@@ -75,6 +75,11 @@ class RuleTester
         // se houver contato escolhido; senao reportamos so o que independe de contato.
         [$bloqueio, $bloqueioLabel] = $this->avaliarFreio($accountId, $jid, $rule->id, $contact !== null);
 
+        // S3: quadro COMPLETO dos freios (transparencia) — so com contato escolhido.
+        $freios = ($contact !== null && $jid !== null)
+            ? $this->guard->breakdown($accountId, $jid, $rule->id)
+            : [];
+
         return [
             'ok' => true,
             'matched' => true,
@@ -86,6 +91,7 @@ class RuleTester
             'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
             'bloqueio' => $bloqueio,
             'bloqueio_label' => $bloqueioLabel,
+            'freios' => $freios,
         ];
     }
 

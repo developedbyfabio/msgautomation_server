@@ -108,6 +108,56 @@ class RuleTesterTest extends TestCase
         $this->assertSame('nao_aprovado', $r['bloqueio']);
     }
 
+    private function freio(array $r, string $labelLike): ?array
+    {
+        foreach ($r['freios'] ?? [] as $f) {
+            if (str_contains($f['label'], $labelLike)) {
+                return $f;
+            }
+        }
+
+        return null;
+    }
+
+    public function test_breakdown_lista_todos_os_freios(): void
+    {
+        $this->rule();
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'push_name' => 'Joao', 'auto_reply_mode' => 'on']);
+
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id);
+
+        $this->assertNotEmpty($r['freios']);
+        // Cada freio esperado aparece no quadro.
+        foreach (['fromMe', 'Idempotencia', 'Pular grupos', 'Aprovacao do contato', 'Politica', 'kill switch', 'Janela', 'Intervalo por contato', 'Cooldown da regra', 'Intervalo minimo', 'Teto / minuto', 'Teto / dia'] as $label) {
+            $this->assertNotNull($this->freio($r, $label), "freio ausente: {$label}");
+        }
+        // Estruturais sempre passam.
+        $this->assertSame('passa', $this->freio($r, 'fromMe')['status']);
+        $this->assertSame('passa', $this->freio($r, 'Idempotencia')['status']);
+    }
+
+    public function test_breakdown_respeita_toggle_desligado(): void
+    {
+        $this->rule();
+        AutoReplySetting::where('account_id', $this->account->id)->update(['window_enabled' => false]);
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'push_name' => 'Joao', 'auto_reply_mode' => 'on']);
+
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id);
+
+        $this->assertSame('desligado', $this->freio($r, 'Janela')['status']);
+    }
+
+    public function test_breakdown_marca_bloqueio_do_kill_switch(): void
+    {
+        $this->rule();
+        AutoReplySetting::where('account_id', $this->account->id)->update(['enabled' => false]);
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'push_name' => 'Joao', 'auto_reply_mode' => 'on']);
+
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id);
+
+        $this->assertSame('bloqueia', $this->freio($r, 'kill switch')['status']);
+    }
+
     public function test_dry_run_nao_envia_nem_cria_log(): void
     {
         $this->rule();

@@ -327,6 +327,34 @@
                                 @else
                                     <p class="text-[11px] text-zinc-400">Escolha um contato para avaliar os freios.</p>
                                 @endif
+
+                                {{-- S3: quadro completo dos freios (passa/bloqueia/desligado) --}}
+                                @if (! empty($testResult['freios']))
+                                    <div class="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                                        <div class="border-b border-zinc-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:border-zinc-800">Todos os freios</div>
+                                        <ul class="divide-y divide-zinc-100 text-xs dark:divide-zinc-800">
+                                            @foreach ($testResult['freios'] as $f)
+                                                @php
+                                                    [$cor, $icone, $txt] = match ($f['status']) {
+                                                        'passa' => ['text-emerald-600 dark:text-emerald-400', 'check-circle', 'passa'],
+                                                        'bloqueia' => ['text-red-600 dark:text-red-400', 'no-symbol', 'bloqueia'],
+                                                        'desligado' => ['text-zinc-400', 'minus-circle', 'desligado'],
+                                                        default => ['text-zinc-400', 'minus-circle', 'n/a'],
+                                                    };
+                                                @endphp
+                                                <li class="flex items-center justify-between gap-2 px-2 py-1.5">
+                                                    <span class="min-w-0 truncate text-zinc-600 dark:text-zinc-300">
+                                                        {{ $f['label'] }}
+                                                        @if ($f['detalhe'])<span class="text-zinc-400">· {{ $f['detalhe'] }}</span>@endif
+                                                    </span>
+                                                    <span class="inline-flex shrink-0 items-center gap-1 font-medium {{ $cor }}">
+                                                        <flux:icon :icon="$icone" variant="micro" class="size-3.5" /> {{ $txt }}
+                                                    </span>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
                             </div>
                         @endif
                     </div>

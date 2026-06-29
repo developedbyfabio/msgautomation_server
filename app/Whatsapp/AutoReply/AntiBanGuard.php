@@ -152,6 +152,98 @@ class AntiBanGuard
         return GuardDecision::allow();
     }
 
+    /**
+     * S3 — quadro COMPLETO dos freios (transparencia), somente-leitura. Lista cada
+     * freio na ordem de avaliacao com status: passa | bloqueia | desligado | na
+     * (nao se aplica). Respeita os toggles do S2. Nao muta nada.
+     *
+     * @return array<int,array{label:string,status:string,detalhe:?string}>
+     */
+    public function breakdown(int $accountId, string $jid, ?int $ruleId = null): array
+    {
+        $settings = $this->settingsFor($accountId);
+        $rule = $ruleId !== null ? AutoReplyRule::find($ruleId) : null;
+        $mode = $rule?->cooldown_mode ?: 'global';
+        $contactMode = $this->contactMode($accountId, $jid);
+        $itens = [];
+
+        $add = function (string $label, string $status, ?string $detalhe = null) use (&$itens) {
+            $itens[] = ['label' => $label, 'status' => $status, 'detalhe' => $detalhe];
+        };
+
+        // Guardas estruturais (sempre ativos). No dry-run, uma mensagem recebida nao e
+        // fromMe e nao e duplicata -> passam; mostramos pra transparencia.
+        $add('fromMe (proprio numero)', 'passa', 'sempre ativo');
+        $add('Idempotencia (duplicata)', 'passa', 'sempre ativo');
+
+        // Grupo.
+        if ($settings->skip_groups && $this->isGroup($jid)) {
+            $add('Pular grupos', 'bloqueia', 'e um grupo');
+        } else {
+            $add('Pular grupos', $settings->skip_groups ? 'passa' : 'desligado', null);
+        }
+
+        // Aprovacao do contato.
+        $add('Aprovacao do contato', $contactMode === 'off' ? 'bloqueia' : 'passa',
+            $contactMode === 'off' ? 'contato silenciado (off)' : "modo: {$contactMode}");
+
+        // Politica de resposta.
+        $policy = $settings->reply_policy ?: 'allowlist';
+        $polBloqueia = $policy === 'allowlist' && $contactMode !== 'on';
+        $add('Politica de resposta', $polBloqueia ? 'bloqueia' : 'passa',
+            $policy === 'allowlist' ? 'allowlist: so contatos on' : 'todos (menos off)');
+
+        // Kill switch.
+        $add('Autoresponder (kill switch)', $settings->enabled ? 'passa' : 'bloqueia',
+            $settings->enabled ? 'ligado' : 'robo desligado');
+
+        // Janela.
+        if (! $settings->window_enabled) {
+            $add('Janela de horario', 'desligado', null);
+        } else {
+            $add('Janela de horario', $this->withinWindow($settings) ? 'passa' : 'bloqueia', null);
+        }
+
+        // Intervalo por contato (so quando a regra usa o modo global).
+        if ($mode !== 'global') {
+            $add('Intervalo por contato', 'na', 'a regra usa cooldown proprio');
+        } elseif (! $settings->contact_rate_enabled || (int) $settings->contact_rate_seconds <= 0) {
+            $add('Intervalo por contato', 'desligado', null);
+        } else {
+            $bloqueia = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings)->reason === 'rate_contato';
+            $add('Intervalo por contato', $bloqueia ? 'bloqueia' : 'passa', $settings->contact_rate_seconds . 's');
+        }
+
+        // Cooldown da regra (so quando a regra define modo proprio).
+        if ($mode === 'global') {
+            $add('Cooldown da regra', 'na', 'usa intervalo por contato');
+        } else {
+            $dec = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings);
+            $bloqueia = in_array($dec->reason, ['cooldown', 'cooldown_dia'], true);
+            $add('Cooldown da regra', $bloqueia ? 'bloqueia' : 'passa', $mode);
+        }
+
+        // Tetos de volume.
+        if (! $settings->min_interval_enabled) {
+            $add('Intervalo minimo', 'desligado', null);
+        } else {
+            $since = $this->throttle->secondsSinceLastSend($accountId);
+            $add('Intervalo minimo', ($since !== null && $since < $settings->min_interval_seconds) ? 'bloqueia' : 'passa', $settings->min_interval_seconds . 's');
+        }
+        if (! $settings->per_minute_enabled) {
+            $add('Teto / minuto', 'desligado', null);
+        } else {
+            $add('Teto / minuto', $this->throttle->minuteHits($accountId) >= $settings->per_minute_cap ? 'bloqueia' : 'passa', null);
+        }
+        if (! $settings->per_day_enabled) {
+            $add('Teto / dia', 'desligado', null);
+        } else {
+            $add('Teto / dia', $this->throttle->dayHits($accountId) >= $settings->per_day_cap ? 'bloqueia' : 'passa', null);
+        }
+
+        return $itens;
+    }
+
     public function isGroup(string $jid): bool
     {
         return str_ends_with($jid, '@g.us');
