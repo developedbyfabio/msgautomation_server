@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Contracts\WhatsappGateway;
 use App\Whatsapp\Drivers\EvolutionDriver;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +23,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // S1 (fuso): armazenamento em UTC, EXIBICAO em America/Sao_Paulo. Esta macro
+        // converte qualquer Carbon (received_at/sent_at/created_at vem em UTC do banco)
+        // para o fuso de exibicao SO na hora de formatar na UI. Nao toca no storage nem
+        // nos freios/janela (que seguem em config('app.timezone') = UTC).
+        Carbon::macro('paraExibicao', function () {
+            /** @var Carbon $this */
+            return $this->copy()->setTimezone(config('app.display_timezone'));
+        });
     }
 }

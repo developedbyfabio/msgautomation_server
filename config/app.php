@@ -69,6 +69,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Display Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Armazenamento permanece em UTC (linha acima) — padrao Laravel e seguro
+    | para os dados JA gravados (epoch UTC do messageTimestamp da Evolution).
+    | ESTE fuso e usado SO na EXIBICAO: todo horario mostrado na UI e
+    | convertido de UTC para ca (ver macro Carbon::paraExibicao no
+    | AppServiceProvider). Brasil nao usa mais horario de verao -> America/
+    | Sao_Paulo (UTC-3) e fixo. Honramos APP_TIMEZONE do .env como fonte.
+    |
+    */
+
+    'display_timezone' => env('APP_TIMEZONE', 'America/Sao_Paulo'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

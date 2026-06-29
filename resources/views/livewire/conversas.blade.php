@@ -28,7 +28,7 @@
                         </div>
                         <div class="truncate text-sm text-zinc-500">{{ $conv['text'] }}</div>
                     </div>
-                    <div class="shrink-0 text-[11px] text-zinc-400">{{ optional($conv['at'])->format('d/m H:i') }}</div>
+                    <div class="shrink-0 text-[11px] text-zinc-400">{{ $conv['at']?->paraExibicao()->format('d/m H:i') }}</div>
                 </button>
                 @unless ($conv['is_group'])
                     <div class="pr-1">
@@ -102,7 +102,7 @@
                             <div class="whitespace-pre-wrap break-words">{{ $msg['text'] }}</div>
                             <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] opacity-70">
                                 @if ($label)<span class="uppercase">{{ $label }}</span>@endif
-                                <span>{{ optional($msg['at'])->format('d/m H:i') }}</span>
+                                <span>{{ $msg['at']?->paraExibicao()->format('d/m H:i') }}</span>
                             </div>
                         </div>
                     </div>
