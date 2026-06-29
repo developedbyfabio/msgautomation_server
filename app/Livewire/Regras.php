@@ -4,7 +4,10 @@ namespace App\Livewire;
 
 use App\Models\Account;
 use App\Models\AutoReplyRule;
+use App\Models\Channel;
+use App\Models\Contact;
 use App\Whatsapp\AutoReply\RuleMatcher;
+use App\Whatsapp\AutoReply\RuleTester;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -26,6 +29,12 @@ class Regras extends Component
     /** @var array<int,string> */
     public array $responses = [];
     public bool $enabled = true;
+
+    // S4 — testador (dry-run).
+    public bool $showTester = false;
+    public string $testSample = '';
+    public ?int $testContactId = null;
+    public ?array $testResult = null;
 
     protected function rules(): array
     {
@@ -201,6 +210,34 @@ class Regras extends Component
         $this->confirmingDeleteId = null;
     }
 
+    // ---- S4: testador (dry-run) --------------------------------------------
+
+    public function openTester(): void
+    {
+        $this->testResult = null;
+        $this->showTester = true;
+    }
+
+    public function closeTester(): void
+    {
+        $this->showTester = false;
+    }
+
+    public function runTest(RuleTester $tester): void
+    {
+        $this->testResult = $tester->test(
+            $this->accountId(),
+            $this->channelId(),
+            $this->testSample,
+            $this->testContactId ?: null,
+        );
+    }
+
+    private function channelId(): ?int
+    {
+        return Channel::query()->where('account_id', $this->accountId())->oldest('id')->value('id');
+    }
+
     public function move(int $id, string $dir): void
     {
         $rules = $this->query()->orderBy('priority')->orderBy('id')->get();
@@ -237,9 +274,16 @@ class Regras extends Component
 
     public function render()
     {
-        $rules = $this->query()->with(['triggers', 'responses'])->orderBy('priority')->orderBy('id')->get();
+        $rules = $this->query()->with(['triggers', 'responses', 'contacts'])->orderBy('priority')->orderBy('id')->get();
         $deleting = $this->confirmingDeleteId ? $rules->firstWhere('id', $this->confirmingDeleteId) : null;
 
-        return view('livewire.regras', ['rules' => $rules, 'deleting' => $deleting]);
+        // Contatos pro seletor (escopo S3 + testador S4).
+        $contacts = ($this->showTester || $this->showForm)
+            ? Contact::query()->where('account_id', $this->accountId())
+                ->orderByRaw('COALESCE(push_name, remote_jid)')->limit(500)
+                ->get(['id', 'push_name', 'remote_jid'])
+            : collect();
+
+        return view('livewire.regras', ['rules' => $rules, 'deleting' => $deleting, 'contacts' => $contacts]);
     }
 }

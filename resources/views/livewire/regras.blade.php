@@ -2,10 +2,16 @@
     <div class="mx-auto max-w-4xl p-6 space-y-4">
         <div class="flex items-center justify-between">
             <h1 class="text-xl font-semibold">Regras (automacoes)</h1>
-            <button type="button" wire:click="novo"
-                class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                <flux:icon icon="plus" variant="micro" /> Nova regra
-            </button>
+            <div class="flex items-center gap-2">
+                <button type="button" wire:click="openTester"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                    <flux:icon icon="beaker" variant="micro" /> Testar
+                </button>
+                <button type="button" wire:click="novo"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <flux:icon icon="plus" variant="micro" /> Nova regra
+                </button>
+            </div>
         </div>
 
         <p class="text-sm text-zinc-500">
@@ -163,6 +169,83 @@
                         <flux:icon icon="check" variant="micro" wire:loading.remove wire:target="save" />
                         <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="save" />
                         Salvar
+                    </button>
+                </div>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: testador (dry-run, S4) --}}
+    @if ($showTester)
+        <x-modal wireClose="closeTester" title="Testar regras (nao envia)" maxWidth="lg">
+            <div class="space-y-3">
+                <p class="text-xs text-zinc-500">
+                    Simula uma mensagem recebida e mostra qual regra casaria, a resposta resolvida e se
+                    algum freio bloquearia. <strong>Nao envia nada</strong> nem mexe nos contadores.
+                </p>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Mensagem de exemplo</label>
+                    <textarea wire:model="testSample" rows="2" placeholder="ex.: qual a senha do wifi?"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Contato (opcional)</label>
+                    <select wire:model="testContactId" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <option value="">Sem contato (so o match/resposta)</option>
+                        @foreach ($contacts as $c)
+                            <option value="{{ $c->id }}">{{ $c->push_name ?: \Illuminate\Support\Str::before($c->remote_jid, '@') }}</option>
+                        @endforeach
+                    </select>
+                    <p class="mt-1 text-[11px] text-zinc-400">Com contato, avalia tambem os freios (escopo, aprovacao, cooldown, janela).</p>
+                </div>
+
+                @if ($testResult)
+                    <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                        @if (! ($testResult['ok'] ?? false))
+                            <p class="text-amber-600 dark:text-amber-400">{{ $testResult['erro'] ?? 'Erro.' }}</p>
+                        @elseif (! $testResult['matched'])
+                            <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="x-circle" variant="micro" /> Nenhuma regra casaria.</p>
+                        @else
+                            <div class="space-y-1.5">
+                                <p class="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-300">
+                                    <flux:icon icon="check-circle" variant="micro" /> Casaria a regra #{{ $testResult['rule_id'] }}
+                                </p>
+                                <p class="text-xs text-zinc-500">Gatilho: <span class="font-mono">{{ $testResult['trigger'] }}</span>
+                                    @if (($testResult['trigger_precision'] ?? 'exato') !== 'exato')
+                                        <span class="rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-950 dark:text-amber-300">tolerante</span>
+                                    @endif
+                                </p>
+                                <div class="rounded bg-white p-2 text-sm dark:bg-zinc-900">
+                                    <span class="text-[11px] uppercase text-zinc-400">Resposta</span>
+                                    <div class="whitespace-pre-wrap">{{ $testResult['resposta'] }}</div>
+                                    @if (($testResult['respostas_total'] ?? 1) > 1)
+                                        <p class="mt-1 text-[11px] text-zinc-400">(sorteia entre {{ $testResult['respostas_total'] }} respostas — mostrando a 1a)</p>
+                                    @endif
+                                </div>
+                                @if ($testResult['bloqueio'] ?? null)
+                                    <p class="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                                        <flux:icon icon="no-symbol" variant="micro" /> Mas um freio bloquearia: {{ $testResult['bloqueio_label'] }}
+                                    </p>
+                                @elseif ($testResult['contato'] ?? null)
+                                    <p class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                                        <flux:icon icon="paper-airplane" variant="micro" /> Responderia (nenhum freio bloqueia agora).
+                                    </p>
+                                @else
+                                    <p class="text-[11px] text-zinc-400">Escolha um contato para avaliar os freios.</p>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                @endif
+            </div>
+
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="closeTester" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Fechar</button>
+                    <button type="button" wire:click="runTest" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                        <flux:icon icon="beaker" variant="micro" wire:loading.remove wire:target="runTest" />
+                        <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="runTest" />
+                        Testar
                     </button>
                 </div>
             </x-slot:footer>

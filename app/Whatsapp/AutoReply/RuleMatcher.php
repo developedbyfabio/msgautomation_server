@@ -85,6 +85,27 @@ class RuleMatcher
         return $contatos->contains(fn ($c) => $c->remote_jid === $remoteJid);
     }
 
+    /**
+     * Qual gatilho da regra casa o texto (p/ o testador S4). Retorna o item do
+     * triggerList (['type','value','precision','fuzzy_level']) ou null.
+     */
+    public function firstMatchingTrigger(AutoReplyRule $rule, string $text): ?array
+    {
+        $raw = trim($text);
+        $normText = $this->normalize($text);
+        if ($normText === '') {
+            return null;
+        }
+
+        foreach ($rule->triggerList() as $trigger) {
+            if ($this->matches($trigger['type'], $raw, $normText, $this->normalize($trigger['value']), (string) $trigger['value'])) {
+                return $trigger;
+            }
+        }
+
+        return null;
+    }
+
     public function normalize(string $value): string
     {
         $value = Str::ascii($value);          // fold de acento -> ascii
