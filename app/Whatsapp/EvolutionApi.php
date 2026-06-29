@@ -100,4 +100,13 @@ class EvolutionApi
     {
         return $this->http()->get("/instance/connectionState/{$this->instance}");
     }
+
+    /**
+     * Desconecta (logout) a instancia — derruba a sessao do WhatsApp, exigindo
+     * novo QR. Evolution v2.3.7: DELETE /instance/logout/{instance}.
+     */
+    public function logout(): Response
+    {
+        return $this->http()->delete("/instance/logout/{$this->instance}");
+    }
 }

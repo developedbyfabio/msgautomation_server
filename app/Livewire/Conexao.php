@@ -1,0 +1,108 @@
+<?php
+
+namespace App\Livewire;
+
+use App\Models\Channel;
+use App\Whatsapp\EvolutionApi;
+use Livewire\Attributes\Layout;
+use Livewire\Component;
+
+/**
+ * S3 — tela de conexao (QR). Quando a sessao NAO esta `open`, a UI cai aqui:
+ * mostra o QR (endpoint connect da Evolution), faz polling do estado e, ao
+ * conectar, segue pras conversas. Botao de gerar novo QR se expirar.
+ *
+ * Nao toca no motor de auto-resposta. So admin da instancia (estado + QR).
+ */
+#[Layout('components.layouts.app')]
+class Conexao extends Component
+{
+    public string $state = 'verificando';
+    public ?string $qr = null;
+    public ?string $qrError = null;
+
+    public function mount(EvolutionApi $api)
+    {
+        return $this->poll($api);
+    }
+
+    /** Poll do estado; se ja conectou, segue pras conversas. */
+    public function poll(EvolutionApi $api)
+    {
+        try {
+            $resp = $api->connectionState();
+            $this->state = $resp->successful()
+                ? (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido')
+                : 'desconhecido';
+        } catch (\Throwable) {
+            $this->state = 'desconhecido';
+        }
+
+        $this->syncChannel();
+
+        if ($this->state === 'open') {
+            return $this->redirectRoute('conversas', navigate: true);
+        }
+
+        // Sem QR ainda e fora do open -> tenta obter um.
+        if ($this->qr === null && $this->qrError === null) {
+            $this->gerarQr($api);
+        }
+
+        return null;
+    }
+
+    /** (Re)gera o QR via endpoint connect da Evolution. */
+    public function gerarQr(EvolutionApi $api)
+    {
+        $this->qr = null;
+        $this->qrError = null;
+
+        try {
+            $resp = $api->connect();
+            if (! $resp->successful()) {
+                $this->qrError = 'Falha ao obter o QR (HTTP ' . $resp->status() . ').';
+
+                return null;
+            }
+
+            $data = $resp->json();
+
+            // Ja conectou nesse meio tempo.
+            if ((data_get($data, 'instance.state') === 'open') || (data_get($data, 'state') === 'open')) {
+                $this->state = 'open';
+                $this->syncChannel();
+
+                return $this->redirectRoute('conversas', navigate: true);
+            }
+
+            $b64 = data_get($data, 'base64');
+            if (is_string($b64) && $b64 !== '') {
+                $this->qr = str_starts_with($b64, 'data:') ? $b64 : 'data:image/png;base64,' . $b64;
+            } else {
+                $this->qrError = 'Sem QR no retorno da Evolution.';
+            }
+        } catch (\Throwable) {
+            $this->qrError = 'Evolution inacessivel.';
+        }
+
+        return null;
+    }
+
+    private function syncChannel(): void
+    {
+        $map = ['open' => 'connected', 'connecting' => 'connecting', 'close' => 'disconnected'];
+        if (! isset($map[$this->state])) {
+            return;
+        }
+
+        Channel::query()
+            ->where('instance', config('services.evolution.instance'))
+            ->update(['status' => $map[$this->state]]);
+    }
+
+    public function render()
+    {
+        return view('livewire.conexao');
+    }
+}

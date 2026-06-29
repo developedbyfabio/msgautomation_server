@@ -20,6 +20,27 @@
             <span wire:loading.remove wire:target="abrirQr">Reconectar</span>
             <span wire:loading wire:target="abrirQr">...</span>
         </button>
+    @elseif ($state === 'open')
+        <button type="button" wire:click="confirmDisconnect"
+            class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300 dark:border-zinc-700 dark:hover:bg-red-950 dark:hover:text-red-400">
+            <flux:icon icon="power" variant="micro" /> Desconectar
+        </button>
+    @endif
+
+    {{-- MODAL: confirmar desconexao --}}
+    @if ($confirmingDisconnect)
+        <x-modal wireClose="cancelDisconnect" title="Desconectar o WhatsApp?">
+            <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                Isso encerra a sessao na Evolution. Voce precisara <strong>escanear o QR de novo</strong>
+                para reconectar. Enquanto desconectado, o robo nao recebe nem responde nada.
+            </p>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelDisconnect" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="disconnectConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                    <flux:icon icon="power" variant="micro" /> Desconectar
+                </button>
+            </div>
+        </x-modal>
     @endif
 
     @if ($showQr)

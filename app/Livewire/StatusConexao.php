@@ -19,6 +19,8 @@ class StatusConexao extends Component
     public ?string $qr = null;
     public ?string $qrError = null;
 
+    public bool $confirmingDisconnect = false;
+
     public function refresh(EvolutionApi $api): void
     {
         try {
@@ -33,14 +35,57 @@ class StatusConexao extends Component
         $this->syncChannel();
     }
 
+    /**
+     * Sincroniza channels.status SO com estados DEFINITIVOS da Evolution. Em
+     * 'desconhecido'/'verificando' (Evolution momentaneamente inacessivel) NAO
+     * rebaixa pra disconnected — senao um blip de rede chutaria o Fabio pra tela
+     * de QR no meio do uso. O gate de conexao confia nesse status.
+     */
     private function syncChannel(): void
     {
         $map = ['open' => 'connected', 'connecting' => 'connecting', 'close' => 'disconnected'];
-        $status = $map[$this->state] ?? 'disconnected';
+        if (! isset($map[$this->state])) {
+            return;
+        }
 
         Channel::query()
             ->where('instance', config('services.evolution.instance'))
-            ->update(['status' => $status]);
+            ->update(['status' => $map[$this->state]]);
+    }
+
+    public function confirmDisconnect(): void
+    {
+        $this->confirmingDisconnect = true;
+    }
+
+    public function cancelDisconnect(): void
+    {
+        $this->confirmingDisconnect = false;
+    }
+
+    /** Desconecta de verdade (logout na Evolution). So por acao explicita + confirmacao. */
+    public function disconnectConfirmed(EvolutionApi $api)
+    {
+        $this->confirmingDisconnect = false;
+
+        try {
+            $resp = $api->logout();
+            if (! $resp->successful()) {
+                $this->dispatch('toast', message: 'Falha ao desconectar (HTTP ' . $resp->status() . ').', type: 'error');
+
+                return null;
+            }
+        } catch (\Throwable) {
+            $this->dispatch('toast', message: 'Evolution inacessivel.', type: 'error');
+
+            return null;
+        }
+
+        $this->state = 'close';
+        $this->syncChannel();
+        $this->dispatch('toast', message: 'WhatsApp desconectado. Escaneie o QR para reconectar.');
+
+        return $this->redirectRoute('conexao', navigate: true);
     }
 
     public function abrirQr(EvolutionApi $api): void

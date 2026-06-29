@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\EvolutionWebhookController;
+use App\Livewire\Conexao;
 use App\Livewire\Configuracoes;
 use App\Livewire\Contatos;
 use App\Livewire\Conversas;
@@ -22,13 +23,18 @@ Route::post('/logout', function () {
     return redirect()->route('login');
 })->middleware('auth')->name('logout');
 
-// UI (Camada 4) — toda atras de auth.
+// UI (Camada 4) — toda atras de auth. /conexao mostra o QR quando a sessao cai;
+// as demais paginas exigem o WhatsApp conectado (gate whatsapp.connected).
 Route::middleware('auth')->group(function () {
     Route::redirect('/', '/conversas');
-    Route::get('/conversas', Conversas::class)->name('conversas');
-    Route::get('/contatos', Contatos::class)->name('contatos');
-    Route::get('/regras', Regras::class)->name('regras');
-    Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
+    Route::get('/conexao', Conexao::class)->name('conexao');
+
+    Route::middleware('whatsapp.connected')->group(function () {
+        Route::get('/conversas', Conversas::class)->name('conversas');
+        Route::get('/contatos', Contatos::class)->name('contatos');
+        Route::get('/regras', Regras::class)->name('regras');
+        Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
+    });
 });
 
 // Webhook da Evolution (Camada 1): valida origem -> enfileira -> 200.
