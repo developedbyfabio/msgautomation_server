@@ -1,10 +1,10 @@
 @php
     $robo = \App\Models\AutoReplySetting::query()->value('enabled');
     $nav = [
-        ['conversas', 'Conversas'],
-        ['contatos', 'Contatos'],
-        ['regras', 'Regras'],
-        ['configuracoes', 'Configuracoes'],
+        ['conversas', 'Conversas', 'chat-bubble-left-right'],
+        ['contatos', 'Contatos', 'users'],
+        ['regras', 'Regras', 'bolt'],
+        ['configuracoes', 'Configuracoes', 'cog-6-tooth'],
     ];
 @endphp
 <!DOCTYPE html>
@@ -21,17 +21,22 @@
         <div class="flex items-center gap-4 px-4 h-12">
             <span class="font-semibold tracking-tight">msgautomation</span>
             <nav class="flex items-center gap-1 text-sm">
-                @foreach ($nav as [$route, $label])
+                @foreach ($nav as [$route, $label, $icon])
                     <a href="{{ route($route) }}"
                        wire:navigate
                        @class([
-                           'px-3 py-1.5 rounded-md transition',
+                           'flex items-center gap-1.5 px-3 py-1.5 rounded-md transition',
                            'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' => request()->routeIs($route),
                            'hover:bg-zinc-100 dark:hover:bg-zinc-800' => ! request()->routeIs($route),
-                       ])>{{ $label }}</a>
+                       ])>
+                        <flux:icon :icon="$icon" variant="micro" />
+                        <span>{{ $label }}</span>
+                    </a>
                 @endforeach
             </nav>
-            <div class="ml-auto flex items-center gap-2 text-xs">
+            <div class="ml-auto flex items-center gap-3 text-xs">
+                <livewire:status-conexao />
+                <span class="text-zinc-400">|</span>
                 <span class="text-zinc-500">Robo:</span>
                 @if ($robo)
                     <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -49,6 +54,26 @@
     <main class="flex-1 min-h-0 overflow-hidden">
         {{ $slot }}
     </main>
+
+    {{-- Toasts globais (Alpine ouve eventos 'toast' despachados pelos componentes Livewire). --}}
+    <div
+        x-data="{ toasts: [] }"
+        @toast.window="
+            const id = Date.now() + Math.random();
+            toasts.push({ id, message: $event.detail.message ?? $event.detail[0]?.message, type: $event.detail.type ?? $event.detail[0]?.type ?? 'success' });
+            setTimeout(() => toasts = toasts.filter(t => t.id !== id), 3500)
+        "
+        class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2"
+    >
+        <template x-for="t in toasts" :key="t.id">
+            <div
+                x-transition
+                class="rounded-lg px-4 py-2 text-sm text-white shadow-lg"
+                :class="t.type === 'error' ? 'bg-red-600' : 'bg-zinc-900 dark:bg-zinc-700'"
+                x-text="t.message"
+            ></div>
+        </template>
+    </div>
 
     @fluxScripts
 </body>
