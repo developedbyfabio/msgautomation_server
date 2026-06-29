@@ -115,6 +115,20 @@ grava a redacao) nem em logs de app. Guarda de escopo: regra com `{senha:...}` e
 `scope=contatos` e gatilho estrito (sem fuzzy). Limite conhecido: o app decifra pra responder
 sozinho e a senha vai em texto pelo WhatsApp pra quem disparar — por isso o escopo restrito.
 
+## groups — cache do nome de grupo (`..._000015`)
+Escopo account. `remote_jid` (...@g.us) + `subject` (nome) + `resolved_at`, unique
+(account_id, remote_jid). `GroupNameResolver::nameFor` le so o cache (render nunca bate na
+Evolution); `ensure` dispara `ResolveGroupName` (job, dedupe 5 min) que busca o subject em
+`GET /group/findGroupInfos/{instance}` e grava. Exibicao apenas.
+
+## Captura e exibicao de mensagens (S5/S6)
+- **Catch-all:** o `EvolutionDriver` SEMPRE registra qualquer `messageType` (reaction/sticker/
+  location/poll/desconhecido) — tipo resolvido (messageType -> inferido, pulando
+  messageContextInfo -> 'unknown'); nunca descarta (so falta key.id/jid). Reacoes chegam via
+  `messages.upsert`. `incoming_messages.text` segue sendo a legenda/conversation (matcher).
+- **Preview (display):** `MessagePreview::for(type,text,raw)` deriva icone/label/legenda/emoji
+  (componente `x-msg-preview`), sem tocar em matcher/freios.
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000014`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000015`).

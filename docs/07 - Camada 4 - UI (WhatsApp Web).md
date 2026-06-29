@@ -107,6 +107,18 @@ O webhook da Evolution aponta pra `host.docker.internal:8080`. Trocou a porta ->
   valor atual (sem cache stale).
 - Selecao de contatos do escopo por **checkbox buscavel** (nao mais `<select multiple>`).
 
+## Conversas — completude (display)
+- **Ir para a ultima mensagem (S1):** botao flutuante (chevron-down) aparece so quando rolado pra
+  cima; auto-scroll ao chegar msg nova SO se ja estava no fim (Alpine + MutationObserver).
+- **Nome do grupo (S4):** lista e cabecalho mostram o subject (cache em `groups`, resolvido em
+  background) em vez do JID numerico.
+- **Icones por tipo (S5):** imagem/video/audio/documento(+nome)/figurinha/localizacao/contato/
+  enquete com Heroicon + label; reacao = emoji real; texto normal; desconhecido = `[tipo]`.
+- **Captura 100% (S6):** normalizador catch-all; todos os tipos chegam e aparecem (a captura ja
+  funcionava — o gap era exibicao crua, agora resolvida).
+- **Freios (S2/S3):** toggles cabem no card; testador separa "Intervalo por contato (global)" de
+  "Frequencia desta regra" com texto claro.
+
 ## Cofre de senhas (/senhas)
 - Aba **Senhas** (ao lado de Contatos): CRUD do cofre. Valor **cifrado em repouso** (chave dedicada
   `SECRETS_KEY`), **mascarado** na UI; **revelar** exige re-digitar a senha de **login** (1 por vez,
