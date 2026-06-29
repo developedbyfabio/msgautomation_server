@@ -50,8 +50,8 @@ class Sender
             $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId));
         }
 
-        // 2. freios
-        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe);
+        // 2. freios (ruleId habilita o cooldown por regra — S2)
+        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe, $ruleId);
         if (! $decision->allowed) {
             $log->update(['status' => 'blocked', 'motivo' => $decision->reason]);
 

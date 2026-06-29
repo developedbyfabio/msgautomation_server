@@ -2,6 +2,8 @@
 
 namespace App\Whatsapp\AutoReply;
 
+use App\Models\AutoReplyLog;
+use App\Models\AutoReplyRule;
 use App\Models\AutoReplySetting;
 use App\Models\Contact;
 
@@ -21,7 +23,7 @@ class AntiBanGuard
     {
     }
 
-    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false): GuardDecision
+    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null): GuardDecision
     {
         $settings = $this->settingsFor($accountId);
 
@@ -42,13 +44,69 @@ class AntiBanGuard
             if (! $this->withinWindow($settings)) {
                 return GuardDecision::block('fora_da_janela');
             }
-            if ($this->throttle->contactRecentlyReplied($accountId, $jid)) {
-                return GuardDecision::block('rate_contato');
+            // S2: cooldown por regra SUBSTITUI o rate-por-contato global (quando a regra
+            // define um modo proprio); senao cai no rate global. Os tetos de volume
+            // (checkCaps) seguem valendo abaixo como piso de protecao do numero.
+            $cd = $this->rateOrCooldown($accountId, $jid, $ruleId);
+            if (! $cd->allowed) {
+                return $cd;
             }
         }
 
         // Tetos protetivos: valem para AMBOS os caminhos.
         return $this->checkCaps($accountId, $settings);
+    }
+
+    /**
+     * S2 — frequencia por regra (cooldown) por contato, OU o rate global se a regra
+     * usa 'global'/sem regra. Rastreio em auto_reply_logs (rule_id, remote_jid, sent_at).
+     */
+    private function rateOrCooldown(int $accountId, string $jid, ?int $ruleId): GuardDecision
+    {
+        $rule = $ruleId !== null ? AutoReplyRule::find($ruleId) : null;
+        $mode = $rule?->cooldown_mode ?: 'global';
+
+        if ($mode === 'global') {
+            return $this->throttle->contactRecentlyReplied($accountId, $jid)
+                ? GuardDecision::block('rate_contato')
+                : GuardDecision::allow();
+        }
+
+        if ($mode === 'sempre') {
+            return GuardDecision::allow();
+        }
+
+        $ultima = AutoReplyLog::query()
+            ->where('account_id', $accountId)
+            ->where('rule_id', $ruleId)
+            ->where('remote_jid', $jid)
+            ->where('status', 'sent')
+            ->whereNotNull('sent_at')
+            ->latest('sent_at')
+            ->value('sent_at');
+
+        if ($ultima === null) {
+            return GuardDecision::allow();
+        }
+
+        if ($mode === '1x_dia') {
+            // Reset a meia-noite America/Sao_Paulo. sent_at e gravado em UTC.
+            $inicioDiaSp = now((string) config('app.display_timezone'))->startOfDay()->setTimezone('UTC');
+
+            return $ultima->copy()->utc()->greaterThanOrEqualTo($inicioDiaSp)
+                ? GuardDecision::block('cooldown_dia')
+                : GuardDecision::allow();
+        }
+
+        if ($mode === 'cada_n') {
+            $minutos = max(1, (int) ($rule->cooldown_minutes ?? 0));
+
+            return $ultima->copy()->greaterThan(now()->subMinutes($minutos))
+                ? GuardDecision::block('cooldown')
+                : GuardDecision::allow();
+        }
+
+        return GuardDecision::allow();
     }
 
     /**
