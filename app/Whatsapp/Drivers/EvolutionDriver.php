@@ -60,6 +60,9 @@ class EvolutionDriver implements WhatsappGateway
             return null;
         }
 
+        // Catch-all: SEMPRE resolve um tipo (messageType -> inferido -> 'unknown') e
+        // SEMPRE retorna o DTO pra qualquer messageType. Nada e descartado por tipo
+        // (incl. reaction/sticker/location/poll/desconhecido) — so falta key.id/jid.
         $type = $this->str($data['messageType'] ?? null) ?? $this->inferirTipo($data['message'] ?? null) ?? 'unknown';
 
         return new IncomingMessageData(
@@ -119,6 +122,14 @@ class EvolutionDriver implements WhatsappGateway
     {
         if (! is_array($message)) {
             return null;
+        }
+
+        // Pula wrappers de metadados pra pegar o tipo REAL (ex.: messageContextInfo
+        // costuma vir junto de imageMessage/extendedTextMessage).
+        foreach ($message as $chave => $_) {
+            if (! in_array($chave, ['messageContextInfo'], true)) {
+                return (string) $chave;
+            }
         }
 
         return array_key_first($message) ?: null;
