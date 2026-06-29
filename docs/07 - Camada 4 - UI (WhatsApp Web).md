@@ -106,3 +106,15 @@ O webhook da Evolution aponta pra `host.docker.internal:8080`. Trocou a porta ->
   / Regex (avancado). "Rate por contato" renomeado para **Intervalo por contato** e passou a ler o
   valor atual (sem cache stale).
 - Selecao de contatos do escopo por **checkbox buscavel** (nao mais `<select multiple>`).
+
+## Cofre de senhas (/senhas)
+- Aba **Senhas** (ao lado de Contatos): CRUD do cofre. Valor **cifrado em repouso** (chave dedicada
+  `SECRETS_KEY`), **mascarado** na UI; **revelar** exige re-digitar a senha de **login** (1 por vez,
+  transiente). Ver schema/seguranca na doc 02.
+- Uso na regra: picker **inserir senha** (lista nomes, nunca valores) -> `{senha:nome}` na resposta.
+  **Resolucao no envio** (em memoria); o log grava `[senha: nome]`, nunca o valor.
+- **Guarda de escopo:** regra com `{senha:...}` exige **Contatos Especificos** + match estrito
+  (bloqueia "Todos os Aprovados" e gatilho tolerante).
+- **Testador** mascara a senha por padrao (revelar deliberado, nao persiste).
+- **Transporte (recomendacao):** a rede e HTTP — acessar o cofre por **tunel SSH** ou pôr **HTTPS**
+  (login e valor revelado cruzam a LAN sem cifra). A confirmar como fatia propria.

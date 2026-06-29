@@ -100,6 +100,21 @@ O **intervalo por contato** (modo `global` de cooldown) passou a ler o **valor a
 `contact_rate_seconds` comparando com o ultimo auto-reply ao contato em `auto_reply_logs`
 (antes usava cache com TTL congelado no envio -> nao refletia mudanca do valor).
 
+## secrets — cofre de senhas (`..._000014`)
+Escopo account. Valor **cifrado em repouso** com chave **dedicada** (`SECRETS_KEY`, separada do
+`APP_KEY`; AES-256 via Encrypter dedicado em `SecretCipher`). Colunas: `account_id`, `nome`
+(label nao-secreto), `value_encrypted` (cifrado), `categoria`/`notes` (opcionais), unique
+(account_id, nome). Model `Secret` com `$hidden = [value_encrypted]`.
+
+`SecretVault`: `put` (cifra), `reveal` (decifra sob demanda), `names` (so nomes), `resolve`
+(`{senha:nome}` -> valor, EM MEMORIA no envio), `redact` (`-> [senha: nome]` p/ log), `mask`
+(`-> ••••` p/ testador). Regras referenciam por `{senha:nome}` (guardam so a referencia).
+
+Seguranca: o valor decifrado vai SO na mensagem enviada; **nunca** em `auto_reply_logs` (Sender
+grava a redacao) nem em logs de app. Guarda de escopo: regra com `{senha:...}` exige
+`scope=contatos` e gatilho estrito (sem fuzzy). Limite conhecido: o app decifra pra responder
+sozinho e a senha vai em texto pelo WhatsApp pra quem disparar — por isso o escopo restrito.
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000013`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000014`).
