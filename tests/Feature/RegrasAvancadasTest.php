@@ -228,6 +228,18 @@ class RegrasAvancadasTest extends TestCase
         $this->assertSame(0, AutoReplyRule::where('scope', 'contatos')->count());
     }
 
+    public function test_ui_picker_insere_referencia_de_senha(): void
+    {
+        app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'segredo');
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->assertSee('inserir senha')
+            ->set('responses.0', 'A senha e')
+            ->call('insertSecret', 0, 'wifi')
+            ->assertSet('responses.0', 'A senha e {senha:wifi}');
+    }
+
     public function test_ui_tipos_em_pt_br_no_modal(): void
     {
         Livewire::test(Regras::class)

@@ -172,6 +172,19 @@
                                     <textarea wire:model="responses.{{ $i }}" rows="2" placeholder="ex.: {saudacao}, {nome}! Atendo das 8h as 18h."
                                         class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
                                     @error("responses.{$i}") <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                                    {{-- S3: picker de senha (insere {senha:nome}; so nomes, nunca valores) --}}
+                                    @if (! empty($secretNames))
+                                        <flux:dropdown position="bottom" align="start">
+                                            <button type="button" class="mt-1 inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline">
+                                                <flux:icon icon="key" variant="micro" /> inserir senha
+                                            </button>
+                                            <flux:menu>
+                                                @foreach ($secretNames as $sn)
+                                                    <flux:menu.item wire:click="insertSecret({{ $i }}, '{{ $sn }}')">{{ $sn }}</flux:menu.item>
+                                                @endforeach
+                                            </flux:menu>
+                                        </flux:dropdown>
+                                    @endif
                                 </div>
                                 <button type="button" wire:click="removeResponse({{ $i }})" @disabled(count($responses) <= 1)
                                     class="mt-1.5 text-zinc-400 hover:text-red-500 disabled:opacity-30" aria-label="Remover resposta">
@@ -189,7 +202,8 @@
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{nome}</code> nome do contato ·
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{saudacao}</code> bom dia/tarde/noite ·
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{data}</code> ·
-                    <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{hora}</code>
+                    <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{hora}</code> ·
+                    <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{senha:nome}</code> senha do cofre (resolvida no envio; exige escopo de contatos)
                 </div>
 
                 {{-- FREQUENCIA (S2) --}}

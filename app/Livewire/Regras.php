@@ -8,6 +8,7 @@ use App\Models\Channel;
 use App\Models\Contact;
 use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\AutoReply\RuleTester;
+use App\Whatsapp\Secrets\SecretVault;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -129,6 +130,17 @@ class Regras extends Component
     public function addResponse(): void
     {
         $this->responses[] = '';
+    }
+
+    /** S3 — insere {senha:nome} na resposta indicada (guarda so a referencia). */
+    public function insertSecret(int $i, string $nome): void
+    {
+        if (! isset($this->responses[$i])) {
+            return;
+        }
+        $ref = '{senha:' . $nome . '}';
+        $atual = trim((string) $this->responses[$i]);
+        $this->responses[$i] = $atual === '' ? $ref : $atual . ' ' . $ref;
     }
 
     public function removeResponse(int $i): void
@@ -341,11 +353,15 @@ class Regras extends Component
             ? $contacts->filter(fn ($c) => str_contains(mb_strtolower(($c->push_name ?? '') . ' ' . $c->remote_jid, 'UTF-8'), $busca))->values()
             : $contacts;
 
+        // S3 — nomes das senhas pro picker (NUNCA valores).
+        $secretNames = $this->showForm ? app(SecretVault::class)->names($this->accountId()) : [];
+
         return view('livewire.regras', [
             'rules' => $rules,
             'deleting' => $deleting,
             'contacts' => $contacts,
             'scopeContacts' => $scopeContacts,
+            'secretNames' => $secretNames,
         ]);
     }
 }
