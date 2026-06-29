@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    // Validacao de origem do webhook (header secreto verificado com hash_equals).
+    'webhook' => [
+        'secret' => env('WEBHOOK_SECRET'),
+        'header' => env('WEBHOOK_HEADER', 'X-Webhook-Secret'),
+    ],
+
+    // 2a Evolution (instancia isolada do msgautomation).
+    'evolution' => [
+        'base_url' => env('EVOLUTION_BASE_URL', 'http://127.0.0.1:8090'),
+        'api_key' => env('EVOLUTION_API_KEY'),
+        'instance' => env('EVOLUTION_INSTANCE', 'fabio-pessoal'),
+        // URL que o CONTAINER da Evolution usa pra alcancar o app no host:
+        'webhook_url' => env('EVOLUTION_WEBHOOK_URL', 'http://host.docker.internal:8190/webhook/evolution'),
+    ],
+
 ];

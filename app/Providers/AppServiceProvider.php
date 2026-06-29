@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\WhatsappGateway;
+use App\Whatsapp\Drivers\EvolutionDriver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Abstracao de driver: hoje Evolution; troca de provedor sem mexer no resto.
+        $this->app->bind(WhatsappGateway::class, EvolutionDriver::class);
     }
 
     /**

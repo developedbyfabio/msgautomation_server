@@ -2,7 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Models\Account;
+use App\Models\Channel;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -15,11 +16,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Conta-ancora (single-user na Camada 1, multi-tenant em mente).
+        $account = Account::firstOrCreate(['name' => config('app.name', 'msgautomation')]);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // Canal correspondente a instancia da Evolution.
+        Channel::firstOrCreate(
+            ['instance' => config('services.evolution.instance', 'fabio-pessoal')],
+            ['account_id' => $account->id, 'status' => 'disconnected'],
+        );
     }
 }
