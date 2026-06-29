@@ -460,6 +460,7 @@ class Fluxos extends Component
 
         $flow = $this->flow();
         $tree = $flow ? $this->treeOrdered($flow) : [];
+        $warnings = $flow ? $this->flowWarnings($flow, $tree) : [];
         $deleting = $this->confirmingDeleteFlowId ? $flows->firstWhere('id', $this->confirmingDeleteFlowId) : null;
 
         $contacts = ($flow && $this->scope === 'contatos')
@@ -506,6 +507,33 @@ class Fluxos extends Component
             'secretNames' => $secretNames,
             'simView' => $simView,
             'flowConflicts' => $flowConflicts,
+            'warnings' => $warnings,
         ]);
+    }
+
+    /** C.3 — avisos de arvore mal-montada (so exibicao; nao bloqueia salvar). */
+    private function flowWarnings(Flow $flow, array $tree): array
+    {
+        $w = [];
+        if ($flow->triggers()->count() === 0) {
+            $w[] = 'Sem gatilho de entrada — o fluxo nao pode ser ligado.';
+        }
+        foreach ($tree as $row) {
+            $node = $row['node'];
+            $opts = $node->options;
+            if ($node->kind !== 'final' && $opts->isEmpty()) {
+                $w[] = "No #{$node->id} e menu mas nao tem opcao — vai encerrar como resposta final.";
+            }
+            foreach ($opts as $opt) {
+                if (! $opt->next_node_id) {
+                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->id} esta sem destino.";
+                }
+                if (trim((string) $opt->label) === '') {
+                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->id} esta sem rotulo.";
+                }
+            }
+        }
+
+        return $w;
     }
 }

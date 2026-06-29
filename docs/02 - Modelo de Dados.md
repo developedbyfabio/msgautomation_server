@@ -155,8 +155,14 @@ UI (Fatia B): pagina `/fluxos` (construtor arvore-outline) — lista, criar rasc
 ligar/desligar (valida gatilho+raiz; **guarda de senha: nó com `{senha:...}` exige escopo
 contatos pra ligar**), editor de config + gatilhos de entrada + nós/opcoes (destino: nó
 existente | novo sub-menu | nova resposta final) + preview. So construcao; runtime intacta.
-**Atencao:** ligar um fluxo com o kill switch ON deixa o menu AO VIVO. Guarda de segredo
-completa (gatilho estrito) + testador estendido = Fatia C.
+**Atencao:** ligar um fluxo com o kill switch ON deixa o menu AO VIVO.
+
+Fatia C: **testador** no /fluxos (simula o menu andando, sem enviar/sem sessao, senha
+mascarada com revelar deliberado — FlowEngine::simStart/simAdvance puros); **guarda de
+segredo completa** (ligar fluxo com `{senha:}` exige escopo contatos + gatilho estrito);
+**detector fluxo×regra** (RuleConflictDetector::flowRuleOverlaps — aviso em /fluxos "o fluxo
+vence" e em /regras "fluxo intercepta"); **avisos de arvore** (menu sem opcao, opcao sem
+destino/rotulo, sem gatilho).
 
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.

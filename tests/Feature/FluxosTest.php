@@ -87,6 +87,19 @@ class FluxosTest extends TestCase
         $this->assertSame($rootId, (int) FlowNode::find($opt->next_node_id)->parent_node_id);
     }
 
+    public function test_avisos_de_arvore(): void
+    {
+        // Fluxo sem gatilho, menu sem opcao -> avisos aparecem no editor.
+        $flow = Flow::create(['account_id' => $this->account->id, 'name' => 'F', 'enabled' => false]);
+        $root = FlowNode::create(['flow_id' => $flow->id, 'kind' => 'menu', 'message' => 'x']);
+        $flow->update(['root_node_id' => $root->id]);
+
+        Livewire::test(Fluxos::class)
+            ->call('editar', $flow->id)
+            ->assertSee('Sem gatilho de entrada')
+            ->assertSee('nao tem opcao');
+    }
+
     public function test_remover_no_bloqueia_raiz(): void
     {
         $c = Livewire::test(Fluxos::class)->call('novoFluxo');

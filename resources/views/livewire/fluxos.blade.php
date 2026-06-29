@@ -77,6 +77,17 @@
                 </button>
             </div>
 
+            @if (! empty($warnings))
+                <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                    <div class="mb-1 flex items-center gap-1 font-medium"><flux:icon icon="exclamation-triangle" variant="micro" /> Avisos do fluxo</div>
+                    <ul class="list-disc space-y-0.5 pl-5">
+                        @foreach ($warnings as $msg)
+                            <li>{{ $msg }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             {{-- TESTADOR (dry-run, nao envia) --}}
             <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <div class="flex items-center justify-between">
