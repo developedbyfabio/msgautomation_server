@@ -149,6 +149,38 @@ class RuleCooldownTest extends TestCase
         Http::assertSentCount(2);
     }
 
+    private function logAntigo(Account $a, Channel $c, AutoReplyRule $rule, int $segundosAtras): void
+    {
+        AutoReplyLog::create([
+            'account_id' => $a->id, 'channel_id' => $c->id, 'rule_id' => $rule->id,
+            'remote_jid' => self::JID, 'mode' => 'auto', 'response_text' => 'x',
+            'status' => 'sent', 'sent_at' => now()->subSeconds($segundosAtras),
+        ]);
+    }
+
+    public function test_rate_global_le_valor_atual_passa_se_resposta_antiga(): void
+    {
+        [$account, $channel] = $this->scaffold();
+        // Valor ATUAL = 3s. Ultima resposta ha 10s -> deve PASSAR (S1: nao usa cache stale).
+        AutoReplySetting::where('account_id', $account->id)->update(['contact_rate_seconds' => 3]);
+        $rule = $this->rule($account, 'global');
+        $this->logAntigo($account, $channel, $rule, 10);
+
+        $this->assertSame('sent', $this->send($channel, $rule)->status);
+    }
+
+    public function test_rate_global_bloqueia_se_resposta_recente(): void
+    {
+        [$account, $channel] = $this->scaffold();
+        AutoReplySetting::where('account_id', $account->id)->update(['contact_rate_seconds' => 30]);
+        $rule = $this->rule($account, 'global');
+        $this->logAntigo($account, $channel, $rule, 5); // 5s < 30s -> bloqueia
+
+        $log = $this->send($channel, $rule);
+        $this->assertSame('blocked', $log->status);
+        $this->assertSame('rate_contato', $log->motivo);
+    }
+
     public function test_global_preserva_rate_por_contato(): void
     {
         [$account, $channel] = $this->scaffold();

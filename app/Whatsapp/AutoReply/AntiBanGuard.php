@@ -47,7 +47,7 @@ class AntiBanGuard
             // S2: cooldown por regra SUBSTITUI o rate-por-contato global (quando a regra
             // define um modo proprio); senao cai no rate global. Os tetos de volume
             // (checkCaps) seguem valendo abaixo como piso de protecao do numero.
-            $cd = $this->rateOrCooldown($accountId, $jid, $ruleId);
+            $cd = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings);
             if (! $cd->allowed) {
                 return $cd;
             }
@@ -61,13 +61,33 @@ class AntiBanGuard
      * S2 — frequencia por regra (cooldown) por contato, OU o rate global se a regra
      * usa 'global'/sem regra. Rastreio em auto_reply_logs (rule_id, remote_jid, sent_at).
      */
-    private function rateOrCooldown(int $accountId, string $jid, ?int $ruleId): GuardDecision
+    private function rateOrCooldown(int $accountId, string $jid, ?int $ruleId, AutoReplySetting $settings): GuardDecision
     {
         $rule = $ruleId !== null ? AutoReplyRule::find($ruleId) : null;
         $mode = $rule?->cooldown_mode ?: 'global';
 
         if ($mode === 'global') {
-            return $this->throttle->contactRecentlyReplied($accountId, $jid)
+            // S1: le o VALOR ATUAL de contact_rate_seconds e compara com o ULTIMO
+            // auto-reply ao contato (qualquer regra). Antes usava cache com TTL congelado
+            // no envio -> mudar o valor nao tinha efeito ate o TTL antigo expirar (stale).
+            $segundos = (int) $settings->contact_rate_seconds;
+            if ($segundos <= 0) {
+                return GuardDecision::allow();
+            }
+
+            $ultimaContato = AutoReplyLog::query()
+                ->where('account_id', $accountId)
+                ->where('remote_jid', $jid)
+                ->where('status', 'sent')
+                ->whereNotNull('sent_at')
+                ->latest('sent_at')
+                ->value('sent_at');
+
+            if ($ultimaContato === null) {
+                return GuardDecision::allow();
+            }
+
+            return $ultimaContato->copy()->greaterThan(now()->subSeconds($segundos))
                 ? GuardDecision::block('rate_contato')
                 : GuardDecision::allow();
         }
