@@ -83,7 +83,7 @@
             </div>
 
             {{-- FREIOS-THROTTLE com toggle liga/desliga --}}
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 @foreach ([
                     ['min_interval_seconds', 'min_interval_enabled', $min_interval_enabled, 'Intervalo min (s)', 'Tempo minimo, em segundos, entre dois envios quaisquer do robo. Espaca os disparos pra nao parecer robo.'],
                     ['per_minute_cap', 'per_minute_enabled', $per_minute_enabled, 'Teto / minuto', 'Maximo de respostas automaticas por minuto, no total. Atingiu, segura ate o minuto virar.'],
@@ -91,9 +91,9 @@
                     ['contact_rate_seconds', 'contact_rate_enabled', $contact_rate_enabled, 'Intervalo por contato (s)', 'Tempo minimo, em segundos, entre duas respostas pro MESMO contato. Evita responder a mesma pessoa repetidamente. 1800 = 30 min.'],
                 ] as [$field, $toggleProp, $toggleVal, $label, $tip])
                     <div @class(['rounded-lg border border-zinc-200 p-3 dark:border-zinc-800', 'opacity-60' => ! $toggleVal])>
-                        <div class="mb-1 flex items-center justify-between gap-1">
-                            <span class="flex items-center gap-1">
-                                <label class="text-sm font-medium">{{ $label }}</label>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <span class="flex min-w-0 items-center gap-1">
+                                <label class="truncate text-sm font-medium">{{ $label }}</label>
                                 <x-info-tip :text="$tip" />
                             </span>
                             <x-freio-toggle :model="$toggleProp" :enabled="$toggleVal" />
