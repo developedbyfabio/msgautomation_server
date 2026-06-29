@@ -21,9 +21,12 @@ php artisan db:seed          # conta-ancora + channel da instancia
 
 ### Servir (porta que o container alcanca)
 ```
-php artisan serve --host=0.0.0.0 --port=8190
+php artisan serve --host=172.17.0.1 --port=8190
 ```
-`0.0.0.0` e necessario pra o container da Evolution alcancar via `host.docker.internal`.
+Bindamos no IP do **docker0** (`172.17.0.1`), que e pra onde o `host.docker.internal`
+resolve de dentro do container da Evolution. Assim o webhook funciona **sem** expor a
+8190 na LAN (`eth0`). Confirme o IP com `docker exec evolution_msg getent hosts
+host.docker.internal` — se mudar, ajuste o bind. **Nunca** volte pra `0.0.0.0`.
 
 ### Worker da fila (Redis)
 Em outro terminal:
