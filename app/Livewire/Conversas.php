@@ -18,6 +18,7 @@ class Conversas extends Component
     public ?string $selectedJid = null;
     public string $body = '';
     public ?string $sendStatus = null;
+    public ?string $confirmingMuteJid = null;
 
     public function select(string $jid): void
     {
@@ -25,26 +26,35 @@ class Conversas extends Component
         $this->sendStatus = null;
     }
 
-    public function approveContact(): void
+    public function approveJid(string $jid): void
     {
-        $this->setSelectedMode('on');
-    }
-
-    public function muteContact(): void
-    {
-        $this->setSelectedMode('off');
-    }
-
-    private function setSelectedMode(string $mode): void
-    {
-        if (! $this->selectedJid) {
-            return;
-        }
-
         Contact::updateOrCreate(
-            ['account_id' => $this->accountId(), 'remote_jid' => $this->selectedJid],
-            ['auto_reply_mode' => $mode],
+            ['account_id' => $this->accountId(), 'remote_jid' => $jid],
+            ['auto_reply_mode' => 'on'],
         );
+        $this->dispatch('toast', message: 'Contato aprovado.');
+    }
+
+    public function confirmMute(string $jid): void
+    {
+        $this->confirmingMuteJid = $jid;
+    }
+
+    public function cancelMute(): void
+    {
+        $this->confirmingMuteJid = null;
+    }
+
+    public function muteConfirmed(): void
+    {
+        if ($this->confirmingMuteJid) {
+            Contact::updateOrCreate(
+                ['account_id' => $this->accountId(), 'remote_jid' => $this->confirmingMuteJid],
+                ['auto_reply_mode' => 'off'],
+            );
+            $this->dispatch('toast', message: 'Contato silenciado.');
+        }
+        $this->confirmingMuteJid = null;
     }
 
     /** Envio MANUAL (R1): respeita tetos protetivos, ignora kill switch. Envia de verdade. */
@@ -65,11 +75,14 @@ class Conversas extends Component
         $log = $sender->send('manual', $channel, $this->selectedJid, $body);
 
         $this->body = '';
-        $this->sendStatus = match ($log->status) {
-            'sent' => null,
-            'blocked' => 'Bloqueado por freio: ' . $log->motivo,
-            default => 'Falha no envio.',
-        };
+        if ($log->status === 'sent') {
+            $this->sendStatus = null;
+            $this->dispatch('toast', message: 'Mensagem enviada.');
+        } else {
+            $this->sendStatus = $log->status === 'blocked'
+                ? 'Bloqueado por freio: ' . $log->motivo
+                : 'Falha no envio.';
+        }
     }
 
     private function channel(): ?Channel
@@ -101,7 +114,6 @@ class Conversas extends Component
                     'jid' => $m->remote_jid,
                     'at' => $at,
                     'text' => $m->text ?: '[' . $m->type . ']',
-                    'dir' => $m->from_me ? 'out' : 'in',
                 ];
             }
         }
@@ -113,7 +125,6 @@ class Conversas extends Component
                     'jid' => $l->remote_jid,
                     'at' => $at,
                     'text' => $l->response_text,
-                    'dir' => 'out',
                 ];
             }
         }
@@ -147,7 +158,6 @@ class Conversas extends Component
         $items = [];
 
         foreach (IncomingMessage::query()->where('account_id', $account)->where('remote_jid', $this->selectedJid)->orderBy('received_at')->limit(500)->get() as $m) {
-            // Dedup: mensagem propria (fromMe) que e o eco de um envio do app ja aparece como log.
             if ($m->from_me && in_array($m->evolution_message_id, $providerIds, true)) {
                 continue;
             }
@@ -182,6 +192,7 @@ class Conversas extends Component
             'thread' => $this->thread(),
             'selectedContact' => $selectedContact,
             'isGroup' => $this->selectedJid ? str_ends_with($this->selectedJid, '@g.us') : false,
+            'mutingName' => $this->confirmingMuteJid ? ($selectedContact?->push_name ?: $this->numberFromJid($this->confirmingMuteJid)) : null,
         ]);
     }
 }
