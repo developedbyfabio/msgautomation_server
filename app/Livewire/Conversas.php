@@ -19,6 +19,7 @@ class Conversas extends Component
     public string $body = '';
     public ?string $sendStatus = null;
     public ?string $confirmingMuteJid = null;
+    public string $search = '';
 
     // S4 — painel de info do contato.
     public bool $showContactPanel = false;
@@ -238,14 +239,60 @@ class Conversas extends Component
             }
         }
 
+        $busca = $this->normalizeSearch($this->search);
+
         return collect($rows)->map(function ($r) use ($contacts) {
             $c = $contacts->get($r['jid']);
             $r['name'] = $c?->push_name ?: $this->numberFromJid($r['jid']);
             $r['mode'] = $c?->auto_reply_mode ?? 'default';
             $r['is_group'] = str_ends_with($r['jid'], '@g.us');
+            $r['time_label'] = $r['at'] ? $this->relativeTime($r['at']) : '';
 
             return $r;
-        })->sortByDesc('at')->values();
+        })
+            ->when($busca !== '', fn ($col) => $col->filter(
+                fn ($r) => str_contains($this->normalizeSearch($r['name']), $busca)
+                    || str_contains($this->normalizeSearch($this->numberFromJid($r['jid'])), $busca)
+            ))
+            ->sortByDesc('at')
+            ->values();
+    }
+
+    private function normalizeSearch(string $value): string
+    {
+        return mb_strtolower(trim($value), 'UTF-8');
+    }
+
+    /** Hora relativa estilo WhatsApp: hoje -> H:i; ontem -> "Ontem"; antigo -> d/m. */
+    private function relativeTime(\Illuminate\Support\Carbon $at): string
+    {
+        $local = $at->paraExibicao();
+        $hoje = now()->paraExibicao()->startOfDay();
+        $dia = $local->copy()->startOfDay();
+        // Carbon 3: diffInDays e SINALIZADO. Datas passadas dao negativo -> abs().
+        $diff = (int) abs($hoje->diffInDays($dia));
+
+        return match (true) {
+            $diff === 0 => $local->format('H:i'),
+            $diff === 1 => 'Ontem',
+            default => $local->format('d/m'),
+        };
+    }
+
+    /** Rotulo do separador de data na thread. */
+    private function dateSeparator(\Illuminate\Support\Carbon $at): string
+    {
+        $local = $at->paraExibicao();
+        $hoje = now()->paraExibicao()->startOfDay();
+        $dia = $local->copy()->startOfDay();
+        // Carbon 3: diffInDays e SINALIZADO. Datas passadas dao negativo -> abs().
+        $diff = (int) abs($hoje->diffInDays($dia));
+
+        return match (true) {
+            $diff === 0 => 'Hoje',
+            $diff === 1 => 'Ontem',
+            default => $local->format('d/m/Y'),
+        };
     }
 
     private function thread(): array
@@ -286,6 +333,23 @@ class Conversas extends Component
         }
 
         usort($items, fn ($a, $b) => ($a['at'] <=> $b['at']));
+
+        // S6: separadores de data ("Hoje"/"Ontem"/data) + agrupamento de mensagens
+        // seguidas do mesmo lado (esconde repeticao, aperta o espacamento).
+        $prevDate = null;
+        $prevSide = null;
+        foreach ($items as $i => &$item) {
+            $side = $item['kind'] === 'in' ? 'in' : 'out';
+            $dateKey = $item['at'] ? $item['at']->paraExibicao()->format('Y-m-d') : null;
+
+            $item['side'] = $side;
+            $item['separator'] = ($dateKey !== $prevDate && $item['at']) ? $this->dateSeparator($item['at']) : null;
+            $item['grouped'] = ($side === $prevSide && $item['separator'] === null);
+
+            $prevDate = $dateKey;
+            $prevSide = $side;
+        }
+        unset($item);
 
         return $items;
     }

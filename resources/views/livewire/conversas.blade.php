@@ -1,9 +1,16 @@
 <div class="flex h-full" wire:poll.5s>
     {{-- LISTA DE CONVERSAS --}}
-    <aside class="w-80 shrink-0 border-r border-zinc-200 bg-white overflow-y-auto dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="flex items-center gap-2 p-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            <flux:icon icon="chat-bubble-left-right" variant="micro" /> Conversas
+    <aside class="flex w-80 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div class="shrink-0 border-b border-zinc-100 p-2.5 dark:border-zinc-800">
+            <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-zinc-400">
+                    <flux:icon icon="magnifying-glass" variant="micro" />
+                </span>
+                <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar conversa..."
+                    class="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-8 pr-3 text-sm focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800">
+            </div>
         </div>
+        <div class="min-h-0 flex-1 overflow-y-auto">
         @forelse ($conversations as $conv)
             <div wire:key="conv-{{ $conv['jid'] }}"
                 @class([
@@ -12,8 +19,13 @@
                     'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' => $selectedJid !== $conv['jid'],
                 ])>
                 <button type="button" wire:click="select('{{ $conv['jid'] }}')" class="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left">
-                    <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-medium text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200">
-                        {{ mb_strtoupper(mb_substr($conv['name'], 0, 1)) }}
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-medium {{ $conv['is_group'] ? 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200' : 'text-white' }}"
+                        @unless($conv['is_group']) style="background-color: {{ '#' . substr(md5($conv['jid']), 0, 6) }}" @endunless>
+                        @if ($conv['is_group'])
+                            <flux:icon icon="user-group" variant="micro" />
+                        @else
+                            {{ mb_strtoupper(mb_substr($conv['name'], 0, 1)) }}
+                        @endif
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5">
@@ -28,7 +40,7 @@
                         </div>
                         <div class="truncate text-sm text-zinc-500">{{ $conv['text'] }}</div>
                     </div>
-                    <div class="shrink-0 text-[11px] text-zinc-400">{{ $conv['at']?->paraExibicao()->format('d/m H:i') }}</div>
+                    <div class="shrink-0 self-start pt-0.5 text-[11px] text-zinc-400">{{ $conv['time_label'] }}</div>
                 </button>
                 @unless ($conv['is_group'])
                     <div class="pr-1">
@@ -47,9 +59,10 @@
         @empty
             <div class="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
                 <flux:icon icon="chat-bubble-left-right" class="size-8" />
-                <p class="text-sm">Nenhuma conversa ainda.</p>
+                <p class="text-sm">{{ $search !== '' ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.' }}</p>
             </div>
         @endforelse
+        </div>
     </aside>
 
     {{-- THREAD --}}
@@ -116,26 +129,46 @@
                 @endunless
             </div>
 
-            <div class="flex-1 space-y-2 overflow-y-auto p-4">
+            <div class="flex-1 overflow-y-auto p-4">
                 @forelse ($thread as $msg)
                     @php
-                        $isIn = $msg['kind'] === 'in';
-                        $label = match ($msg['kind']) {
-                            'out_bot' => 'robo', 'out_manual' => 'manual', 'out_phone' => 'celular', default => null,
+                        $isIn = $msg['side'] === 'in';
+                        // Origem (sutil): de quem partiu a mensagem enviada.
+                        [$origLabel, $origIcon] = match ($msg['kind']) {
+                            'out_bot' => ['robo', 'bolt'],
+                            'out_manual' => ['manual', 'hand-raised'],
+                            'out_phone' => ['celular', 'device-phone-mobile'],
+                            default => [null, null],
                         };
                     @endphp
-                    <div @class(['flex', 'justify-start' => $isIn, 'justify-end' => ! $isIn])>
+
+                    @if ($msg['separator'])
+                        <div class="my-3 flex justify-center">
+                            <span class="rounded-full bg-zinc-200/80 px-3 py-1 text-[11px] font-medium text-zinc-600 shadow-sm dark:bg-zinc-800 dark:text-zinc-300">{{ $msg['separator'] }}</span>
+                        </div>
+                    @endif
+
+                    <div @class(['flex', 'justify-start' => $isIn, 'justify-end' => ! $isIn, 'mt-0.5' => $msg['grouped'], 'mt-2' => ! $msg['grouped']])>
                         <div @class([
-                            'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
+                            'relative max-w-[75%] px-3 py-2 text-sm shadow-sm',
+                            // Bolha recebida: clara, a esquerda. Enviada: verde, a direita.
                             'bg-white text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100' => $isIn,
-                            'bg-sky-100 text-sky-900 dark:bg-sky-900 dark:text-sky-50' => $msg['kind'] === 'out_phone',
-                            'bg-zinc-800 text-white dark:bg-zinc-700' => $msg['kind'] === 'out_manual',
-                            'bg-emerald-600 text-white' => $msg['kind'] === 'out_bot',
+                            'bg-emerald-100 text-zinc-800 dark:bg-emerald-900 dark:text-emerald-50' => ! $isIn,
+                            // Cantos estilo WhatsApp; "bico" some quando agrupado.
+                            'rounded-2xl' => $msg['grouped'],
+                            'rounded-2xl rounded-tl-sm' => ! $msg['grouped'] && $isIn,
+                            'rounded-2xl rounded-tr-sm' => ! $msg['grouped'] && ! $isIn,
                         ])>
                             <div class="whitespace-pre-wrap break-words">{{ $msg['text'] }}</div>
-                            <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] opacity-70">
-                                @if ($label)<span class="uppercase">{{ $label }}</span>@endif
-                                <span>{{ $msg['at']?->paraExibicao()->format('d/m H:i') }}</span>
+                            <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                @if ($origLabel)
+                                    <flux:tooltip content="Origem: {{ $origLabel }}">
+                                        <span class="inline-flex items-center gap-0.5">
+                                            <flux:icon :icon="$origIcon" variant="micro" class="size-3 opacity-60" />
+                                        </span>
+                                    </flux:tooltip>
+                                @endif
+                                <span>{{ $msg['at']?->paraExibicao()->format('H:i') }}</span>
                             </div>
                         </div>
                     </div>
