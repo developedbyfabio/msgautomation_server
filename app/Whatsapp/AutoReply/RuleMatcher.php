@@ -192,6 +192,30 @@ class RuleMatcher
         ][$type] ?? $type;
     }
 
+    /**
+     * Casa uma LISTA de gatilhos (['type','value','precision','fuzzy_level']) contra o
+     * texto — reusado pelo motor de fluxos (gatilhos de entrada, mesmo motor das regras).
+     * @param iterable<array> $triggerList
+     */
+    public function listMatches(iterable $triggerList, ?string $text): bool
+    {
+        if ($text === null) {
+            return false;
+        }
+        $raw = trim($text);
+        $normText = $this->normalize($text);
+        if ($normText === '') {
+            return false;
+        }
+        foreach ($triggerList as $trigger) {
+            if ($this->triggerMatches($trigger, $raw, $normText)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function normalize(string $value): string
     {
         $value = Str::ascii($value);          // fold de acento -> ascii
