@@ -126,6 +126,22 @@
                                             <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
                                             Regex avancado: validado e protegido, mas teste antes. Sem delimitadores; flags i+u aplicadas.
                                         </p>
+                                    @else
+                                        {{-- Precisao por gatilho (S5): exato (default) ou tolerante a erros --}}
+                                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                            <select wire:model.live="triggers.{{ $i }}.precision" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                                                <option value="exato">exato</option>
+                                                <option value="tolerante">tolerante a erros</option>
+                                            </select>
+                                            @if (($t['precision'] ?? 'exato') === 'tolerante')
+                                                <select wire:model="triggers.{{ $i }}.fuzzy_level" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                                                    <option value="baixa">baixa</option>
+                                                    <option value="media">media</option>
+                                                    <option value="alta">alta</option>
+                                                </select>
+                                                <span class="text-amber-600 dark:text-amber-400">tolera erro de digitacao; palavra curta (&lt;4) segue exata. Teste no "Testar".</span>
+                                            @endif
+                                        </div>
                                     @endif
                                 </div>
                                 <button type="button" wire:click="removeTrigger({{ $i }})" @disabled(count($triggers) <= 1)

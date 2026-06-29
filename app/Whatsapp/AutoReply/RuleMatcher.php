@@ -59,7 +59,7 @@ class RuleMatcher
             }
 
             foreach ($rule->triggerList() as $trigger) {
-                if ($this->matches($trigger['type'], $raw, $normText, $this->normalize($trigger['value']), (string) $trigger['value'])) {
+                if ($this->triggerMatches($trigger, $raw, $normText)) {
                     return $rule;
                 }
             }
@@ -98,7 +98,7 @@ class RuleMatcher
         }
 
         foreach ($rule->triggerList() as $trigger) {
-            if ($this->matches($trigger['type'], $raw, $normText, $this->normalize($trigger['value']), (string) $trigger['value'])) {
+            if ($this->triggerMatches($trigger, $raw, $normText)) {
                 return $trigger;
             }
         }
@@ -115,22 +115,34 @@ class RuleMatcher
         return trim($value);
     }
 
-    private function matches(string $type, string $raw, string $text, string $normValue, string $rawValue): bool
+    /**
+     * Decide se UM gatilho casa o texto. $trigger: ['type','value','precision','fuzzy_level'].
+     * precision 'tolerante' (S5) so vale para tipos de texto; regex nunca e fuzzy.
+     */
+    private function triggerMatches(array $trigger, string $raw, string $normText): bool
     {
+        $type = $trigger['type'];
+
         if ($type === 'regex') {
-            return $this->regexMatches($raw, $rawValue);
+            return $this->regexMatches($raw, (string) $trigger['value']);
         }
 
+        $normValue = $this->normalize((string) $trigger['value']);
         if ($normValue === '') {
             return false;
         }
 
-        return match ($type) {
-            'exact' => $text === $normValue,
-            'starts_with' => str_starts_with($text, $normValue),
-            'contains' => $this->containsWholeWord($text, $normValue),
-            default => false,
-        };
+        $tolerante = ($trigger['precision'] ?? 'exato') === 'tolerante';
+        if (! $tolerante) {
+            return match ($type) {
+                'exact' => $normText === $normValue,
+                'starts_with' => str_starts_with($normText, $normValue),
+                'contains' => $this->containsWholeWord($normText, $normValue),
+                default => false,
+            };
+        }
+
+        return $this->fuzzyMatches($type, $normText, $normValue, (string) ($trigger['fuzzy_level'] ?? 'media'));
     }
 
     private function containsWholeWord(string $text, string $value): bool
@@ -138,6 +150,95 @@ class RuleMatcher
         $pattern = '/(?<![\p{L}\p{N}])' . preg_quote($value, '/') . '(?![\p{L}\p{N}])/u';
 
         return (bool) preg_match($pattern, $text);
+    }
+
+    // ---- S5: match tolerante (fuzzy), por token, whole-word -----------------
+
+    private function tokens(string $value): array
+    {
+        return preg_split('/[^\p{L}\p{N}]+/u', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+
+    /**
+     * Match tolerante por TOKEN (Levenshtein, whole-word). Multi-token exige a
+     * sequencia consecutiva (mantem o whole-word). Texto ja normalizado (ascii
+     * lowercase) -> levenshtein byte-safe.
+     */
+    private function fuzzyMatches(string $type, string $normText, string $normValue, string $level): bool
+    {
+        $alvo = $this->tokens($normValue);
+        $msg = $this->tokens($normText);
+        $n = count($alvo);
+        if ($n === 0 || count($msg) < $n) {
+            return false;
+        }
+
+        if ($type === 'exact') {
+            return count($msg) === $n && $this->tokenSeqMatches($msg, 0, $alvo, $level);
+        }
+
+        if ($type === 'starts_with') {
+            return $this->tokenSeqMatches($msg, 0, $alvo, $level);
+        }
+
+        // contains: procura a sequencia consecutiva em qualquer posicao.
+        for ($i = 0; $i + $n <= count($msg); $i++) {
+            if ($this->tokenSeqMatches($msg, $i, $alvo, $level)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Os tokens-alvo casam (cada um dentro da folga) a partir de $offset no $msg? */
+    private function tokenSeqMatches(array $msg, int $offset, array $alvo, string $level): bool
+    {
+        foreach ($alvo as $k => $t) {
+            if (! $this->fuzzyTokenEqual($msg[$offset + $k], (string) $t, $level)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function fuzzyTokenEqual(string $msgToken, string $trigToken, string $level): bool
+    {
+        $len = strlen($trigToken);
+
+        // Guarda-corpo: token curto (< 4) NUNCA tolera erro -> so exato.
+        if ($len < 4) {
+            return $msgToken === $trigToken;
+        }
+
+        $allowed = $this->allowedDistance($len, $level);
+        if ($allowed === 0) {
+            return $msgToken === $trigToken;
+        }
+
+        // Poda barata: diferenca de tamanho ja maior que a folga -> nao casa.
+        if (abs(strlen($msgToken) - $len) > $allowed) {
+            return false;
+        }
+
+        return levenshtein($msgToken, $trigToken) <= $allowed;
+    }
+
+    /**
+     * Folga (distancia maxima de edicao) que ESCALA com o tamanho do token, com teto
+     * baixo por nivel. Conservador de proposito (anti falso-positivo):
+     *   baixa  -> ~len/6 (teto 1)   media -> ~len/4 (teto 2)   alta -> ~len/3 (teto 2)
+     */
+    private function allowedDistance(int $len, string $level): int
+    {
+        [$divisor, $cap] = match ($level) {
+            'baixa' => [6, 1],
+            'alta' => [3, 2],
+            default => [4, 2], // media
+        };
+
+        return min($cap, intdiv($len, $divisor));
     }
 
     /**
