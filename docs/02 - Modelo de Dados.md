@@ -89,6 +89,17 @@ Engine: `RuleMatcher` filtra por **escopo** (S3) e casa se **qualquer** gatilho 
 aplica o **cooldown por regra** (S2, via `auto_reply_logs`) substituindo o rate-global da regra,
 com os **tetos de volume** como piso. `RuleTester` (S4) faz dry-run sem enviar.
 
+## auto_reply_settings — toggles por freio (aditivo, `..._000013`)
+Cada freio-throttle global ganhou um liga/desliga (bool, **default true** = preserva o
+comportamento): `window_enabled`, `min_interval_enabled`, `per_minute_enabled`,
+`per_day_enabled`, `contact_rate_enabled`. Desligado = aquele freio **nao bloqueia**
+(o `AntiBanGuard` respeita). `skip_groups`/`warmup_enabled` ja eram seus proprios toggles.
+Guardas estruturais **fromMe** e **idempotencia** NAO tem toggle (sempre ativos).
+
+O **intervalo por contato** (modo `global` de cooldown) passou a ler o **valor atual** de
+`contact_rate_seconds` comparando com o ultimo auto-reply ao contato em `auto_reply_logs`
+(antes usava cache com TTL congelado no envio -> nao refletia mudanca do valor).
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000012`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000013`).

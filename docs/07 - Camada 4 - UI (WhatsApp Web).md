@@ -91,5 +91,18 @@ O webhook da Evolution aponta pra `host.docker.internal:8080`. Trocou a porta ->
 - **Precisao por gatilho (S5):** `exato` (default) ou `tolerante a erros` (baixa/media/alta).
   Levenshtein por token whole-word; guarda-corpos: token < 4 chars = exato, folga escala com o
   tamanho (teto baixo). Calibravel no Testador. Default seguro = exato.
-- Pendente: paginacao, websockets no lugar do polling; render real de midia; multiselect de contatos
-  com busca (hoje `<select multiple>`); variantes Pro do Flux nao usadas. **Kill switch real = OFF.**
+- Pendente: paginacao, websockets no lugar do polling; render real de midia; variantes Pro do Flux
+  nao usadas.
+
+## Controle e transparencia dos freios
+- **Tooltips "i"** (`<x-info-tip>`, Flux tooltip acessivel) em cada campo de `/configuracoes`.
+- **Toggle liga/desliga por freio** (`<x-freio-toggle>`): janela, intervalo minimo, teto/minuto,
+  teto/dia, intervalo por contato. Desligado = nao bloqueia (estado visivel). `skip_groups`/aquecimento
+  seguem como checkbox. **Guardas estruturais** (fromMe, idempotencia) sao **sempre ativos, nao
+  desligaveis, mas VISIVEIS** com explicacao (transparencia).
+- **Testador (dry-run)** lista **todos os freios** com passa/bloqueia/desligado
+  (`AntiBanGuard::breakdown`).
+- **Rotulos pt-BR** dos tipos de match (`RuleMatcher::typeLabel`): Contem / Mensagem exata / Comeca com
+  / Regex (avancado). "Rate por contato" renomeado para **Intervalo por contato** e passou a ler o
+  valor atual (sem cache stale).
+- Selecao de contatos do escopo por **checkbox buscavel** (nao mais `<select multiple>`).
