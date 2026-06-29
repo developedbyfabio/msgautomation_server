@@ -23,7 +23,7 @@ class AntiBanGuard
     {
     }
 
-    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null): GuardDecision
+    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null, bool $flow = false): GuardDecision
     {
         $settings = $this->settingsFor($accountId);
 
@@ -45,11 +45,14 @@ class AntiBanGuard
                 return GuardDecision::block('fora_da_janela');
             }
             // S2: cooldown por regra SUBSTITUI o rate-por-contato global (quando a regra
-            // define um modo proprio); senao cai no rate global. Os tetos de volume
-            // (checkCaps) seguem valendo abaixo como piso de protecao do numero.
-            $cd = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings);
-            if (! $cd->allowed) {
-                return $cd;
+            // define um modo proprio); senao cai no rate global. Fatia A: respostas de
+            // FLUXO (sessao ativa) sao ISENTAS do intervalo-por-contato — senao o
+            // vai-e-volta do menu travaria. Os tetos de volume (checkCaps) seguem valendo.
+            if (! $flow) {
+                $cd = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings);
+                if (! $cd->allowed) {
+                    return $cd;
+                }
             }
         }
 

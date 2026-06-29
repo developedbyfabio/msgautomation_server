@@ -31,6 +31,7 @@ class SendAutoReply implements ShouldQueue
         public readonly int $incomingMessageId,
         public readonly ?int $ruleId,
         public readonly ?string $text = null,
+        public readonly bool $flow = false,
     ) {
     }
 
@@ -69,6 +70,7 @@ class SendAutoReply implements ShouldQueue
             incomingMessageId: $incoming->id,
             ruleId: $this->ruleId,
             fromMe: (bool) $incoming->from_me,
+            flow: $this->flow,
         );
     }
 }

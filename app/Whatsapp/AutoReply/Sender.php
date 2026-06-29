@@ -38,6 +38,7 @@ class Sender
         ?int $incomingMessageId = null,
         ?int $ruleId = null,
         bool $fromMe = false,
+        bool $flow = false,
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
@@ -53,8 +54,9 @@ class Sender
             $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId));
         }
 
-        // 2. freios (ruleId habilita o cooldown por regra — S2)
-        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe, $ruleId);
+        // 2. freios (ruleId habilita o cooldown por regra — S2; flow isenta o intervalo
+        //    por contato durante a sessao — Fatia A)
+        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe, $ruleId, $flow);
         if (! $decision->allowed) {
             $log->update(['status' => 'blocked', 'motivo' => $decision->reason]);
 

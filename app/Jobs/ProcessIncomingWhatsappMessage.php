@@ -137,26 +137,71 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        // Sem regra que case -> silencio. (Passa o remetente p/ o escopo por contato — S3.)
-        $rule = $matcher->match($account->id, $channel->id, $data->text, $data->remoteJid);
+        $jid = $data->remoteJid;
+        $flows = app(\App\Whatsapp\Flows\FlowEngine::class);
+
+        // Fatia A — (1) sessao de fluxo ATIVA tem prioridade: navegacao, nunca cai nas regras.
+        $session = $flows->activeSession($account->id, $jid);
+        if ($session !== null) {
+            // Opt-out no meio do fluxo -> encerra a sessao e silencia (decisao 7).
+            if ($guard->contactMode($account->id, $jid) === 'off') {
+                $session->update(['status' => 'cancelled']);
+
+                return;
+            }
+            $this->dispatchFlowReply($account, $channel, $message, $flows->advance($session, (string) $data->text), $guard);
+
+            return;
+        }
+
+        // (2) Sem sessao: fluxo de ENTRADA vence a regra (decisao 6). Exige aprovacao do contato.
+        $flow = $flows->entryFlow($account->id, (string) $data->text, $jid);
+        if ($flow !== null) {
+            if (! $guard->contactGatePasses($account->id, $jid)) {
+                return;
+            }
+            $this->dispatchFlowReply($account, $channel, $message, $flows->start($account->id, $flow, $jid), $guard);
+
+            return;
+        }
+
+        // (3) Regras normais (inalterado). Sem regra que case -> silencio.
+        $rule = $matcher->match($account->id, $channel->id, $data->text, $jid);
         if ($rule === null) {
             return;
         }
 
         // Portao de contato (allowlist/all + auto_reply_mode) -> silencio se nao aprovado.
-        if (! $guard->contactGatePasses($account->id, $data->remoteJid)) {
+        if (! $guard->contactGatePasses($account->id, $jid)) {
             return;
         }
 
         // Delay humano: a auto-resposta vai pra fila com atraso aleatorio. O envio real
         // (e o re-check R2 + freios volateis) acontece no SendAutoReply via Sender.
-        // S7: a resposta (escolha aleatoria + placeholders) e resolvida NO ENVIO, nao
-        // aqui — por isso passamos so o rule->id (sem texto).
         $settings = $guard->settingsFor($account->id);
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
         SendAutoReply::dispatch($message->id, $rule->id)
+            ->delay(now()->addSeconds(random_int($min, $max)));
+    }
+
+    /**
+     * Enfileira a resposta de um nó de fluxo (texto resolvido no envio). `flow: true`
+     * isenta o "Intervalo por contato"/cooldown durante a sessao (resto dos freios vale).
+     */
+    private function dispatchFlowReply(Account $account, Channel $channel, IncomingMessage $message, array $res, AntiBanGuard $guard): void
+    {
+        $text = $res['text'] ?? null;
+        if ($text === null || $text === '') {
+            return;
+        }
+
+        $settings = $guard->settingsFor($account->id);
+        $min = (int) $settings->delay_min_seconds;
+        $max = (int) max($min, $settings->delay_max_seconds);
+
+        SendAutoReply::dispatch($message->id, null, $text, true)
             ->delay(now()->addSeconds(random_int($min, $max)));
     }
 }
