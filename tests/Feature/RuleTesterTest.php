@@ -171,6 +171,33 @@ class RuleTesterTest extends TestCase
         $this->assertSame('bloqueia', $this->freio($r, 'kill switch')['status']);
     }
 
+    public function test_senha_mascarada_por_padrao_no_testador(): void
+    {
+        // Regra que devolve senha (escopo contatos exigido pelo S5).
+        $rule = AutoReplyRule::create([
+            'account_id' => $this->account->id, 'match_type' => 'contains', 'match_value' => 'wifi',
+            'response_text' => 'A senha e {senha:wifi}', 'enabled' => true, 'priority' => 0, 'scope' => 'contatos',
+        ]);
+        $rule->triggers()->create(['match_type' => 'contains', 'match_value' => 'wifi']);
+        $rule->responses()->create(['response_text' => 'A senha e {senha:wifi}']);
+        app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'TopSecret#9');
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'push_name' => 'Joao', 'auto_reply_mode' => 'on']);
+        $rule->contacts()->attach($contact->id);
+
+        // Mascarado por padrao: NAO mostra o valor.
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id, false);
+        $this->assertTrue($r['tem_senha']);
+        $this->assertStringNotContainsString('TopSecret#9', (string) $r['resposta']);
+        $this->assertStringContainsString('••••', (string) $r['resposta']);
+
+        // Revelar deliberado: mostra o valor (transiente, retornado, nao persistido).
+        $r2 = $this->tester()->test($this->account->id, null, 'wifi', $contact->id, true);
+        $this->assertStringContainsString('TopSecret#9', (string) $r2['resposta']);
+
+        // O testador nao cria log nem grava o valor.
+        $this->assertSame(0, \App\Models\AutoReplyLog::count());
+    }
+
     public function test_dry_run_nao_envia_nem_cria_log(): void
     {
         $this->rule();

@@ -2,9 +2,9 @@
 
 namespace App\Whatsapp\AutoReply;
 
-use App\Models\Account;
-use App\Models\Channel;
 use App\Models\Contact;
+use App\Whatsapp\Secrets\SecretMissingException;
+use App\Whatsapp\Secrets\SecretVault;
 
 /**
  * S4 — testador (dry-run). Dado um texto de exemplo (+ contato opcional), diz QUAL
@@ -20,6 +20,7 @@ class RuleTester
         private RuleMatcher $matcher,
         private RuleResponder $responder,
         private AntiBanGuard $guard,
+        private SecretVault $vault,
     ) {
     }
 
@@ -39,7 +40,7 @@ class RuleTester
         'teto_dia' => 'Teto de volume: limite por dia',
     ];
 
-    public function test(int $accountId, ?int $channelId, string $sample, ?int $contactId = null): array
+    public function test(int $accountId, ?int $channelId, string $sample, ?int $contactId = null, bool $revealSecrets = false): array
     {
         $sample = trim($sample);
         if ($sample === '') {
@@ -64,12 +65,27 @@ class RuleTester
         $trigger = $this->matcher->firstMatchingTrigger($rule, $sample);
         $respostas = $rule->responseList();
 
-        $resposta = $respostas->isNotEmpty()
+        // Resolve placeholders comuns ({nome}/{saudacao}/...). {senha:...} fica intacto aqui.
+        $rendered = $respostas->isNotEmpty()
             ? $this->responder->render((string) $respostas->first(), [
                 'nome' => $contact?->push_name,
                 'now' => now(),
             ])
             : null;
+
+        // S6: senha MASCARADA por padrao. Revelar e deliberado e transiente (nao persiste).
+        $temSenha = $rendered !== null && $this->vault->hasRef($rendered);
+        if ($rendered === null) {
+            $resposta = null;
+        } elseif ($temSenha && $revealSecrets) {
+            try {
+                $resposta = $this->vault->resolve($accountId, $rendered);
+            } catch (SecretMissingException) {
+                $resposta = $this->vault->mask($rendered);
+            }
+        } else {
+            $resposta = $this->vault->mask($rendered); // sem senha, mask e no-op
+        }
 
         // Freio que bloquearia (somente-leitura). So da pra avaliar os freios de contato
         // se houver contato escolhido; senao reportamos so o que independe de contato.
@@ -87,6 +103,7 @@ class RuleTester
             'trigger' => $trigger ? (RuleMatcher::typeLabel($trigger['type']) . ': ' . $trigger['value']) : null,
             'trigger_precision' => $trigger['precision'] ?? 'exato',
             'resposta' => $resposta,
+            'tem_senha' => $temSenha,
             'respostas_total' => $respostas->count(),
             'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
             'bloqueio' => $bloqueio,

@@ -326,10 +326,22 @@
                                     @endif
                                 </p>
                                 <div class="rounded bg-white p-2 text-sm dark:bg-zinc-900">
-                                    <span class="text-[11px] uppercase text-zinc-400">Resposta</span>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] uppercase text-zinc-400">Resposta</span>
+                                        @if ($testResult['tem_senha'] ?? false)
+                                            @if ($testReveal)
+                                                <button type="button" wire:click="runTest" class="text-[11px] text-zinc-400 hover:underline">ocultar senha</button>
+                                            @else
+                                                <button type="button" wire:click="revealTest" class="text-[11px] text-emerald-600 hover:underline">revelar senha</button>
+                                            @endif
+                                        @endif
+                                    </div>
                                     <div class="whitespace-pre-wrap">{{ $testResult['resposta'] }}</div>
                                     @if (($testResult['respostas_total'] ?? 1) > 1)
                                         <p class="mt-1 text-[11px] text-zinc-400">(sorteia entre {{ $testResult['respostas_total'] }} respostas — mostrando a 1a)</p>
+                                    @endif
+                                    @if (($testResult['tem_senha'] ?? false) && ! $testReveal)
+                                        <p class="mt-1 text-[11px] text-zinc-400">Senha mascarada. "Revelar senha" decifra so pra exibir (nao persiste).</p>
                                     @endif
                                 </div>
                                 @if ($testResult['bloqueio'] ?? null)

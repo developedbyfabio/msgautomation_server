@@ -44,6 +44,7 @@ class Regras extends Component
     public string $testSample = '';
     public ?int $testContactId = null;
     public ?array $testResult = null;
+    public bool $testReveal = false;
 
     protected function rules(): array
     {
@@ -294,22 +295,29 @@ class Regras extends Component
     public function openTester(): void
     {
         $this->testResult = null;
+        $this->testReveal = false;
         $this->showTester = true;
     }
 
     public function closeTester(): void
     {
         $this->showTester = false;
+        $this->testReveal = false;
+        $this->testResult = null;
     }
 
     public function runTest(RuleTester $tester): void
     {
-        $this->testResult = $tester->test(
-            $this->accountId(),
-            $this->channelId(),
-            $this->testSample,
-            $this->testContactId ?: null,
-        );
+        // Re-testar sempre re-mascara a senha (revelar e deliberado, via revealTest).
+        $this->testReveal = false;
+        $this->testResult = $tester->test($this->accountId(), $this->channelId(), $this->testSample, $this->testContactId ?: null, false);
+    }
+
+    /** S6 — revelar a senha no resultado do testador (deliberado, transiente). */
+    public function revealTest(RuleTester $tester): void
+    {
+        $this->testReveal = true;
+        $this->testResult = $tester->test($this->accountId(), $this->channelId(), $this->testSample, $this->testContactId ?: null, true);
     }
 
     private function channelId(): ?int
