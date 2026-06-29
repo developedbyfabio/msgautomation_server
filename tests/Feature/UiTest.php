@@ -128,18 +128,14 @@ class UiTest extends TestCase
         $this->assertDatabaseHas('auto_reply_rules', ['id' => $rule->id]);
     }
 
-    public function test_regras_toggle_e_reordena(): void
+    public function test_regras_toggle(): void
     {
+        // Fatia 0: setas de prioridade removidas; resta o toggle (ativar/desativar).
         $account = $this->account();
-        $a = AutoReplyRule::create(['account_id' => $account->id, 'match_type' => 'contains', 'match_value' => 'a', 'response_text' => 'A', 'priority' => 0, 'enabled' => true]);
-        $b = AutoReplyRule::create(['account_id' => $account->id, 'match_type' => 'contains', 'match_value' => 'b', 'response_text' => 'B', 'priority' => 1]);
+        $a = AutoReplyRule::create(['account_id' => $account->id, 'match_type' => 'contains', 'match_value' => 'a', 'response_text' => 'A', 'enabled' => true]);
 
-        $c = Livewire::test(Regras::class)->call('toggle', $a->id);
+        Livewire::test(Regras::class)->call('toggle', $a->id);
         $this->assertDatabaseHas('auto_reply_rules', ['id' => $a->id, 'enabled' => false]);
-
-        $c->call('move', $b->id, 'up');
-        $this->assertSame(0, (int) $b->fresh()->priority);
-        $this->assertSame(1, (int) $a->fresh()->priority);
     }
 
     // ---- Contatos -----------------------------------------------------------

@@ -325,26 +325,6 @@ class Regras extends Component
         return Channel::query()->where('account_id', $this->accountId())->oldest('id')->value('id');
     }
 
-    public function move(int $id, string $dir): void
-    {
-        $rules = $this->query()->orderBy('priority')->orderBy('id')->get();
-        $idx = $rules->search(fn ($r) => $r->id === $id);
-        if ($idx === false) {
-            return;
-        }
-        $swap = $dir === 'up' ? $idx - 1 : $idx + 1;
-        if ($swap < 0 || $swap >= $rules->count()) {
-            return;
-        }
-
-        foreach ($rules as $i => $r) {
-            if ((int) $r->priority !== $i) {
-                $r->update(['priority' => $i]);
-            }
-        }
-        $rules[$idx]->update(['priority' => $swap]);
-        $rules[$swap]->update(['priority' => $idx]);
-    }
 
     private function query()
     {
@@ -361,8 +341,12 @@ class Regras extends Component
 
     public function render()
     {
-        $rules = $this->query()->with(['triggers', 'responses', 'contacts'])->orderBy('priority')->orderBy('id')->get();
+        // Fatia 0: ordem da lista = criacao (id); a precedencia agora e por especificidade.
+        $rules = $this->query()->with(['triggers', 'responses', 'contacts'])->orderBy('id')->get();
         $deleting = $this->confirmingDeleteId ? $rules->firstWhere('id', $this->confirmingDeleteId) : null;
+
+        // Fatia 0: detector de sobreposicao (avisa regras que casariam a mesma mensagem).
+        $conflicts = app(\App\Whatsapp\AutoReply\RuleConflictDetector::class)->conflicts($this->accountId());
 
         // Contatos pro seletor (escopo S3 + testador S4).
         $contacts = ($this->showTester || $this->showForm)
@@ -386,6 +370,7 @@ class Regras extends Component
             'contacts' => $contacts,
             'scopeContacts' => $scopeContacts,
             'secretNames' => $secretNames,
+            'conflicts' => $conflicts,
         ]);
     }
 }

@@ -52,7 +52,9 @@ class RuleTester
             : null;
         $jid = $contact?->remote_jid;
 
-        $rule = $this->matcher->match($accountId, $channelId, $sample, $jid);
+        // Fatia 0: todas as que casam, vencedora primeiro (auto-resolucao por especificidade).
+        $matching = $this->matcher->allMatching($accountId, $channelId, $sample, $jid);
+        $rule = $matching[0] ?? null;
 
         if ($rule === null) {
             return [
@@ -60,6 +62,13 @@ class RuleTester
                 'matched' => false,
                 'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
             ];
+        }
+
+        // "Tambem casariam" (perdedoras do conflito) — transparencia.
+        $tambem = [];
+        foreach (array_slice($matching, 1) as $outra) {
+            $g = $this->matcher->firstMatchingTrigger($outra, $sample);
+            $tambem[] = '#' . $outra->id . ($g ? ' (' . $g['value'] . ')' : '');
         }
 
         $trigger = $this->matcher->firstMatchingTrigger($rule, $sample);
@@ -109,6 +118,7 @@ class RuleTester
             'bloqueio' => $bloqueio,
             'bloqueio_label' => $bloqueioLabel,
             'freios' => $freios,
+            'tambem' => $tambem, // outras regras que tambem casariam (perderam por especificidade)
         ];
     }
 

@@ -24,14 +24,6 @@
             @forelse ($rules as $rule)
                 @php $trigs = $rule->triggerList(); $resps = $rule->responseList(); @endphp
                 <div class="flex items-start gap-3 p-3" wire:key="r-{{ $rule->id }}">
-                    <div class="flex flex-col pt-1 text-zinc-400">
-                        <button type="button" wire:click="move({{ $rule->id }}, 'up')" class="hover:text-zinc-700 dark:hover:text-zinc-200" aria-label="Subir">
-                            <flux:icon icon="chevron-up" variant="micro" />
-                        </button>
-                        <button type="button" wire:click="move({{ $rule->id }}, 'down')" class="hover:text-zinc-700 dark:hover:text-zinc-200" aria-label="Descer">
-                            <flux:icon icon="chevron-down" variant="micro" />
-                        </button>
-                    </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-1.5">
                             @foreach ($trigs as $t)
@@ -41,6 +33,13 @@
                                 </span>
                             @endforeach
                         </div>
+                        @if (! empty($conflicts[$rule->id]))
+                            @php $confLabels = collect($conflicts[$rule->id])->pluck('label')->unique()->take(3)->implode(', '); @endphp
+                            <div class="mt-1 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                                <flux:icon icon="exclamation-triangle" variant="micro" class="size-3" />
+                                Sobreposicao: casa as mesmas mensagens de "{{ $confLabels }}". A mais especifica vence; ajuste se nao for o que quer.
+                            </div>
+                        @endif
                         <div class="mt-1 flex items-start gap-1 text-sm text-zinc-500">
                             <span class="shrink-0">&rarr;</span>
                             <span class="min-w-0 truncate">{{ $resps->first() }}</span>
@@ -328,6 +327,12 @@
                                         <span class="rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-950 dark:text-amber-300">tolerante</span>
                                     @endif
                                 </p>
+                                @if (! empty($testResult['tambem']))
+                                    <p class="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                                        <flux:icon icon="exclamation-triangle" variant="micro" class="mt-0.5 size-3 shrink-0" />
+                                        <span>Tambem casariam (venceu a mais especifica): {{ implode(', ', $testResult['tambem']) }}</span>
+                                    </p>
+                                @endif
                                 <div class="rounded bg-white p-2 text-sm dark:bg-zinc-900">
                                     <div class="flex items-center justify-between">
                                         <span class="text-[11px] uppercase text-zinc-400">Resposta</span>

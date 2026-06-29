@@ -66,11 +66,27 @@ class RuleMatcherTest extends TestCase
         $this->assertNotNull($this->match('Qual o horário de funcionamento?'));
     }
 
-    public function test_primeira_por_priority_vence(): void
+    public function test_conflito_gatilho_mais_especifico_vence(): void
     {
-        $this->rule('contains', 'preco', priority: 5);
-        $vencedora = $this->rule('contains', 'preco', priority: 1);
-        $this->assertSame($vencedora->id, $this->match('qual o preco?')->id);
+        // Fatia 0: sem setas; resolve por especificidade. exact > contains.
+        $this->rule('contains', 'preco');
+        $exata = $this->rule('exact', 'preco');
+        $this->assertSame($exata->id, $this->match('preco')->id);
+
+        // Mais longo vence entre o mesmo tipo.
+        $curta = $this->rule('contains', 'nota');
+        $longa = $this->rule('contains', 'nota fiscal');
+        $this->assertSame($longa->id, $this->match('preciso da nota fiscal hoje')->id);
+        // (a 'curta' tambem casa, mas a mais longa e mais especifica)
+        $this->assertNotNull($curta);
+    }
+
+    public function test_conflito_empate_mais_antiga_vence(): void
+    {
+        // Gatilhos identicos -> empate -> regra mais antiga (id menor) vence.
+        $primeira = $this->rule('contains', 'preco');
+        $this->rule('contains', 'preco');
+        $this->assertSame($primeira->id, $this->match('qual o preco?')->id);
     }
 
     public function test_regra_desabilitada_nao_casa(): void

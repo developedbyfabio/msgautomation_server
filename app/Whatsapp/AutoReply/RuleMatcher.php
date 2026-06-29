@@ -6,11 +6,17 @@ use App\Models\AutoReplyRule;
 use Illuminate\Support\Str;
 
 /**
- * Motor de match das regras (SEM IA). Primeira regra habilitada que casa vence
- * (priority asc, id asc). Sem match (ou texto nulo) -> null -> silencio.
+ * Motor de match das regras (SEM IA). Sem match (ou texto nulo) -> null -> silencio.
+ *
+ * Fatia 0 — RESOLUCAO AUTOMATICA de conflito (sem setas de prioridade): quando mais de
+ * uma regra casa a mesma mensagem, vence a de gatilho MAIS ESPECIFICO. Escore (maior
+ * vence), nesta ordem: tipo (exact > starts_with > contains > regex) -> tamanho do
+ * gatilho que casou (mais longo) -> escopo (contatos > global) -> precisao (exato >
+ * tolerante) -> desempate por id menor (mais antiga). O campo `priority` nao e mais
+ * usado (mantido no schema, sem UI).
  *
  * S7 — multiplos gatilhos por regra (rule_triggers; cai pro legado se nao houver).
- * A regra casa se QUALQUER gatilho dela casa.
+ * A regra casa se QUALQUER gatilho dela casa (vale o gatilho mais especifico que casou).
  *
  * Tipos:
  *  - exact / starts_with / contains: normalizacao nos dois lados (fold de acento via
@@ -25,16 +31,33 @@ class RuleMatcher
     /** Limite de backtracking ao rodar regex de usuario (anti-catastrofe). */
     private const REGEX_BACKTRACK_LIMIT = 100000;
 
+    /** A regra vencedora (mais especifica) que casa, ou null. */
     public function match(int $accountId, ?int $channelId, ?string $text, ?string $remoteJid = null): ?AutoReplyRule
     {
-        if ($text === null) {
-            return null;
-        }
+        return $this->rankedMatches($accountId, $channelId, $text, $remoteJid)[0]['rule'] ?? null;
+    }
 
+    /**
+     * TODAS as regras que casam, ordenadas da mais especifica pra menos (vencedora
+     * primeiro). Usado pelo detector de sobreposicao e pelo testador ("tambem casaria").
+     *
+     * @return array<int,AutoReplyRule>
+     */
+    public function allMatching(int $accountId, ?int $channelId, ?string $text, ?string $remoteJid = null): array
+    {
+        return array_map(fn ($e) => $e['rule'], $this->rankedMatches($accountId, $channelId, $text, $remoteJid));
+    }
+
+    /** @return array<int,array{rule:AutoReplyRule,key:array,id:int}> ordenado (vencedora primeiro) */
+    private function rankedMatches(int $accountId, ?int $channelId, ?string $text, ?string $remoteJid): array
+    {
+        if ($text === null) {
+            return [];
+        }
         $raw = trim($text);
         $normText = $this->normalize($text);
         if ($normText === '') {
-            return null;
+            return [];
         }
 
         $rules = AutoReplyRule::query()
@@ -47,25 +70,70 @@ class RuleMatcher
                     $q->orWhere('channel_id', $channelId);
                 }
             })
-            ->orderBy('priority')
             ->orderBy('id')
             ->get();
 
+        $matches = [];
         foreach ($rules as $rule) {
-            // S3: escopo. Regra 'contatos' so entra na avaliacao se o remetente esta na
-            // lista; 'global' sempre entra. Depois segue o match normal (e a prioridade).
+            // S3: escopo. Regra 'contatos' so entra se o remetente esta na lista.
             if (! $this->scopeEligible($rule, $remoteJid)) {
                 continue;
             }
+            $score = $this->bestTriggerScore($rule, $raw, $normText);
+            if ($score === null) {
+                continue;
+            }
+            // Chave de especificidade (maior vence): tipo, tamanho, escopo, precisao.
+            $matches[] = [
+                'rule' => $rule,
+                'id' => (int) $rule->id,
+                'key' => [$score['type'], $score['len'], $this->scopeRank($rule), $score['prec']],
+            ];
+        }
 
-            foreach ($rule->triggerList() as $trigger) {
-                if ($this->triggerMatches($trigger, $raw, $normText)) {
-                    return $rule;
-                }
+        // Mais especifica primeiro; empate -> id menor (mais antiga).
+        usort($matches, fn ($a, $b) => ($b['key'] <=> $a['key']) ?: ($a['id'] <=> $b['id']));
+
+        return $matches;
+    }
+
+    /** Escore do gatilho MAIS especifico da regra que casa, ou null. */
+    private function bestTriggerScore(AutoReplyRule $rule, string $raw, string $normText): ?array
+    {
+        $best = null;
+        foreach ($rule->triggerList() as $trigger) {
+            if (! $this->triggerMatches($trigger, $raw, $normText)) {
+                continue;
+            }
+            $cand = [
+                'type' => $this->typeRank($trigger['type']),
+                'len' => $this->valueLength($trigger),
+                'prec' => ($trigger['precision'] ?? 'exato') === 'tolerante' ? 0 : 1,
+            ];
+            if ($best === null || [$cand['type'], $cand['len'], $cand['prec']] > [$best['type'], $best['len'], $best['prec']]) {
+                $best = $cand;
             }
         }
 
-        return null;
+        return $best;
+    }
+
+    private function typeRank(string $type): int
+    {
+        return ['exact' => 4, 'starts_with' => 3, 'contains' => 2, 'regex' => 1][$type] ?? 0;
+    }
+
+    private function scopeRank(AutoReplyRule $rule): int
+    {
+        return ($rule->scope ?? 'global') === 'contatos' ? 1 : 0;
+    }
+
+    private function valueLength(array $trigger): int
+    {
+        // regex: tamanho do padrao cru; demais: tamanho do gatilho normalizado.
+        return $trigger['type'] === 'regex'
+            ? mb_strlen((string) $trigger['value'])
+            : mb_strlen($this->normalize((string) $trigger['value']));
     }
 
     /** S3 — a regra e elegivel para este remetente? */
@@ -86,8 +154,8 @@ class RuleMatcher
     }
 
     /**
-     * Qual gatilho da regra casa o texto (p/ o testador S4). Retorna o item do
-     * triggerList (['type','value','precision','fuzzy_level']) ou null.
+     * O gatilho MAIS especifico da regra que casa o texto (p/ o testador S4). Retorna
+     * o item do triggerList (['type','value','precision','fuzzy_level']) ou null.
      */
     public function firstMatchingTrigger(AutoReplyRule $rule, string $text): ?array
     {
@@ -97,13 +165,20 @@ class RuleMatcher
             return null;
         }
 
+        $melhor = null;
+        $melhorChave = null;
         foreach ($rule->triggerList() as $trigger) {
-            if ($this->triggerMatches($trigger, $raw, $normText)) {
-                return $trigger;
+            if (! $this->triggerMatches($trigger, $raw, $normText)) {
+                continue;
+            }
+            $chave = [$this->typeRank($trigger['type']), $this->valueLength($trigger), ($trigger['precision'] ?? 'exato') === 'tolerante' ? 0 : 1];
+            if ($melhor === null || $chave > $melhorChave) {
+                $melhor = $trigger;
+                $melhorChave = $chave;
             }
         }
 
-        return null;
+        return $melhor;
     }
 
     /** Rotulo pt-BR do tipo de match (so exibicao; o valor interno nao muda). */
