@@ -132,6 +132,49 @@ class FlowEngine
         return ['text' => $this->invalidPrefix($flow, $node) . $node->message, 'status' => 'active', 'session' => $session];
     }
 
+    // ---- Simulacao (testador, SEM persistir sessao nem enviar) --------------
+
+    /** Diretiva do nó raiz pra simulacao. Nao cria sessao. */
+    public function simStart(Flow $flow): array
+    {
+        $root = $flow->rootNode();
+
+        return $root ? $this->simEmit($root) : ['node_id' => null, 'text' => null, 'status' => 'none'];
+    }
+
+    /** Avanca a simulacao a partir do nó atual, sem tocar no banco de sessoes. */
+    public function simAdvance(Flow $flow, ?int $currentNodeId, string $text): array
+    {
+        $node = $currentNodeId ? FlowNode::find($currentNodeId) : null;
+        if ($node === null || (int) $node->flow_id !== (int) $flow->id) {
+            return ['node_id' => null, 'text' => null, 'status' => 'completed'];
+        }
+
+        $in = $this->norm($text);
+        if (in_array($in, self::CANCEL, true)) {
+            return ['node_id' => null, 'text' => 'Ok, encerrei o atendimento.', 'status' => 'cancelled'];
+        }
+        if ($this->matcher->listMatches($flow->triggerList(), $text)) {
+            return $this->simStart($flow); // reentrada -> raiz
+        }
+        foreach ($node->options as $opt) {
+            if ($this->matchesOption($in, (string) $opt->input)) {
+                $next = $opt->next_node_id ? FlowNode::find($opt->next_node_id) : null;
+
+                return $next ? $this->simEmit($next) : ['node_id' => null, 'text' => null, 'status' => 'completed'];
+            }
+        }
+
+        return ['node_id' => $node->id, 'text' => $this->invalidPrefix($flow, $node) . $node->message, 'status' => 'active'];
+    }
+
+    private function simEmit(FlowNode $node): array
+    {
+        $encerra = $node->isFinal() || ! $node->options()->exists();
+
+        return ['node_id' => $node->id, 'text' => (string) $node->message, 'status' => $encerra ? 'completed' : 'active'];
+    }
+
     /** Emite a diretiva pra um nó: menu -> espera; final (ou menu sem opcoes) -> encerra. */
     private function emit(FlowSession $session, Flow $flow, FlowNode $node): array
     {

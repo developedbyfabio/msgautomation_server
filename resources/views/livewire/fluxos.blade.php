@@ -71,6 +71,49 @@
                 </button>
             </div>
 
+            {{-- TESTADOR (dry-run, nao envia) --}}
+            <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5 text-sm font-medium">
+                        <flux:icon icon="beaker" variant="micro" class="text-zinc-400" /> Testar fluxo (nao envia)
+                    </div>
+                    <div class="flex items-center gap-2">
+                        @if ($simOpen)
+                            <button type="button" wire:click="toggleSimReveal" class="text-xs text-zinc-500 hover:underline">{{ $simReveal ? 'mascarar senha' : 'revelar senha' }}</button>
+                            <button type="button" wire:click="iniciarSim" class="text-xs text-emerald-600 hover:underline">reiniciar</button>
+                            <button type="button" wire:click="fecharSim" class="text-xs text-zinc-400 hover:underline">fechar</button>
+                        @else
+                            <button type="button" wire:click="iniciarSim" class="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                                <flux:icon icon="play" variant="micro" /> Iniciar simulacao
+                            </button>
+                        @endif
+                    </div>
+                </div>
+                @if ($simOpen)
+                    <div class="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-lg bg-zinc-50 p-3 dark:bg-zinc-800/50">
+                        @forelse ($simView as $m)
+                            <div @class(['flex', 'justify-end' => $m['who'] === 'user', 'justify-start' => $m['who'] !== 'user'])>
+                                <div @class([
+                                    'max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm',
+                                    'bg-emerald-100 text-zinc-800 dark:bg-emerald-900 dark:text-emerald-50' => $m['who'] === 'user',
+                                    'bg-white text-zinc-800 shadow-sm dark:bg-zinc-800 dark:text-zinc-100' => $m['who'] !== 'user',
+                                ])>{{ $m['text'] }}@if ($m['secret'] ?? false)<span class="ml-1 text-[10px] text-amber-500">(senha)</span>@endif</div>
+                            </div>
+                        @empty
+                            <p class="text-center text-xs text-zinc-400">Simulacao iniciada. Digite uma opcao abaixo.</p>
+                        @endforelse
+                    </div>
+                    <div class="mt-2 flex items-center gap-2">
+                        <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">{{ $simStatus }}</span>
+                        <form wire:submit="enviarSim" class="flex flex-1 items-center gap-2">
+                            <input type="text" wire:model="simInput" placeholder="digite uma opcao (ex.: 1)" class="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <button type="submit" class="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Enviar</button>
+                        </form>
+                    </div>
+                    <p class="mt-1 text-[11px] text-zinc-400">Dry-run: nao envia mensagem, nao cria sessao, nao mexe em contadores. Senha mascarada por padrao.</p>
+                @endif
+            </div>
+
             {{-- CONFIG --}}
             <div class="rounded-xl border border-zinc-200 bg-white p-5 space-y-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Configuracao</div>

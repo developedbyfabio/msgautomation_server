@@ -44,6 +44,15 @@ class Fluxos extends Component
 
     public ?int $confirmingDeleteFlowId = null;
 
+    // C.1 — testador (dry-run, sem enviar, sem persistir sessao).
+    public bool $simOpen = false;
+    public ?int $simNodeId = null;
+    public string $simStatus = 'none';
+    public string $simInput = '';
+    public bool $simReveal = false;
+    /** @var array<int,array{who:string,raw:string}> */
+    public array $simLog = [];
+
     private function accountId(): int
     {
         return (int) (Account::query()->oldest('id')->value('id')
@@ -362,6 +371,62 @@ class Fluxos extends Component
             ->first();
     }
 
+    // ---- C.1: testador (dry-run) -------------------------------------------
+
+    public function iniciarSim(\App\Whatsapp\Flows\FlowEngine $engine): void
+    {
+        $flow = $this->flow();
+        if (! $flow) {
+            return;
+        }
+        $this->simOpen = true;
+        $this->simLog = [];
+        $this->simInput = '';
+        $r = $engine->simStart($flow);
+        $this->simNodeId = $r['node_id'];
+        $this->simStatus = $r['status'];
+        if ($r['text'] !== null) {
+            $this->simLog[] = ['who' => 'bot', 'raw' => (string) $r['text']];
+        }
+    }
+
+    public function enviarSim(\App\Whatsapp\Flows\FlowEngine $engine): void
+    {
+        $flow = $this->flow();
+        $texto = trim($this->simInput);
+        if (! $flow || $texto === '') {
+            return;
+        }
+        $this->simLog[] = ['who' => 'user', 'raw' => $texto];
+
+        // Sessao encerrada? Um novo texto pode reiniciar pelo gatilho (como na runtime).
+        $r = in_array($this->simStatus, ['completed', 'cancelled', 'none'], true)
+            ? ($engine->entryFlow($this->accountId(), $texto, 'sim@local') ? $engine->simStart($flow) : ['node_id' => $this->simNodeId, 'text' => null, 'status' => $this->simStatus])
+            : $engine->simAdvance($flow, $this->simNodeId, $texto);
+
+        $this->simNodeId = $r['node_id'];
+        $this->simStatus = $r['status'];
+        if (($r['text'] ?? null) !== null && $r['text'] !== null) {
+            $this->simLog[] = ['who' => 'bot', 'raw' => (string) $r['text']];
+        } else {
+            $this->simLog[] = ['who' => 'bot', 'raw' => '(sem resposta — fora do fluxo)'];
+        }
+        $this->simInput = '';
+    }
+
+    public function toggleSimReveal(): void
+    {
+        $this->simReveal = ! $this->simReveal;
+    }
+
+    public function fecharSim(): void
+    {
+        $this->simOpen = false;
+        $this->simLog = [];
+        $this->simNodeId = null;
+        $this->simStatus = 'none';
+    }
+
     /** Nós ordenados em arvore (raiz primeiro, depois filhos por ordem) com profundidade. */
     private function treeOrdered(Flow $flow): array
     {
@@ -397,6 +462,30 @@ class Fluxos extends Component
 
         $secretNames = $flow ? app(SecretVault::class)->names($accountId) : [];
 
+        // C.1 — transcript do testador renderizado: placeholders + senha mascarada (ou revelada).
+        $vault = app(SecretVault::class);
+        $responder = app(\App\Whatsapp\AutoReply\RuleResponder::class);
+        $simView = [];
+        foreach ($this->simLog as $e) {
+            if ($e['who'] === 'user') {
+                $simView[] = ['who' => 'user', 'text' => $e['raw'], 'secret' => false];
+
+                continue;
+            }
+            $rendered = $responder->render($e['raw'], ['now' => now()]);
+            $secret = $vault->hasRef($rendered);
+            if ($secret && $this->simReveal) {
+                try {
+                    $text = $vault->resolve($accountId, $rendered);
+                } catch (\Throwable) {
+                    $text = $vault->mask($rendered);
+                }
+            } else {
+                $text = $vault->mask($rendered);
+            }
+            $simView[] = ['who' => 'bot', 'text' => $text, 'secret' => $secret];
+        }
+
         return view('livewire.fluxos', [
             'flows' => $flows,
             'flow' => $flow,
@@ -404,6 +493,7 @@ class Fluxos extends Component
             'deleting' => $deleting,
             'contacts' => $contacts,
             'secretNames' => $secretNames,
+            'simView' => $simView,
         ]);
     }
 }
