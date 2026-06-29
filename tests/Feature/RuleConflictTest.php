@@ -54,6 +54,18 @@ class RuleConflictTest extends TestCase
         $this->assertSame([], $conf);
     }
 
+    public function test_detecta_sobreposicao_fluxo_x_regra(): void
+    {
+        $rule = $this->rule('contains', 'menu');
+        $flow = \App\Models\Flow::create(['account_id' => $this->account->id, 'name' => 'Atendimento', 'enabled' => true]);
+        $flow->triggers()->create(['match_type' => 'contains', 'match_value' => 'menu']);
+
+        $ov = app(RuleConflictDetector::class)->flowRuleOverlaps($this->account->id);
+
+        $this->assertArrayHasKey($flow->id, $ov['flows']);  // fluxo sobrepoe regra
+        $this->assertArrayHasKey($rule->id, $ov['rules']);  // regra sombreada pelo fluxo
+    }
+
     public function test_all_matching_ordena_vencedora_primeiro(): void
     {
         $contains = $this->rule('contains', 'preco');

@@ -119,13 +119,21 @@ class Fluxos extends Component
 
                 return;
             }
-            // Guarda de segredo (como nas regras): nó com {senha:...} exige escopo contatos.
+            // Guarda de segredo (como nas regras): nó com {senha:...} exige escopo contatos
+            // E gatilhos de entrada ESTRITOS (sem fuzzy) — pra nao disparar/vazar por engano.
             $vault = app(SecretVault::class);
             $temSenha = $flow->nodes()->get()->contains(fn ($n) => $vault->hasRef((string) $n->message));
-            if ($temSenha && ($flow->scope ?: 'global') !== 'contatos') {
-                $this->dispatch('toast', message: 'Este fluxo usa senha ({senha:...}) em um nó. Use escopo "Contatos Especificos" antes de ligar (senao a senha vaza pra quem disparar).', type: 'error');
+            if ($temSenha) {
+                if (($flow->scope ?: 'global') !== 'contatos') {
+                    $this->dispatch('toast', message: 'Este fluxo usa senha ({senha:...}) em um nó. Use escopo "Contatos Especificos" antes de ligar (senao a senha vaza pra quem disparar).', type: 'error');
 
-                return;
+                    return;
+                }
+                if ($flow->triggers->contains(fn ($t) => $t->precision === 'tolerante')) {
+                    $this->dispatch('toast', message: 'Fluxo com senha exige gatilho de entrada ESTRITO (exato). Tire a tolerancia a erros do gatilho antes de ligar.', type: 'error');
+
+                    return;
+                }
             }
         }
         $flow->update(['enabled' => ! $flow->enabled]);
@@ -462,6 +470,9 @@ class Fluxos extends Component
 
         $secretNames = $flow ? app(SecretVault::class)->names($accountId) : [];
 
+        // C.2 — sobreposicao fluxo (entrada) × regra (o fluxo vence; aviso na lista).
+        $flowConflicts = $this->editingFlowId ? [] : app(\App\Whatsapp\AutoReply\RuleConflictDetector::class)->flowRuleOverlaps($accountId)['flows'];
+
         // C.1 — transcript do testador renderizado: placeholders + senha mascarada (ou revelada).
         $vault = app(SecretVault::class);
         $responder = app(\App\Whatsapp\AutoReply\RuleResponder::class);
@@ -494,6 +505,7 @@ class Fluxos extends Component
             'contacts' => $contacts,
             'secretNames' => $secretNames,
             'simView' => $simView,
+            'flowConflicts' => $flowConflicts,
         ]);
     }
 }

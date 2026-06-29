@@ -40,6 +40,12 @@
                                 Sobreposicao: casa as mesmas mensagens de "{{ $confLabels }}". A mais especifica vence; ajuste se nao for o que quer.
                             </div>
                         @endif
+                        @if (! empty($flowOverlap[$rule->id]))
+                            <div class="mt-1 inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
+                                <flux:icon icon="rectangle-stack" variant="micro" class="size-3" />
+                                Fluxo "{{ implode(', ', array_slice($flowOverlap[$rule->id], 0, 2)) }}" intercepta estas mensagens (o fluxo vence a regra).
+                            </div>
+                        @endif
                         <div class="mt-1 flex items-start gap-1 text-sm text-zinc-500">
                             <span class="shrink-0">&rarr;</span>
                             <span class="min-w-0 truncate">{{ $resps->first() }}</span>

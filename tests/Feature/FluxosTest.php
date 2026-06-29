@@ -114,6 +114,25 @@ class FluxosTest extends TestCase
         $this->assertTrue((bool) $flow->fresh()->enabled);
     }
 
+    public function test_guarda_senha_exige_gatilho_estrito(): void
+    {
+        $flow = Flow::create(['account_id' => $this->account->id, 'name' => 'F', 'enabled' => false, 'scope' => 'contatos']);
+        $root = FlowNode::create(['flow_id' => $flow->id, 'kind' => 'final', 'message' => '{senha:wifi}']);
+        $flow->update(['root_node_id' => $root->id]);
+        $flow->triggers()->create(['match_type' => 'contains', 'match_value' => 'senha', 'precision' => 'tolerante']);
+        $c = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+        $flow->contacts()->attach($c->id);
+
+        // Contatos OK, mas gatilho tolerante -> nao liga.
+        Livewire::test(Fluxos::class)->call('toggleFluxo', $flow->id);
+        $this->assertFalse((bool) $flow->fresh()->enabled);
+
+        // Gatilho estrito -> liga.
+        $flow->triggers()->update(['precision' => 'exato']);
+        Livewire::test(Fluxos::class)->call('toggleFluxo', $flow->id);
+        $this->assertTrue((bool) $flow->fresh()->enabled);
+    }
+
     public function test_definir_destino_no_existente(): void
     {
         $c = Livewire::test(Fluxos::class)->call('novoFluxo');

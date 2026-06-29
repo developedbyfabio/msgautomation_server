@@ -28,6 +28,12 @@
                                 {{ $f->scope === 'contatos' ? 'contatos especificos' : 'todos os aprovados' }} ·
                                 gatilhos: {{ $trigs->pluck('value')->take(3)->implode(', ') ?: '(nenhum)' }}
                             </div>
+                            @if (! empty($flowConflicts[$f->id]))
+                                <div class="mt-1 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                                    <flux:icon icon="exclamation-triangle" variant="micro" class="size-3" />
+                                    Sobrepoe a(s) regra(s) "{{ implode(', ', array_slice($flowConflicts[$f->id], 0, 3)) }}" — o fluxo vence.
+                                </div>
+                            @endif
                         </div>
                         <button type="button" wire:click="toggleFluxo({{ $f->id }})" @class([
                             'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',

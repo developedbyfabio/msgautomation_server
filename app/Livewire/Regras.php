@@ -346,7 +346,10 @@ class Regras extends Component
         $deleting = $this->confirmingDeleteId ? $rules->firstWhere('id', $this->confirmingDeleteId) : null;
 
         // Fatia 0: detector de sobreposicao (avisa regras que casariam a mesma mensagem).
-        $conflicts = app(\App\Whatsapp\AutoReply\RuleConflictDetector::class)->conflicts($this->accountId());
+        $detector = app(\App\Whatsapp\AutoReply\RuleConflictDetector::class);
+        $conflicts = $detector->conflicts($this->accountId());
+        // C.2: regra sombreada por fluxo de entrada (o fluxo vence).
+        $flowOverlap = $detector->flowRuleOverlaps($this->accountId())['rules'];
 
         // Contatos pro seletor (escopo S3 + testador S4).
         $contacts = ($this->showTester || $this->showForm)
@@ -371,6 +374,7 @@ class Regras extends Component
             'scopeContacts' => $scopeContacts,
             'secretNames' => $secretNames,
             'conflicts' => $conflicts,
+            'flowOverlap' => $flowOverlap,
         ]);
     }
 }
