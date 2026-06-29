@@ -4,9 +4,16 @@ namespace App\Livewire;
 
 use App\Models\Account;
 use App\Models\AutoReplyRule;
+use App\Whatsapp\AutoReply\RuleMatcher;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
+/**
+ * S7 — CRUD de regras avancadas: multiplos gatilhos (incl. regex), multiplas
+ * respostas (escolha aleatoria no envio) e placeholders. Persiste nas tabelas
+ * filhas rule_triggers/rule_responses e mantem as colunas legadas de
+ * auto_reply_rules como cache denormalizado (1o gatilho / 1a resposta).
+ */
 #[Layout('components.layouts.app')]
 class Regras extends Component
 {
@@ -14,25 +21,39 @@ class Regras extends Component
     public ?int $editingId = null;
     public ?int $confirmingDeleteId = null;
 
-    public string $match_type = 'contains';
-    public string $match_value = '';
-    public string $response_text = '';
+    /** @var array<int,array{type:string,value:string}> */
+    public array $triggers = [];
+    /** @var array<int,string> */
+    public array $responses = [];
     public bool $enabled = true;
 
     protected function rules(): array
     {
         return [
-            'match_type' => 'required|in:exact,contains,starts_with',
-            'match_value' => 'required|string|max:255',
-            'response_text' => 'required|string|max:4000',
+            'triggers' => 'required|array|min:1',
+            'triggers.*.type' => 'required|in:exact,contains,starts_with,regex',
+            'triggers.*.value' => 'required|string|max:255',
+            'responses' => 'required|array|min:1',
+            'responses.*' => 'required|string|max:4000',
             'enabled' => 'boolean',
+        ];
+    }
+
+    protected function messages(): array
+    {
+        return [
+            'triggers.*.value.required' => 'Informe o gatilho.',
+            'responses.*.required' => 'Informe a resposta.',
+            'responses.required' => 'Cadastre ao menos uma resposta.',
+            'triggers.required' => 'Cadastre ao menos um gatilho.',
         ];
     }
 
     public function novo(): void
     {
-        $this->reset(['editingId', 'match_value', 'response_text']);
-        $this->match_type = 'contains';
+        $this->reset(['editingId']);
+        $this->triggers = [['type' => 'contains', 'value' => '']];
+        $this->responses = [''];
         $this->enabled = true;
         $this->resetValidation();
         $this->showForm = true;
@@ -40,20 +61,56 @@ class Regras extends Component
 
     public function edit(int $id): void
     {
-        $rule = $this->query()->findOrFail($id);
+        $rule = $this->query()->with(['triggers', 'responses'])->findOrFail($id);
+
         $this->editingId = $rule->id;
-        $this->match_type = $rule->match_type;
-        $this->match_value = $rule->match_value;
-        $this->response_text = $rule->response_text;
+        $this->triggers = $rule->triggerList()
+            ->map(fn ($t) => ['type' => $t['type'], 'value' => $t['value']])
+            ->values()->all();
+        $this->responses = $rule->responseList()->values()->all();
+
+        if ($this->triggers === []) {
+            $this->triggers = [['type' => 'contains', 'value' => '']];
+        }
+        if ($this->responses === []) {
+            $this->responses = [''];
+        }
+
         $this->enabled = (bool) $rule->enabled;
         $this->resetValidation();
         $this->showForm = true;
     }
 
+    public function addTrigger(): void
+    {
+        $this->triggers[] = ['type' => 'contains', 'value' => ''];
+    }
+
+    public function removeTrigger(int $i): void
+    {
+        if (count($this->triggers) > 1) {
+            unset($this->triggers[$i]);
+            $this->triggers = array_values($this->triggers);
+        }
+    }
+
+    public function addResponse(): void
+    {
+        $this->responses[] = '';
+    }
+
+    public function removeResponse(int $i): void
+    {
+        if (count($this->responses) > 1) {
+            unset($this->responses[$i]);
+            $this->responses = array_values($this->responses);
+        }
+    }
+
     public function closeForm(): void
     {
         $this->showForm = false;
-        $this->reset(['editingId', 'match_value', 'response_text']);
+        $this->reset(['editingId', 'triggers', 'responses']);
         $this->resetValidation();
     }
 
@@ -61,24 +118,54 @@ class Regras extends Component
     {
         $this->validate();
 
+        // Protecao: valida cada gatilho regex (padrao compila).
+        foreach ($this->triggers as $i => $t) {
+            if ($t['type'] === 'regex' && ! RuleMatcher::isValidRegex((string) $t['value'])) {
+                $this->addError("triggers.{$i}.value", 'Regex invalido. Confira o padrao.');
+
+                return;
+            }
+        }
+
+        $triggers = array_values(array_map(
+            fn ($t) => ['match_type' => $t['type'], 'match_value' => trim((string) $t['value'])],
+            $this->triggers,
+        ));
+        $responses = array_values(array_filter(array_map(
+            fn ($r) => trim((string) $r),
+            $this->responses,
+        ), fn ($r) => $r !== ''));
+
+        if ($responses === []) {
+            $this->addError('responses', 'Cadastre ao menos uma resposta.');
+
+            return;
+        }
+
+        // Colunas legadas = cache do 1o gatilho / 1a resposta (back-compat).
+        $legado = [
+            'match_type' => $triggers[0]['match_type'],
+            'match_value' => $triggers[0]['match_value'],
+            'response_text' => $responses[0],
+            'enabled' => $this->enabled,
+        ];
+
         if ($this->editingId) {
-            $this->query()->where('id', $this->editingId)->update([
-                'match_type' => $this->match_type,
-                'match_value' => $this->match_value,
-                'response_text' => $this->response_text,
-                'enabled' => $this->enabled,
-            ]);
+            $rule = $this->query()->findOrFail($this->editingId);
+            $rule->update($legado);
         } else {
             $next = (int) ($this->query()->max('priority') ?? -1) + 1;
-            AutoReplyRule::create([
+            $rule = AutoReplyRule::create(array_merge($legado, [
                 'account_id' => $this->accountId(),
-                'match_type' => $this->match_type,
-                'match_value' => $this->match_value,
-                'response_text' => $this->response_text,
-                'enabled' => $this->enabled,
                 'priority' => $next,
-            ]);
+            ]));
         }
+
+        // Re-sincroniza as filhas (substitui, sem tocar em outras regras).
+        $rule->triggers()->delete();
+        $rule->triggers()->createMany($triggers);
+        $rule->responses()->delete();
+        $rule->responses()->createMany(array_map(fn ($r) => ['response_text' => $r], $responses));
 
         $this->closeForm();
         $this->dispatch('toast', message: 'Regra salva.');
@@ -106,7 +193,8 @@ class Regras extends Component
     public function deleteConfirmed(): void
     {
         if ($this->confirmingDeleteId) {
-            // Exclusao escopada por account (WHERE id + account_id) — acao de CRUD do usuario.
+            // Exclusao escopada por account (WHERE id + account_id). As filhas caem por
+            // cascade (FK cascadeOnDelete).
             $this->query()->where('id', $this->confirmingDeleteId)->delete();
             $this->dispatch('toast', message: 'Regra excluida.');
         }
@@ -149,7 +237,7 @@ class Regras extends Component
 
     public function render()
     {
-        $rules = $this->query()->orderBy('priority')->orderBy('id')->get();
+        $rules = $this->query()->with(['triggers', 'responses'])->orderBy('priority')->orderBy('id')->get();
         $deleting = $this->confirmingDeleteId ? $rules->firstWhere('id', $this->confirmingDeleteId) : null;
 
         return view('livewire.regras', ['rules' => $rules, 'deleting' => $deleting]);

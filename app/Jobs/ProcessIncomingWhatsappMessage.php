@@ -150,11 +150,13 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
 
         // Delay humano: a auto-resposta vai pra fila com atraso aleatorio. O envio real
         // (e o re-check R2 + freios volateis) acontece no SendAutoReply via Sender.
+        // S7: a resposta (escolha aleatoria + placeholders) e resolvida NO ENVIO, nao
+        // aqui — por isso passamos so o rule->id (sem texto).
         $settings = $guard->settingsFor($account->id);
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($message->id, $rule->id, $rule->response_text)
+        SendAutoReply::dispatch($message->id, $rule->id)
             ->delay(now()->addSeconds(random_int($min, $max)));
     }
 }

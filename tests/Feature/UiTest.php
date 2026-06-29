@@ -92,13 +92,16 @@ class UiTest extends TestCase
         Livewire::test(Regras::class)
             ->call('novo')
             ->assertSet('showForm', true)
-            ->set('match_type', 'contains')
-            ->set('match_value', 'horario')
-            ->set('response_text', 'Atendo das 8h')
+            ->set('triggers.0.type', 'contains')
+            ->set('triggers.0.value', 'horario')
+            ->set('responses.0', 'Atendo das 8h')
             ->call('save')
             ->assertSet('showForm', false);
 
+        // Coluna legada = cache do 1o gatilho/resposta; e as filhas foram criadas.
         $this->assertDatabaseHas('auto_reply_rules', ['match_value' => 'horario', 'enabled' => true]);
+        $this->assertDatabaseHas('rule_triggers', ['match_type' => 'contains', 'match_value' => 'horario']);
+        $this->assertDatabaseHas('rule_responses', ['response_text' => 'Atendo das 8h']);
     }
 
     public function test_regras_excluir_confirmar_apaga(): void
