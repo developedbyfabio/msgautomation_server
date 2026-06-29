@@ -34,6 +34,21 @@ class Conversas extends Component
         $this->showContactPanel = false;
     }
 
+    /** S4 — atualiza o nome do grupo sob demanda (re-busca na Evolution agora). */
+    public function atualizarNomeGrupo(\App\Whatsapp\Groups\GroupNameResolver $resolver): void
+    {
+        if (! $this->selectedJid || ! str_ends_with($this->selectedJid, '@g.us')) {
+            return;
+        }
+
+        $nome = $resolver->resolveNow($this->accountId(), $this->selectedJid);
+
+        $this->dispatch('toast',
+            message: $nome ? 'Nome do grupo atualizado: ' . $nome : 'Nao foi possivel obter o nome do grupo agora.',
+            type: $nome ? 'success' : 'error',
+        );
+    }
+
     public function approveJid(string $jid): void
     {
         Contact::updateOrCreate(

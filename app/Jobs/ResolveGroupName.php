@@ -2,8 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\Group;
-use App\Whatsapp\EvolutionApi;
+use App\Whatsapp\Groups\GroupNameResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,29 +24,8 @@ class ResolveGroupName implements ShouldQueue
     ) {
     }
 
-    public function handle(EvolutionApi $api): void
+    public function handle(GroupNameResolver $resolver): void
     {
-        try {
-            $resp = $api->groupInfo($this->jid);
-            if (! $resp->successful()) {
-                return;
-            }
-            $j = $resp->json();
-            $subject = data_get($j, 'subject')
-                ?? data_get($j, 'data.subject')
-                ?? data_get($j, '0.subject')
-                ?? data_get($j, 'groupMetadata.subject');
-        } catch (\Throwable) {
-            return;
-        }
-
-        if (! is_string($subject) || $subject === '') {
-            return;
-        }
-
-        Group::updateOrCreate(
-            ['account_id' => $this->accountId, 'remote_jid' => $this->jid],
-            ['subject' => $subject, 'resolved_at' => now()],
-        );
+        $resolver->resolveNow($this->accountId, $this->jid);
     }
 }

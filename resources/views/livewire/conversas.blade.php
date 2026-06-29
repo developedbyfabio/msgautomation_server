@@ -130,6 +130,16 @@
                             </button>
                         </flux:tooltip>
                     </div>
+                @else
+                    {{-- S4: atualizar o nome do grupo sob demanda (re-busca na Evolution) --}}
+                    <flux:tooltip content="Re-buscar o nome do grupo na Evolution agora (caso tenha sido renomeado).">
+                        <button type="button" wire:click="atualizarNomeGrupo" wire:loading.attr="disabled" wire:target="atualizarNomeGrupo"
+                            class="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                            <flux:icon icon="arrow-path" variant="micro" wire:loading.remove wire:target="atualizarNomeGrupo" />
+                            <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="atualizarNomeGrupo" />
+                            Atualizar nome
+                        </button>
+                    </flux:tooltip>
                 @endunless
             </div>
 

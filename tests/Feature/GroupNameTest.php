@@ -62,9 +62,38 @@ class GroupNameTest extends TestCase
         Http::fake(['*group/findGroupInfos*' => Http::response(['subject' => 'Churras do Predio'], 200)]);
         $a = Account::create(['name' => 'T']);
 
-        (new ResolveGroupName($a->id, self::GJID))->handle(app(\App\Whatsapp\EvolutionApi::class));
+        (new ResolveGroupName($a->id, self::GJID))->handle(app(GroupNameResolver::class));
 
         $this->assertDatabaseHas('groups', ['remote_jid' => self::GJID, 'subject' => 'Churras do Predio']);
+    }
+
+    public function test_atualizar_nome_sob_demanda_rebusca_e_grava(): void
+    {
+        $a = Account::create(['name' => 'T']);
+        Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
+        // Nome antigo em cache.
+        Group::create(['account_id' => $a->id, 'remote_jid' => self::GJID, 'subject' => 'Nome Antigo']);
+        // Evolution agora retorna o nome novo.
+        Http::fake(['*group/findGroupInfos*' => Http::response(['subject' => 'Nome Novo'], 200)]);
+
+        Livewire::test(Conversas::class)
+            ->set('selectedJid', self::GJID)
+            ->call('atualizarNomeGrupo');
+
+        $this->assertSame('Nome Novo', app(GroupNameResolver::class)->nameFor($a->id, self::GJID));
+        $this->assertDatabaseHas('groups', ['remote_jid' => self::GJID, 'subject' => 'Nome Novo']);
+    }
+
+    public function test_resolve_now_sobrescreve_cache(): void
+    {
+        Http::fake(['*group/findGroupInfos*' => Http::response(['subject' => 'Atualizado'], 200)]);
+        $a = Account::create(['name' => 'T']);
+        Group::create(['account_id' => $a->id, 'remote_jid' => self::GJID, 'subject' => 'Velho']);
+
+        $nome = app(GroupNameResolver::class)->resolveNow($a->id, self::GJID);
+
+        $this->assertSame('Atualizado', $nome);
+        $this->assertSame(1, Group::where('remote_jid', self::GJID)->count()); // updateOrCreate, nao duplica
     }
 
     public function test_lista_mostra_nome_do_grupo_em_vez_do_jid(): void
