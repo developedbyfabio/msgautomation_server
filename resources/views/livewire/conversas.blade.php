@@ -38,7 +38,7 @@
                                 <span class="size-2 shrink-0 rounded-full bg-red-400" title="auto OFF"></span>
                             @endif
                         </div>
-                        <div class="truncate text-sm text-zinc-500">{{ $conv['text'] }}</div>
+                        <div class="truncate text-sm text-zinc-500"><x-msg-preview :preview="$conv['preview']" /></div>
                     </div>
                     <div class="shrink-0 self-start pt-0.5 text-[11px] text-zinc-400">{{ $conv['time_label'] }}</div>
                 </button>
@@ -179,7 +179,7 @@
                             'rounded-2xl rounded-tl-sm' => ! $msg['grouped'] && $isIn,
                             'rounded-2xl rounded-tr-sm' => ! $msg['grouped'] && ! $isIn,
                         ])>
-                            <div class="whitespace-pre-wrap break-words">{{ $msg['text'] }}</div>
+                            <div class="whitespace-pre-wrap break-words"><x-msg-preview :preview="$msg['preview']" /></div>
                             <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                                 @if ($origLabel)
                                     <flux:tooltip content="Origem: {{ $origLabel }}">

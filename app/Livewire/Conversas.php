@@ -8,6 +8,7 @@ use App\Models\Channel;
 use App\Models\Contact;
 use App\Models\IncomingMessage;
 use App\Whatsapp\AutoReply\Sender;
+use App\Whatsapp\MessagePreview;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -223,7 +224,7 @@ class Conversas extends Component
                 $rows[$m->remote_jid] = [
                     'jid' => $m->remote_jid,
                     'at' => $at,
-                    'text' => $m->text ?: '[' . $m->type . ']',
+                    'preview' => MessagePreview::for($m->type, $m->text, (array) $m->raw_payload),
                 ];
             }
         }
@@ -234,7 +235,7 @@ class Conversas extends Component
                 $rows[$l->remote_jid] = [
                     'jid' => $l->remote_jid,
                     'at' => $at,
-                    'text' => $l->response_text,
+                    'preview' => MessagePreview::plain($l->response_text),
                 ];
             }
         }
@@ -319,7 +320,7 @@ class Conversas extends Component
             }
             $items[] = [
                 'at' => $m->received_at,
-                'text' => $m->text ?: '[' . $m->type . ']',
+                'preview' => MessagePreview::for($m->type, $m->text, (array) $m->raw_payload),
                 'kind' => $m->from_me ? 'out_phone' : 'in',
             ];
         }
@@ -327,7 +328,7 @@ class Conversas extends Component
         foreach ($logs as $l) {
             $items[] = [
                 'at' => $l->sent_at ?? $l->created_at,
-                'text' => $l->response_text,
+                'preview' => MessagePreview::plain($l->response_text),
                 'kind' => $l->mode === 'auto' ? 'out_bot' : 'out_manual',
             ];
         }
