@@ -12,7 +12,12 @@
         "source": "android",
         "status": "DELIVERY_ACK",
         "message": {
-            "conversation": "Qual o horario de funcionamento?"
+            "conversation": "Qual o horario de funcionamento?",
+            "messageContextInfo": {
+                "deviceListMetadata": {},
+                "deviceListMetadataVersion": 2,
+                "messageSecret": "REDACTED-FIXTURE"
+            }
         },
         "pushName": "Cliente Teste",
         "instanceId": "00000000-0000-0000-0000-000000000000",
