@@ -29,5 +29,8 @@ class DatabaseSeeder extends Seeder
         // Settings do autoresponder com os defaults aprovados (kill switch OFF).
         // Os defaults das colunas cobrem o resto; criamos a linha-ancora por account.
         AutoReplySetting::firstOrCreate(['account_id' => $account->id]);
+
+        // S2 — usuario unico da UI (credenciais no .env).
+        $this->call(SingleUserSeeder::class);
     }
 }

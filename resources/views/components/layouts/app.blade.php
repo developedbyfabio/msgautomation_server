@@ -47,6 +47,13 @@
                         <span class="size-1.5 rounded-full bg-zinc-400"></span> OFF
                     </span>
                 @endif
+                <span class="text-zinc-400">|</span>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" title="Sair">
+                        <flux:icon icon="arrow-right-start-on-rectangle" variant="micro" /> Sair
+                    </button>
+                </form>
             </div>
         </div>
     </header>

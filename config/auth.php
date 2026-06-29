@@ -114,4 +114,21 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Single User (S2)
+    |--------------------------------------------------------------------------
+    |
+    | A UI e single-user. As credenciais do unico usuario vivem NO .env (nunca
+    | em repo). O SingleUserSeeder cria/atualiza esse usuario a partir daqui.
+    | Senha so e aplicada se AUTH_PASSWORD estiver definido no .env.
+    |
+    */
+
+    'single_user' => [
+        'name' => env('AUTH_NAME', 'Operador'),
+        'email' => env('AUTH_EMAIL', 'admin@msgautomation.local'),
+        'password' => env('AUTH_PASSWORD'),
+    ],
+
 ];
