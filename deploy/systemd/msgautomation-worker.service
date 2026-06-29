@@ -1,0 +1,18 @@
+[Unit]
+Description=msgautomation queue worker (Laravel)
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/srv/www/msgautomation
+# Processa a fila default (webhook -> ProcessIncomingWhatsappMessage -> persiste).
+# --max-time recicla o worker de hora em hora (memoria + pega codigo novo).
+ExecStart=/usr/bin/php /srv/www/msgautomation/artisan queue:work --queue=default --sleep=1 --tries=3 --max-time=3600
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

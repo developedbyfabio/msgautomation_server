@@ -19,21 +19,27 @@ php artisan migrate          # cria as tabelas (idempotente)
 php artisan db:seed          # conta-ancora + channel da instancia
 ```
 
-### Servir (porta que o container alcanca)
-```
-php artisan serve --host=172.17.0.1 --port=8190
-```
-Bindamos no IP do **docker0** (`172.17.0.1`), que e pra onde o `host.docker.internal`
-resolve de dentro do container da Evolution. Assim o webhook funciona **sem** expor a
-8190 na LAN (`eth0`). Confirme o IP com `docker exec evolution_msg getent hosts
-host.docker.internal` — se mudar, ajuste o bind. **Nunca** volte pra `0.0.0.0`.
+### Porta canonica: 8080 (serve + worker via systemd)
+A porta canonica do app e **8080**. O webhook da Evolution aponta pra
+`http://host.docker.internal:8080/webhook/evolution` (o container resolve `host.docker.
+internal` -> gateway `172.17.0.1` e alcanca a 8080 do host). **Se mudar a porta, atualize
+o webhook junto** (`.env` `EVOLUTION_WEBHOOK_URL` + `php artisan evolution:setup`), senao a
+ingestao para silenciosamente.
 
-### Worker da fila (Redis)
-Em outro terminal:
+Serve e worker rodam sob **systemd** (sobrevivem a queda da sessao e a reboot) — copias de
+referencia dos units em `deploy/systemd/`:
 ```
-php artisan queue:work redis
-# para testes pontuais: php artisan queue:work redis --stop-when-empty
+sudo cp deploy/systemd/msgautomation-*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now msgautomation-serve.service msgautomation-worker.service
+systemctl status msgautomation-serve msgautomation-worker     # active (running)
+journalctl -u msgautomation-worker -f                          # acompanhar a fila
 ```
+- `msgautomation-serve`: `artisan serve --host=0.0.0.0 --port=8080` (UI na LAN, **atras de
+  login** — ver doc 07). Se preferir tirar da LAN, bindar `172.17.0.1:8080` e usar tunel SSH.
+- `msgautomation-worker`: `artisan queue:work --queue=default --tries=3 --max-time=3600`
+  (consome a fila `default` no Redis; recicla de hora em hora). `Restart=always`.
+- Escopo dos units = **so os processos do app**. Nao tocam em firewall/rede/seguranca do host.
 
 ## 3. Configurar a instancia da Evolution
 ```
@@ -49,9 +55,14 @@ Escanear no WhatsApp do celular: **Aparelhos conectados -> Conectar aparelho**.
 A sessao pode cair sozinha; reconectar com `evolution:qr` e checar com `evolution:status`.
 
 ## 5. Webhook
-- URL (o container -> host): `http://host.docker.internal:8190/webhook/evolution`.
+- URL (o container -> host): `http://host.docker.internal:8080/webhook/evolution`.
 - Origem validada pelo header `X-Webhook-Secret` (segredo no `.env`, `hash_equals`).
-- Fluxo: recebe -> valida -> enfileira -> 200; o job persiste com idempotencia.
+- Fluxo resiliente: recebe -> valida -> **enfileira** (Redis) -> 200; o **worker sempre no ar**
+  (systemd) persiste com idempotencia. **Nada e processado no request.**
+- Conferir a URL registrada na Evolution: `php artisan evolution:status` (ou findWebhook).
+- Diagnostico rapido de "parou de receber": (1) `evolution:status` mostra a URL/porta certa?
+  (2) `systemctl is-active msgautomation-worker`? (3) `curl -s localhost:8080/up`?
+  (4) ultima `incoming_messages.received_at` recente?
 
 ## Segredos
 - Tudo no `.env` (app) e `docker/evolution/.env` (Evolution), ambos `chmod 600` e **gitignored**.

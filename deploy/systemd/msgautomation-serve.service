@@ -1,0 +1,18 @@
+[Unit]
+Description=msgautomation HTTP (Laravel artisan serve, porta canonica 8080)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/srv/www/msgautomation
+# Porta canonica 8080 (o webhook da Evolution aponta pra host.docker.internal:8080).
+# Bind 0.0.0.0 para o container alcancar via gateway. UI esta atras de login.
+ExecStart=/usr/bin/php /srv/www/msgautomation/artisan serve --host=0.0.0.0 --port=8080
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

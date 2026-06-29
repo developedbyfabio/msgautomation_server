@@ -14,32 +14,52 @@ use Livewire\Component;
  */
 class StatusConexao extends Component
 {
+    /** Polls 'desconhecido' seguidos ate considerar a conexao caida (tolera blip). */
+    private const MAX_BLIPS = 2;
+
     public string $state = 'verificando';
     public bool $showQr = false;
     public ?string $qr = null;
     public ?string $qrError = null;
 
     public bool $confirmingDisconnect = false;
+    public int $blips = 0;
 
     public function refresh(EvolutionApi $api): void
     {
+        $estado = 'desconhecido';
         try {
             $resp = $api->connectionState();
-            $this->state = $resp->successful()
-                ? (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido')
-                : 'desconhecido';
+            if ($resp->successful()) {
+                $estado = (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido');
+            }
         } catch (\Throwable) {
-            $this->state = 'desconhecido';
+            $estado = 'desconhecido';
         }
 
-        $this->syncChannel();
+        // Estado DEFINITIVO (open/connecting/close): aceita na hora, zera os blips.
+        if ($estado !== 'desconhecido') {
+            $this->blips = 0;
+            $this->state = $estado;
+            $this->syncChannel();
+
+            return;
+        }
+
+        // 'desconhecido' = Evolution inacessivel. Tolera blip curto (mantem o estado
+        // atual), mas se PERSISTIR (>= MAX_BLIPS), e honesto: marca desconectado em vez
+        // de esconder atras de "conectado" otimista.
+        $this->blips++;
+        if ($this->blips >= self::MAX_BLIPS) {
+            $this->state = 'close';
+            $this->syncChannel();
+        }
     }
 
     /**
-     * Sincroniza channels.status SO com estados DEFINITIVOS da Evolution. Em
-     * 'desconhecido'/'verificando' (Evolution momentaneamente inacessivel) NAO
-     * rebaixa pra disconnected — senao um blip de rede chutaria o Fabio pra tela
-     * de QR no meio do uso. O gate de conexao confia nesse status.
+     * Sincroniza channels.status com o estado avaliado. Estados transitorios
+     * (verificando/desconhecido sob blip) nao chegam aqui — o gate de conexao
+     * confia nesse status, entao so gravamos quando ha um veredito.
      */
     private function syncChannel(): void
     {

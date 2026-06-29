@@ -12,10 +12,13 @@ unico. Email padrao no `.env` (`AUTH_EMAIL`); a **senha** e definida pelo Fabio 
 Se preferir voltar ao tunel SSH, fechar a 8080 pra LAN e manter o login e opcional.
 
 ## Como servir (com os assets buildados)
+Porta canonica **8080**, via **systemd** (serve + worker persistentes — ver doc 03):
 ```
-php artisan serve --host=172.17.0.1 --port=8190   # ja roda em background no dev
-npm run build                                       # assets (NUNCA npm run dev aqui)
+sudo systemctl status msgautomation-serve msgautomation-worker   # active (running)
+npm run build                                                     # assets (NUNCA npm run dev)
 ```
+O webhook da Evolution aponta pra `host.docker.internal:8080`. Trocou a porta -> rode
+`php artisan evolution:setup` pra re-sincronizar, senao a ingestao para.
 
 ## Paginas
 - **/conversas** — lista (agrupada por `remote_jid`, nome/ultima msg/hora, ponto verde = contato

@@ -231,9 +231,13 @@
                 {{-- Auto-resposta (mesmo vocabulario do S5) --}}
                 <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
                     <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Auto-resposta</div>
-                    <p class="mb-3 text-xs text-zinc-500">
+                    <p class="mb-2 text-xs text-zinc-500">
                         <strong>on</strong> = robo responde (sob allowlist) · <strong>off</strong> = nunca responde ·
                         <strong>default</strong> = segue a politica de Configuracoes.
+                    </p>
+                    <p class="mb-3 rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-500 dark:bg-zinc-800/50">
+                        <flux:icon icon="information-circle" variant="micro" class="inline size-3" />
+                        O robo so responde mensagens <strong>recebidas</strong> deste contato — nunca as que <strong>voce</strong> envia (mensagens proprias sao ignoradas).
                     </p>
                     <div class="grid grid-cols-3 gap-2">
                         <button type="button" wire:click="setSelectedMode('on')" @class([

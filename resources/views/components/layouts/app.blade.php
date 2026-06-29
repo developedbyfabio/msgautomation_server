@@ -58,6 +58,16 @@
         </div>
     </header>
 
+    @unless ($robo)
+        {{-- Banner proeminente: robo OFF nao responde ninguem (kill switch). --}}
+        <div class="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <div class="flex items-center gap-2">
+                <flux:icon icon="exclamation-triangle" variant="micro" class="shrink-0" />
+                <span><strong>Robo desligado</strong> — nao responde ninguem automaticamente. A auto-resposta so reage a mensagens <strong>recebidas</strong> de contatos aprovados (on); nunca as mensagens que voce mesmo envia. Para ligar: <a href="{{ route('configuracoes') }}" wire:navigate class="font-medium underline">Configuracoes</a>.</span>
+            </div>
+        </div>
+    @endunless
+
     <main class="flex-1 min-h-0 overflow-hidden">
         {{ $slot }}
     </main>
