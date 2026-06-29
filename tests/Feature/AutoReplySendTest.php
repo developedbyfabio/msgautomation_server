@@ -239,6 +239,37 @@ class AutoReplySendTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    // ---- C2: janela avaliada em America/Sao_Paulo ---------------------------
+
+    public function test_janela_19h30_sao_paulo_esta_dentro(): void
+    {
+        // 19:30 SP = 22:30 UTC. Em UTC cairia FORA (>20:00); em SP esta DENTRO de 08-20.
+        Carbon::setTestNow(Carbon::create(2026, 6, 29, 19, 30, 0, 'America/Sao_Paulo'));
+        $this->fakeOk();
+        [$account, $channel] = $this->scaffold();
+        $im = $this->incoming($account, $channel, '5541999990000@s.whatsapp.net');
+
+        $log = $this->sender()->send('auto', $channel, $im->remote_jid, 'resp', $im->id);
+
+        $this->assertSame('sent', $log->status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_janela_21h_sao_paulo_esta_fora(): void
+    {
+        // 21:00 SP esta FORA de 08-20.
+        Carbon::setTestNow(Carbon::create(2026, 6, 29, 21, 0, 0, 'America/Sao_Paulo'));
+        $this->fakeOk();
+        [$account, $channel] = $this->scaffold();
+        $im = $this->incoming($account, $channel, '5541999990000@s.whatsapp.net');
+
+        $log = $this->sender()->send('auto', $channel, $im->remote_jid, 'resp', $im->id);
+
+        $this->assertSame('blocked', $log->status);
+        $this->assertSame('fora_da_janela', $log->motivo);
+        Http::assertSentCount(0);
+    }
+
     public function test_auto_idempotente_mesmo_incoming(): void
     {
         $this->fakeOk();

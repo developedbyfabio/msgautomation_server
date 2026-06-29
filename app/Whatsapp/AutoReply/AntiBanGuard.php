@@ -135,7 +135,10 @@ class AntiBanGuard
 
     private function withinWindow(AutoReplySetting $settings): bool
     {
-        $now = now((string) config('app.timezone'))->format('H:i:s');
+        // C2: a janela e configurada em horario LOCAL (America/Sao_Paulo, UTC-3 fixo) —
+        // avaliamos o "agora" nesse fuso, nao em UTC. So o fuso muda; valores e demais
+        // freios ficam intactos.
+        $now = now((string) config('app.display_timezone'))->format('H:i:s');
         $start = substr((string) $settings->window_start, 0, 8);
         $end = substr((string) $settings->window_end, 0, 8);
 

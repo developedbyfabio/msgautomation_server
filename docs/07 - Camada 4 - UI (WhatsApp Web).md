@@ -50,8 +50,6 @@ npm run build                                       # assets (NUNCA npm run dev 
 - **S1 Fuso:** storage segue em **UTC** (`config('app.timezone')`); a exibicao converte pra
   `America/Sao_Paulo` via `config('app.display_timezone')` (= `APP_TIMEZONE`) + macro
   `Carbon::paraExibicao()`. Corrige o "+3h" sem reinterpretar as linhas ja gravadas em UTC.
-  Obs.: a **janela** dos freios (AntiBanGuard) ainda compara em UTC — fora do escopo deste refino
-  (nao mexer em freios); a confirmar com o Fabio se a janela deve passar pra SP.
 - **S2 Login:** ver "Acesso" acima.
 - **S3 Conexao:** `StatusConexao` ganhou **Desconectar** (modal -> `DELETE /instance/logout/{inst}`,
   v2.3.7) e nao rebaixa o status em estado desconhecido. Pagina **/conexao** mostra o **QR**
@@ -68,5 +66,10 @@ npm run build                                       # assets (NUNCA npm run dev 
 - **S7 Regras avancadas:** `rule_triggers` + `rule_responses` (ver doc 02). Multiplos gatilhos,
   multiplas respostas (sorteio **no envio**, anti-ban), placeholders (`{nome}`, `{saudacao}`,
   `{data}`, `{hora}`) e `regex` (validado + backtrack_limit reduzido). Modal de regra rico.
-- Pendente: paginacao, websockets no lugar do polling; render real de midia; janela dos freios em
-  SP (a confirmar); variantes Pro do Flux nao usadas de proposito. **Kill switch real = OFF.**
+- **Login (C1):** a senha do usuario unico e definida pelo Fabio via `php artisan msg:auth:senha`
+  (input oculto, hash no banco). Sem senha em texto no `.env`/repo. Seeder so garante a existencia.
+- **Janela dos freios (C2):** `AntiBanGuard::withinWindow` avalia o "agora" em
+  `America/Sao_Paulo` (so o fuso mudou; valores/tetos/rate intactos). Ex.: janela 08-20 -> 19:30 SP
+  DENTRO, 21:00 SP FORA.
+- Pendente: paginacao, websockets no lugar do polling; render real de midia;
+  variantes Pro do Flux nao usadas de proposito. **Kill switch real = OFF.**
