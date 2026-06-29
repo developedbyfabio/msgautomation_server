@@ -6,8 +6,9 @@ expor nada. O kill switch aparece na UI mas **comeca/continua OFF** — ligar e 
 ## Acesso (Refino 2: LOGIN obrigatorio)
 A UI roda via `php artisan serve --host=0.0.0.0 --port=8080`, acessivel na LAN
 (`192.168.11.210:8080`). **Toda rota da UI esta atras de login** (S2): guard `web`, usuario
-unico com credenciais **no `.env`** (`AUTH_EMAIL`/`AUTH_PASSWORD`), nunca em repo. Criar/atualizar
-o usuario: `php artisan db:seed --class=SingleUserSeeder`. Sair: botao no header (`POST /logout`).
+unico. Email padrao no `.env` (`AUTH_EMAIL`); a **senha** e definida pelo Fabio via
+`php artisan msg:auth:senha` (input oculto, **hash no banco** — sem senha em texto). O seeder
+(`db:seed --class=SingleUserSeeder`) so garante a existencia do usuario. Sair: header (`POST /logout`).
 Se preferir voltar ao tunel SSH, fechar a 8080 pra LAN e manter o login e opcional.
 
 ## Como servir (com os assets buildados)
