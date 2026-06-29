@@ -324,7 +324,7 @@ class AutoReplySendTest extends TestCase
             }
         };
 
-        $sender = new Sender(app(\App\Contracts\WhatsappGateway::class), $stubGuard, app(Throttle::class));
+        $sender = new Sender(app(\App\Contracts\WhatsappGateway::class), $stubGuard, app(Throttle::class), app(\App\Whatsapp\Secrets\SecretVault::class));
         $log = $sender->send('auto', $channel, $im->remote_jid, 'resp', $im->id);
 
         $this->assertSame('blocked', $log->status);

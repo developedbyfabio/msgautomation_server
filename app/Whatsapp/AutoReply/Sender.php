@@ -6,6 +6,8 @@ use App\Contracts\WhatsappGateway;
 use App\Models\AutoReplyLog;
 use App\Models\Channel;
 use App\Whatsapp\Exceptions\WhatsappSendException;
+use App\Whatsapp\Secrets\SecretMissingException;
+use App\Whatsapp\Secrets\SecretVault;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
@@ -24,6 +26,7 @@ class Sender
         private WhatsappGateway $gateway,
         private AntiBanGuard $guard,
         private Throttle $throttle,
+        private SecretVault $vault,
     ) {
     }
 
@@ -68,14 +71,26 @@ class Sender
             }
         }
 
-        // 4. envio
+        // 3.5 — resolve {senha:nome} EM MEMORIA, so agora (no envio). O log ja guarda a
+        // versao REDIGIDA (ver base()); o plaintext nunca e persistido nem logado.
+        // Senha ausente -> falha controlada (nao envia meia-resposta).
         try {
-            $sent = $this->gateway->sendText($channel->instance, $jid, $text);
+            $textoEnvio = $this->vault->hasRef($text) ? $this->vault->resolve($accountId, $text) : $text;
+        } catch (SecretMissingException) {
+            $log->update(['status' => 'failed', 'motivo' => 'senha_ausente']);
+
+            return $log;
+        }
+
+        // 4. envio (usa o texto resolvido; descartado apos o POST)
+        try {
+            $sent = $this->gateway->sendText($channel->instance, $jid, $textoEnvio);
         } catch (WhatsappSendException) {
             $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
 
             return $log;
         }
+        unset($textoEnvio);
 
         $this->throttle->recordSend($accountId);
         if ($mode === 'auto') {
@@ -100,7 +115,8 @@ class Sender
             'rule_id' => $ruleId,
             'remote_jid' => $jid,
             'mode' => $mode,
-            'response_text' => $text,
+            // S4: o log guarda a REDACAO ({senha:nome} -> [senha: nome]); nunca o valor.
+            'response_text' => $this->vault->redact($text),
             'status' => 'pending',
         ];
     }
