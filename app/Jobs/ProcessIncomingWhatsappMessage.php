@@ -137,8 +137,8 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        // Sem regra que case -> silencio.
-        $rule = $matcher->match($account->id, $channel->id, $data->text);
+        // Sem regra que case -> silencio. (Passa o remetente p/ o escopo por contato — S3.)
+        $rule = $matcher->match($account->id, $channel->id, $data->text, $data->remoteJid);
         if ($rule === null) {
             return;
         }

@@ -25,7 +25,7 @@ class RuleMatcher
     /** Limite de backtracking ao rodar regex de usuario (anti-catastrofe). */
     private const REGEX_BACKTRACK_LIMIT = 100000;
 
-    public function match(int $accountId, ?int $channelId, ?string $text): ?AutoReplyRule
+    public function match(int $accountId, ?int $channelId, ?string $text, ?string $remoteJid = null): ?AutoReplyRule
     {
         if ($text === null) {
             return null;
@@ -38,7 +38,7 @@ class RuleMatcher
         }
 
         $rules = AutoReplyRule::query()
-            ->with(['triggers', 'responses'])
+            ->with(['triggers', 'responses', 'contacts'])
             ->where('account_id', $accountId)
             ->where('enabled', true)
             ->where(function ($q) use ($channelId) {
@@ -52,6 +52,12 @@ class RuleMatcher
             ->get();
 
         foreach ($rules as $rule) {
+            // S3: escopo. Regra 'contatos' so entra na avaliacao se o remetente esta na
+            // lista; 'global' sempre entra. Depois segue o match normal (e a prioridade).
+            if (! $this->scopeEligible($rule, $remoteJid)) {
+                continue;
+            }
+
             foreach ($rule->triggerList() as $trigger) {
                 if ($this->matches($trigger['type'], $raw, $normText, $this->normalize($trigger['value']), (string) $trigger['value'])) {
                     return $rule;
@@ -60,6 +66,23 @@ class RuleMatcher
         }
 
         return null;
+    }
+
+    /** S3 — a regra e elegivel para este remetente? */
+    private function scopeEligible(AutoReplyRule $rule, ?string $remoteJid): bool
+    {
+        if (($rule->scope ?: 'global') === 'global') {
+            return true;
+        }
+
+        // Escopo 'contatos': precisa saber o remetente e ele tem que estar na lista.
+        if ($remoteJid === null) {
+            return false;
+        }
+
+        $contatos = $rule->relationLoaded('contacts') ? $rule->contacts : $rule->contacts()->get();
+
+        return $contatos->contains(fn ($c) => $c->remote_jid === $remoteJid);
     }
 
     public function normalize(string $value): string
