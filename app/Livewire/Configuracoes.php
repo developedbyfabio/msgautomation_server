@@ -24,6 +24,7 @@ class Configuracoes extends Component
     public bool $warmup_enabled = false;
 
     public bool $salvo = false;
+    public bool $confirmingEnable = false;
 
     public function mount(): void
     {
@@ -50,12 +51,34 @@ class Configuracoes extends Component
         return AutoReplySetting::firstOrCreate(['account_id' => $account->id]);
     }
 
-    /** Kill switch flipa INSTANTANEO (sem precisar do botao Salvar). */
-    public function toggleKillSwitch(): void
+    /**
+     * Ligar pede confirmacao (modal) — ativa respostas automaticas no numero pessoal.
+     * Desligar e INSTANTANEO, sem modal (freio de emergencia, zero friccao).
+     */
+    public function requestKillSwitch(): void
     {
-        $s = $this->settings();
-        $s->update(['enabled' => ! $s->enabled]);
-        $this->enabled = (bool) $s->enabled;
+        if ($this->settings()->enabled) {
+            $this->settings()->update(['enabled' => false]);
+            $this->enabled = false;
+            $this->dispatch('toast', message: 'Robo desligado.');
+
+            return;
+        }
+
+        $this->confirmingEnable = true;
+    }
+
+    public function enableConfirmed(): void
+    {
+        $this->settings()->update(['enabled' => true]);
+        $this->enabled = true;
+        $this->confirmingEnable = false;
+        $this->dispatch('toast', message: 'Robo LIGADO.', type: 'error');
+    }
+
+    public function cancelEnable(): void
+    {
+        $this->confirmingEnable = false;
     }
 
     protected function rules(): array
@@ -92,6 +115,7 @@ class Configuracoes extends Component
         ]);
 
         $this->salvo = true;
+        $this->dispatch('toast', message: 'Configuracoes salvas.');
     }
 
     public function render()

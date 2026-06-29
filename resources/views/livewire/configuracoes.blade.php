@@ -17,7 +17,7 @@
                         <strong>Atencao:</strong> isto faz o sistema enviar mensagens sozinho.
                     </p>
                 </div>
-                <button type="button" wire:click="toggleKillSwitch"
+                <button type="button" wire:click="requestKillSwitch"
                     @class([
                         'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition',
                         'bg-emerald-500' => $enabled,
@@ -93,10 +93,29 @@
             </div>
 
             <div class="pt-2">
-                <button type="submit" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                    Salvar freios
+                <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <flux:icon icon="check" variant="micro" /> Salvar freios
                 </button>
             </div>
         </form>
     </div>
+
+    {{-- MODAL: confirmar LIGAR o kill switch (desligar e instantaneo, sem modal) --}}
+    @if ($confirmingEnable)
+        <x-modal wireClose="cancelEnable" title="Ligar o autoresponder?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-amber-500"><flux:icon icon="exclamation-triangle" class="size-6" /></div>
+                <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                    Isso ativa as <strong>respostas automaticas no numero pessoal</strong>. O robo passara a
+                    responder contatos aprovados que casam uma regra (respeitando janela e tetos). Confirmar?
+                </p>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelEnable" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="enableConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                    <flux:icon icon="bolt" variant="micro" /> Ligar robo
+                </button>
+            </div>
+        </x-modal>
+    @endif
 </div>
