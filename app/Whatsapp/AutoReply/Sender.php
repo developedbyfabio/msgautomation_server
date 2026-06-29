@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Whatsapp\AutoReply;
+
+use App\Contracts\WhatsappGateway;
+use App\Models\AutoReplyLog;
+use App\Models\Channel;
+use App\Whatsapp\Exceptions\WhatsappSendException;
+use Illuminate\Database\UniqueConstraintViolationException;
+
+/**
+ * Orquestra o envio aplicando os freios e registrando tudo em auto_reply_logs.
+ *
+ * Fluxo:
+ *  1. cria/claim a linha de log (status 'pending'). Para 'auto' com incoming_message_id,
+ *     o indice unico garante UMA resposta por mensagem recebida (idempotencia).
+ *  2. roda os freios (R1: manual so tetos; auto tudo).
+ *  3. R2: re-checa kill switch + opt-out + janela imediatamente antes do POST (auto).
+ *  4. envia pelo driver; em sucesso registra contadores e marca a linha 'sent'.
+ */
+class Sender
+{
+    public function __construct(
+        private WhatsappGateway $gateway,
+        private AntiBanGuard $guard,
+        private Throttle $throttle,
+    ) {
+    }
+
+    public function send(
+        string $mode,
+        Channel $channel,
+        string $jid,
+        string $text,
+        ?int $incomingMessageId = null,
+        ?int $ruleId = null,
+        bool $fromMe = false,
+    ): AutoReplyLog {
+        $accountId = $channel->account_id;
+
+        // 1. claim/log
+        if ($mode === 'auto' && $incomingMessageId !== null) {
+            try {
+                $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId));
+            } catch (UniqueConstraintViolationException) {
+                // Ja existe resposta pra essa mensagem recebida -> nao reenvia.
+                return AutoReplyLog::where('incoming_message_id', $incomingMessageId)->first();
+            }
+        } else {
+            $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId));
+        }
+
+        // 2. freios
+        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe);
+        if (! $decision->allowed) {
+            $log->update(['status' => 'blocked', 'motivo' => $decision->reason]);
+
+            return $log;
+        }
+
+        // 3. R2 — re-check volatil antes do POST (so auto)
+        if ($mode === 'auto') {
+            $recheck = $this->guard->volatileRecheck($accountId, $jid);
+            if (! $recheck->allowed) {
+                $log->update(['status' => 'blocked', 'motivo' => $recheck->reason]);
+
+                return $log;
+            }
+        }
+
+        // 4. envio
+        try {
+            $sent = $this->gateway->sendText($channel->instance, $jid, $text);
+        } catch (WhatsappSendException) {
+            $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
+
+            return $log;
+        }
+
+        $this->throttle->recordSend($accountId);
+        if ($mode === 'auto') {
+            $this->throttle->markContactReplied($accountId, $jid, $this->guard->settingsFor($accountId)->contact_rate_seconds);
+        }
+
+        $log->update([
+            'status' => 'sent',
+            'provider_message_id' => $sent->providerMessageId,
+            'sent_at' => now(),
+        ]);
+
+        return $log;
+    }
+
+    private function base(int $accountId, Channel $channel, string $jid, string $text, string $mode, ?int $incomingMessageId, ?int $ruleId): array
+    {
+        return [
+            'account_id' => $accountId,
+            'channel_id' => $channel->id,
+            'incoming_message_id' => $incomingMessageId,
+            'rule_id' => $ruleId,
+            'remote_jid' => $jid,
+            'mode' => $mode,
+            'response_text' => $text,
+            'status' => 'pending',
+        ];
+    }
+}

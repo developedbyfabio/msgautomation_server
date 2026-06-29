@@ -3,12 +3,11 @@
 namespace App\Contracts;
 
 use App\Whatsapp\IncomingMessageData;
+use App\Whatsapp\SentMessageData;
 
 /**
  * Contrato do gateway de WhatsApp. Abstrai o provedor (hoje Evolution) pra manter
  * a porta aberta pra trocar de driver depois sem mexer no resto do app.
- *
- * Camada 1: SO o lado de ENTRADA (normalizar webhook -> DTO). O envio e stub.
  */
 interface WhatsappGateway
 {
@@ -19,8 +18,11 @@ interface WhatsappGateway
     public function normalizeIncoming(array $payload): ?IncomingMessageData;
 
     /**
-     * Envio de texto. STUB na Camada 1 — nao envia nada (lanca excecao).
-     * Sera implementado na Camada 2.
+     * Envia uma mensagem de texto para um destinatario (numero ou jid).
+     * Lanca App\Whatsapp\Exceptions\WhatsappSendException em falha de envio.
+     *
+     * IMPORTANTE: este metodo NAO aplica freios anti-ban — quem chama deve passar
+     * pelos freios (App\Whatsapp\AutoReply\Sender). Aqui e so o transporte.
      */
-    public function sendText(string $instance, string $to, string $text): void;
+    public function sendText(string $instance, string $to, string $text): SentMessageData;
 }

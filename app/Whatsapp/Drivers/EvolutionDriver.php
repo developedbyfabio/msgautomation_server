@@ -3,10 +3,13 @@
 namespace App\Whatsapp\Drivers;
 
 use App\Contracts\WhatsappGateway;
+use App\Whatsapp\Exceptions\WhatsappSendException;
 use App\Whatsapp\IncomingMessageData;
+use App\Whatsapp\SentMessageData;
 use DateTimeImmutable;
 use DateTimeZone;
-use RuntimeException;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * Driver da Evolution API (v2). Camada 1: so normaliza o webhook de entrada.
@@ -72,10 +75,34 @@ class EvolutionDriver implements WhatsappGateway
         );
     }
 
-    public function sendText(string $instance, string $to, string $text): void
+    public function sendText(string $instance, string $to, string $text): SentMessageData
     {
-        // Camada 1 nao envia nada. Implementacao real fica pra Camada 2.
-        throw new RuntimeException('Envio desabilitado na Camada 1 (somente recebimento).');
+        $base = rtrim((string) config('services.evolution.base_url'), '/');
+        $key = (string) config('services.evolution.api_key');
+
+        // A Evolution v2.3.7 aceita numero ou jid no campo "number"; normalizamos pra digitos.
+        $number = str_contains($to, '@') ? Str::before($to, '@') : $to;
+
+        $resp = Http::baseUrl($base)
+            ->withHeaders(['apikey' => $key])
+            ->acceptJson()
+            ->timeout(20)
+            ->post("/message/sendText/{$instance}", [
+                'number' => $number,
+                'text' => $text,
+            ]);
+
+        if ($resp->failed()) {
+            throw new WhatsappSendException("Evolution sendText falhou (HTTP {$resp->status()}).");
+        }
+
+        $json = $resp->json() ?? [];
+
+        return new SentMessageData(
+            providerMessageId: data_get($json, 'key.id'),
+            status: $resp->status(),
+            raw: is_array($json) ? $json : [],
+        );
     }
 
     private function normalizarNomeEvento(mixed $evento): ?string

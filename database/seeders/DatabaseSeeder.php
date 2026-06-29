@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Account;
+use App\Models\AutoReplySetting;
 use App\Models\Channel;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -24,5 +25,9 @@ class DatabaseSeeder extends Seeder
             ['instance' => config('services.evolution.instance', 'fabio-pessoal')],
             ['account_id' => $account->id, 'status' => 'disconnected'],
         );
+
+        // Settings do autoresponder com os defaults aprovados (kill switch OFF).
+        // Os defaults das colunas cobrem o resto; criamos a linha-ancora por account.
+        AutoReplySetting::firstOrCreate(['account_id' => $account->id]);
     }
 }
