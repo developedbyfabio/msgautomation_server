@@ -3,13 +3,12 @@
 Livewire 4 + Flux (free) + Tailwind v4. Tempo real por **polling** (`wire:poll`). Sem IA, sem
 expor nada. O kill switch aparece na UI mas **comeca/continua OFF** — ligar e gate do Fabio.
 
-## Acesso (dev, por tunel SSH)
-A 8190 fica em `172.17.0.1` (fechada pra LAN). Acesse por tunel:
-```
-ssh -L 9000:172.17.0.1:8190 usuario@192.168.11.210
-```
-Depois abra `http://localhost:9000`. Assets e endpoints do Livewire sao **relativos** (funcionam
-sob o host do tunel). **Nao** reabrir pra LAN/internet. **Sem login** (dev).
+## Acesso (Refino 2: LOGIN obrigatorio)
+A UI roda via `php artisan serve --host=0.0.0.0 --port=8080`, acessivel na LAN
+(`192.168.11.210:8080`). **Toda rota da UI esta atras de login** (S2): guard `web`, usuario
+unico com credenciais **no `.env`** (`AUTH_EMAIL`/`AUTH_PASSWORD`), nunca em repo. Criar/atualizar
+o usuario: `php artisan db:seed --class=SingleUserSeeder`. Sair: botao no header (`POST /logout`).
+Se preferir voltar ao tunel SSH, fechar a 8080 pra LAN e manter o login e opcional.
 
 ## Como servir (com os assets buildados)
 ```
@@ -46,5 +45,28 @@ npm run build                                       # assets (NUNCA npm run dev 
 - **Status vivo da conexao** (`StatusConexao`): poll leve do estado real (open/connecting/desconectado),
   sincroniza `channels.status` e oferece **Reconectar** -> modal com **QR** quando a sessao cai.
 - Flux **free** apenas; modal/toast/badge/input/select feitos com Alpine+Tailwind.
-- Pendente: busca na lista de conversas, paginacao, websockets no lugar do polling, autenticacao se
-  sair do tunel; variantes Pro do Flux (modal/toast/table) nao usadas de proposito.
+
+## Refino 2 (S1–S7)
+- **S1 Fuso:** storage segue em **UTC** (`config('app.timezone')`); a exibicao converte pra
+  `America/Sao_Paulo` via `config('app.display_timezone')` (= `APP_TIMEZONE`) + macro
+  `Carbon::paraExibicao()`. Corrige o "+3h" sem reinterpretar as linhas ja gravadas em UTC.
+  Obs.: a **janela** dos freios (AntiBanGuard) ainda compara em UTC — fora do escopo deste refino
+  (nao mexer em freios); a confirmar com o Fabio se a janela deve passar pra SP.
+- **S2 Login:** ver "Acesso" acima.
+- **S3 Conexao:** `StatusConexao` ganhou **Desconectar** (modal -> `DELETE /instance/logout/{inst}`,
+  v2.3.7) e nao rebaixa o status em estado desconhecido. Pagina **/conexao** mostra o **QR**
+  (`GET /instance/connect`), faz polling e segue pras conversas ao conectar; botao gerar novo QR.
+  Middleware `whatsapp.connected` joga as paginas principais pro /conexao quando o canal esta
+  `disconnected`. Tudo testado com **HTTP mockado** (sessao real nunca desconectada).
+- **S4 Painel de contato:** clicar no nome abre drawer com avatar/nome/numero, toggle de
+  auto-resposta, salvar **nome/notas** (flag `contacts.saved`) e **lista** de midias recentes
+  (tipo+hora). Render real da midia = **fatia futura** (download/LGPD).
+- **S5 Aprovar/Silenciar:** tooltips explicitos (Aprovar=on, Silenciar=off), badge do estado
+  atual, vocabulario unificado com `/contatos`.
+- **S6 Cara de WhatsApp:** bolhas (recebida clara/esq, enviada verde/dir), separadores de data
+  (Hoje/Ontem/data), agrupamento, avatar colorido, hora relativa, tag de origem sutil, busca.
+- **S7 Regras avancadas:** `rule_triggers` + `rule_responses` (ver doc 02). Multiplos gatilhos,
+  multiplas respostas (sorteio **no envio**, anti-ban), placeholders (`{nome}`, `{saudacao}`,
+  `{data}`, `{hora}`) e `regex` (validado + backtrack_limit reduzido). Modal de regra rico.
+- Pendente: paginacao, websockets no lugar do polling; render real de midia; janela dos freios em
+  SP (a confirmar); variantes Pro do Flux nao usadas de proposito. **Kill switch real = OFF.**
