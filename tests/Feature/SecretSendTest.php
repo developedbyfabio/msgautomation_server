@@ -101,6 +101,20 @@ class SecretSendTest extends TestCase
         $this->assertSame('segue [senha: wifi]', $log->fresh()->response_text);
     }
 
+    public function test_resposta_sem_senha_funciona_sem_secrets_key(): void
+    {
+        // Regressao: SECRETS_KEY ausente NAO pode quebrar auto-resposta sem senha.
+        // (O cofre e preguicoso: so exige a chave ao cifrar/decifrar de verdade.)
+        config(['secrets.key' => '']);
+        [$account, $channel] = $this->scaffold();
+        $im = $this->incoming($account, $channel);
+
+        $log = app(Sender::class)->send('auto', $channel, self::JID, 'A senha do wifi e v6G8+6Dw', $im->id);
+
+        $this->assertSame('sent', $log->status);
+        Http::assertSent(fn ($r) => $r['text'] === 'A senha do wifi e v6G8+6Dw');
+    }
+
     public function test_resposta_sem_senha_inalterada(): void
     {
         [$account, $channel] = $this->scaffold();

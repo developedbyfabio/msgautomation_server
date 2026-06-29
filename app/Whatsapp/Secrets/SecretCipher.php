@@ -12,21 +12,27 @@ use RuntimeException;
  */
 class SecretCipher
 {
-    private Encrypter $encrypter;
+    private ?Encrypter $encrypter = null;
 
-    public function __construct()
+    /**
+     * Encrypter PREGUICOSO: so e construido (e a SECRETS_KEY so e exigida) quando
+     * realmente cifra/decifra. Assim, montar o SecretCipher/SecretVault NUNCA quebra
+     * (ex.: ao construir o Sender numa auto-resposta SEM senha). So quem usa senha
+     * de verdade depende da chave.
+     */
+    private function encrypter(): Encrypter
     {
-        $this->encrypter = new Encrypter($this->parseKey(), (string) config('secrets.cipher', 'AES-256-CBC'));
+        return $this->encrypter ??= new Encrypter($this->parseKey(), (string) config('secrets.cipher', 'AES-256-CBC'));
     }
 
     public function encrypt(string $plain): string
     {
-        return $this->encrypter->encryptString($plain);
+        return $this->encrypter()->encryptString($plain);
     }
 
     public function decrypt(string $payload): string
     {
-        return $this->encrypter->decryptString($payload);
+        return $this->encrypter()->decryptString($payload);
     }
 
     /** Aceita chave em formato base64: (como o APP_KEY) ou bytes crus. */
