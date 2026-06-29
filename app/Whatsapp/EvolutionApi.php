@@ -109,4 +109,14 @@ class EvolutionApi
     {
         return $this->http()->delete("/instance/logout/{$this->instance}");
     }
+
+    /**
+     * Metadados de um grupo (subject/nome). Evolution v2.3.7:
+     * GET /group/findGroupInfos/{instance}?groupJid=...  (endpoint A CONFIRMAR;
+     * tratamos varios shapes de retorno no resolver). So leitura.
+     */
+    public function groupInfo(string $groupJid): Response
+    {
+        return $this->http()->get("/group/findGroupInfos/{$this->instance}", ['groupJid' => $groupJid]);
+    }
 }

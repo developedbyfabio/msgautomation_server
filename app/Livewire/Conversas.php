@@ -242,11 +242,20 @@ class Conversas extends Component
 
         $busca = $this->normalizeSearch($this->search);
 
-        return collect($rows)->map(function ($r) use ($contacts) {
+        $resolver = app(\App\Whatsapp\Groups\GroupNameResolver::class);
+
+        return collect($rows)->map(function ($r) use ($contacts, $resolver, $account) {
             $c = $contacts->get($r['jid']);
-            $r['name'] = $c?->push_name ?: $this->numberFromJid($r['jid']);
+            $isGroup = str_ends_with($r['jid'], '@g.us');
+            if ($isGroup) {
+                // S4: nome do grupo (cache em DB); dispara resolucao em background se faltar.
+                $resolver->ensure($account, $r['jid']);
+                $r['name'] = $resolver->nameFor($account, $r['jid']) ?: $this->numberFromJid($r['jid']);
+            } else {
+                $r['name'] = $c?->push_name ?: $this->numberFromJid($r['jid']);
+            }
             $r['mode'] = $c?->auto_reply_mode ?? 'default';
-            $r['is_group'] = str_ends_with($r['jid'], '@g.us');
+            $r['is_group'] = $isGroup;
             $r['time_label'] = $r['at'] ? $this->relativeTime($r['at']) : '';
 
             return $r;
@@ -361,11 +370,22 @@ class Conversas extends Component
             ? Contact::query()->where('account_id', $this->accountId())->where('remote_jid', $this->selectedJid)->first()
             : null;
 
+        $isGroup = $this->selectedJid ? str_ends_with($this->selectedJid, '@g.us') : false;
+
+        // Nome do cabecalho: grupo -> subject (cache); contato -> push_name; senao numero.
+        $selectedName = null;
+        if ($this->selectedJid) {
+            $selectedName = $isGroup
+                ? (app(\App\Whatsapp\Groups\GroupNameResolver::class)->nameFor($this->accountId(), $this->selectedJid) ?: $this->numberFromJid($this->selectedJid))
+                : ($selectedContact?->push_name ?: $this->numberFromJid($this->selectedJid));
+        }
+
         return view('livewire.conversas', [
             'conversations' => $this->conversations(),
             'thread' => $this->thread(),
             'selectedContact' => $selectedContact,
-            'isGroup' => $this->selectedJid ? str_ends_with($this->selectedJid, '@g.us') : false,
+            'selectedName' => $selectedName,
+            'isGroup' => $isGroup,
             'mutingName' => $this->confirmingMuteJid ? ($selectedContact?->push_name ?: $this->numberFromJid($this->confirmingMuteJid)) : null,
             'recentMedia' => $this->showContactPanel ? $this->recentMedia() : [],
         ]);

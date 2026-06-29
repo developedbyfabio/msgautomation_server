@@ -80,11 +80,15 @@
                     class="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left transition enabled:hover:bg-zinc-100 disabled:cursor-default dark:enabled:hover:bg-zinc-800">
                     <div class="flex size-9 shrink-0 items-center justify-center rounded-full {{ $isGroup ? 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200' : 'text-white' }}"
                         @unless($isGroup) style="background-color: {{ '#' . substr(md5($selectedJid), 0, 6) }}" @endunless>
-                        {{ mb_strtoupper(mb_substr($selectedContact?->push_name ?: \Illuminate\Support\Str::before($selectedJid, '@'), 0, 1)) }}
+                        @if ($isGroup)
+                            <flux:icon icon="user-group" variant="micro" />
+                        @else
+                            {{ mb_strtoupper(mb_substr($selectedName, 0, 1)) }}
+                        @endif
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5">
-                            <span class="truncate font-medium">{{ $selectedContact?->push_name ?: \Illuminate\Support\Str::before($selectedJid, '@') }}</span>
+                            <span class="truncate font-medium">{{ $selectedName }}</span>
                             @if ($selectedContact?->saved)
                                 <flux:icon icon="bookmark" variant="micro" class="text-emerald-500" title="Salvo nos contatos" />
                             @endif
