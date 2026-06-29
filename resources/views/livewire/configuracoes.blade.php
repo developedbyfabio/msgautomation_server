@@ -59,38 +59,61 @@
                 @error('reply_policy') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <div class="mb-1 flex items-center gap-1">
-                        <label class="text-sm font-medium">Janela inicio</label>
+            {{-- JANELA DE HORARIO (com toggle) --}}
+            <div @class(['rounded-lg border border-zinc-200 p-3 dark:border-zinc-800', 'opacity-50' => ! $window_enabled])>
+                <div class="mb-2 flex items-center justify-between">
+                    <div class="flex items-center gap-1">
+                        <label class="text-sm font-medium">Janela de horario</label>
                         <x-info-tip text="Faixa de horario (Sao Paulo) em que o robo pode responder. Fora dela, fica calado." />
                     </div>
-                    <input type="time" wire:model="window_start" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                    @error('window_start') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                    <x-freio-toggle model="window_enabled" :enabled="$window_enabled" />
                 </div>
-                <div>
-                    <div class="mb-1 flex items-center gap-1">
-                        <label class="text-sm font-medium">Janela fim</label>
-                        <x-info-tip text="Faixa de horario (Sao Paulo) em que o robo pode responder. Fora dela, fica calado." />
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="mb-1 block text-xs text-zinc-500">Inicio</label>
+                        <input type="time" wire:model="window_start" @disabled(! $window_enabled) class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-800">
+                        @error('window_start') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
                     </div>
-                    <input type="time" wire:model="window_end" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                    @error('window_end') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                    <div>
+                        <label class="mb-1 block text-xs text-zinc-500">Fim</label>
+                        <input type="time" wire:model="window_end" @disabled(! $window_enabled) class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-800">
+                        @error('window_end') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                    </div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-4">
+            {{-- FREIOS-THROTTLE com toggle liga/desliga --}}
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 @foreach ([
-                    ['min_interval_seconds', 'Intervalo min (s)', 'Tempo minimo, em segundos, entre dois envios quaisquer do robo. Espaca os disparos pra nao parecer robo.'],
-                    ['per_minute_cap', 'Teto / minuto', 'Maximo de respostas automaticas por minuto, no total. Atingiu, segura ate o minuto virar.'],
-                    ['per_day_cap', 'Teto / dia', 'Maximo de respostas automaticas por dia, no total. Atingiu, para ate o dia seguinte.'],
-                    ['contact_rate_seconds', 'Rate por contato (s)', 'Tempo minimo, em segundos, entre duas respostas pro MESMO contato. Evita responder a mesma pessoa repetidamente. 1800 = 30 min.'],
-                    ['delay_min_seconds', 'Delay min (s)', 'O robo espera um tempo aleatorio entre delay min e max (segundos) antes de responder, pra parecer humano e nao responder na hora.'],
-                    ['delay_max_seconds', 'Delay max (s)', 'O robo espera um tempo aleatorio entre delay min e max (segundos) antes de responder, pra parecer humano e nao responder na hora.'],
-                ] as [$field, $label, $tip])
+                    ['min_interval_seconds', 'min_interval_enabled', $min_interval_enabled, 'Intervalo min (s)', 'Tempo minimo, em segundos, entre dois envios quaisquer do robo. Espaca os disparos pra nao parecer robo.'],
+                    ['per_minute_cap', 'per_minute_enabled', $per_minute_enabled, 'Teto / minuto', 'Maximo de respostas automaticas por minuto, no total. Atingiu, segura ate o minuto virar.'],
+                    ['per_day_cap', 'per_day_enabled', $per_day_enabled, 'Teto / dia', 'Maximo de respostas automaticas por dia, no total. Atingiu, para ate o dia seguinte.'],
+                    ['contact_rate_seconds', 'contact_rate_enabled', $contact_rate_enabled, 'Intervalo por contato (s)', 'Tempo minimo, em segundos, entre duas respostas pro MESMO contato. Evita responder a mesma pessoa repetidamente. 1800 = 30 min.'],
+                ] as [$field, $toggleProp, $toggleVal, $label, $tip])
+                    <div @class(['rounded-lg border border-zinc-200 p-3 dark:border-zinc-800', 'opacity-60' => ! $toggleVal])>
+                        <div class="mb-1 flex items-center justify-between gap-1">
+                            <span class="flex items-center gap-1">
+                                <label class="text-sm font-medium">{{ $label }}</label>
+                                <x-info-tip :text="$tip" />
+                            </span>
+                            <x-freio-toggle :model="$toggleProp" :enabled="$toggleVal" />
+                        </div>
+                        <input type="number" min="0" wire:model="{{ $field }}" @disabled(! $toggleVal) class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-800">
+                        @error($field) <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                    </div>
+                @endforeach
+            </div>
+
+            {{-- DELAYS (timing humano — nao sao "bloqueio", sempre aplicam) --}}
+            <div class="grid grid-cols-2 gap-4">
+                @foreach ([
+                    ['delay_min_seconds', 'Delay min (s)'],
+                    ['delay_max_seconds', 'Delay max (s)'],
+                ] as [$field, $label])
                     <div>
                         <div class="mb-1 flex items-center gap-1">
                             <label class="text-sm font-medium">{{ $label }}</label>
-                            <x-info-tip :text="$tip" />
+                            <x-info-tip text="O robo espera um tempo aleatorio entre delay min e max (segundos) antes de responder, pra parecer humano e nao responder na hora." />
                         </div>
                         <input type="number" min="0" wire:model="{{ $field }}" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                         @error($field) <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
@@ -113,12 +136,35 @@
                 </div>
             </div>
 
+            <p class="text-xs text-zinc-500">
+                Estas sao suas protecoes anti-ban. Desligar da mais liberdade e mais risco de bloqueio do numero.
+            </p>
+
             <div class="pt-2">
                 <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
                     <flux:icon icon="check" variant="micro" /> Salvar freios
                 </button>
             </div>
         </form>
+
+        {{-- GUARDAS ESTRUTURAIS: sempre ativos, NAO desligaveis, mas visiveis (transparencia) --}}
+        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                <flux:icon icon="lock-closed" variant="micro" class="text-zinc-400" />
+                Protecoes de funcionamento (sempre ativas)
+            </div>
+            <p class="mb-3 text-xs text-zinc-500">Nao sao anti-ban e nao podem ser desligadas — garantem o funcionamento correto.</p>
+            <ul class="space-y-2 text-sm">
+                <li class="flex items-start gap-2">
+                    <span class="mt-0.5 shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">sempre ativo</span>
+                    <span><strong>fromMe</strong> — impede o robo de responder as proprias mensagens (evita loop infinito). Nao e anti-ban.</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="mt-0.5 shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">sempre ativo</span>
+                    <span><strong>Idempotencia</strong> — impede responder a mesma mensagem mais de uma vez (evita duplicata). Nao e anti-ban.</span>
+                </li>
+            </ul>
+        </div>
     </div>
 
     {{-- MODAL: confirmar LIGAR o kill switch (desligar e instantaneo, sem modal) --}}

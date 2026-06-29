@@ -21,6 +21,11 @@ class AutoReplySetting extends Model
         'delay_max_seconds',
         'skip_groups',
         'warmup_enabled',
+        'window_enabled',
+        'min_interval_enabled',
+        'per_minute_enabled',
+        'per_day_enabled',
+        'contact_rate_enabled',
     ];
 
     protected function casts(): array
@@ -29,6 +34,11 @@ class AutoReplySetting extends Model
             'enabled' => 'boolean',
             'skip_groups' => 'boolean',
             'warmup_enabled' => 'boolean',
+            'window_enabled' => 'boolean',
+            'min_interval_enabled' => 'boolean',
+            'per_minute_enabled' => 'boolean',
+            'per_day_enabled' => 'boolean',
+            'contact_rate_enabled' => 'boolean',
             'min_interval_seconds' => 'integer',
             'per_minute_cap' => 'integer',
             'per_day_cap' => 'integer',

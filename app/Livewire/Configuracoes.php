@@ -23,6 +23,13 @@ class Configuracoes extends Component
     public bool $skip_groups = true;
     public bool $warmup_enabled = false;
 
+    // S2 — toggles liga/desliga por freio (desligado = nao bloqueia).
+    public bool $window_enabled = true;
+    public bool $min_interval_enabled = true;
+    public bool $per_minute_enabled = true;
+    public bool $per_day_enabled = true;
+    public bool $contact_rate_enabled = true;
+
     public bool $salvo = false;
     public bool $confirmingEnable = false;
 
@@ -41,6 +48,11 @@ class Configuracoes extends Component
         $this->delay_max_seconds = (int) $s->delay_max_seconds;
         $this->skip_groups = (bool) $s->skip_groups;
         $this->warmup_enabled = (bool) $s->warmup_enabled;
+        $this->window_enabled = (bool) $s->window_enabled;
+        $this->min_interval_enabled = (bool) $s->min_interval_enabled;
+        $this->per_minute_enabled = (bool) $s->per_minute_enabled;
+        $this->per_day_enabled = (bool) $s->per_day_enabled;
+        $this->contact_rate_enabled = (bool) $s->contact_rate_enabled;
     }
 
     private function settings(): AutoReplySetting
@@ -112,6 +124,11 @@ class Configuracoes extends Component
             'delay_max_seconds' => $this->delay_max_seconds,
             'skip_groups' => $this->skip_groups,
             'warmup_enabled' => $this->warmup_enabled,
+            'window_enabled' => $this->window_enabled,
+            'min_interval_enabled' => $this->min_interval_enabled,
+            'per_minute_enabled' => $this->per_minute_enabled,
+            'per_day_enabled' => $this->per_day_enabled,
+            'contact_rate_enabled' => $this->contact_rate_enabled,
         ]);
 
         $this->salvo = true;

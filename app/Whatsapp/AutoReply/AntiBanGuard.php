@@ -70,8 +70,9 @@ class AntiBanGuard
             // S1: le o VALOR ATUAL de contact_rate_seconds e compara com o ULTIMO
             // auto-reply ao contato (qualquer regra). Antes usava cache com TTL congelado
             // no envio -> mudar o valor nao tinha efeito ate o TTL antigo expirar (stale).
+            // S2: intervalo por contato desligado (toggle) -> nao bloqueia.
             $segundos = (int) $settings->contact_rate_seconds;
-            if ($segundos <= 0) {
+            if (! $settings->contact_rate_enabled || $segundos <= 0) {
                 return GuardDecision::allow();
             }
 
@@ -163,14 +164,17 @@ class AntiBanGuard
 
     private function checkCaps(int $accountId, AutoReplySetting $settings): GuardDecision
     {
-        $since = $this->throttle->secondsSinceLastSend($accountId);
-        if ($since !== null && $since < $settings->min_interval_seconds) {
-            return GuardDecision::block('intervalo_minimo');
+        // S2: cada teto so vale se o respectivo toggle estiver ligado.
+        if ($settings->min_interval_enabled) {
+            $since = $this->throttle->secondsSinceLastSend($accountId);
+            if ($since !== null && $since < $settings->min_interval_seconds) {
+                return GuardDecision::block('intervalo_minimo');
+            }
         }
-        if ($this->throttle->minuteHits($accountId) >= $settings->per_minute_cap) {
+        if ($settings->per_minute_enabled && $this->throttle->minuteHits($accountId) >= $settings->per_minute_cap) {
             return GuardDecision::block('teto_minuto');
         }
-        if ($this->throttle->dayHits($accountId) >= $settings->per_day_cap) {
+        if ($settings->per_day_enabled && $this->throttle->dayHits($accountId) >= $settings->per_day_cap) {
             return GuardDecision::block('teto_dia');
         }
 
@@ -213,6 +217,11 @@ class AntiBanGuard
 
     private function withinWindow(AutoReplySetting $settings): bool
     {
+        // S2: janela desligada (toggle) -> nao bloqueia (sempre "dentro").
+        if (! $settings->window_enabled) {
+            return true;
+        }
+
         // C2: a janela e configurada em horario LOCAL (America/Sao_Paulo, UTC-3 fixo) —
         // avaliamos o "agora" nesse fuso, nao em UTC. So o fuso muda; valores e demais
         // freios ficam intactos.
