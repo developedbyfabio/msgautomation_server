@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
@@ -17,6 +18,9 @@ class AutoReplyRule extends Model
         'response_text',
         'enabled',
         'priority',
+        'cooldown_mode',     // global | sempre | 1x_dia | cada_n  (S2)
+        'cooldown_minutes',  // usado por cada_n
+        'scope',             // global | contatos  (S3)
     ];
 
     protected function casts(): array
@@ -24,6 +28,7 @@ class AutoReplyRule extends Model
         return [
             'enabled' => 'boolean',
             'priority' => 'integer',
+            'cooldown_minutes' => 'integer',
         ];
     }
 
@@ -47,20 +52,37 @@ class AutoReplyRule extends Model
         return $this->hasMany(RuleResponse::class);
     }
 
+    /** Contatos do escopo 'contatos' (S3). */
+    public function contacts(): BelongsToMany
+    {
+        return $this->belongsToMany(Contact::class, 'rule_contacts');
+    }
+
     /**
      * Gatilhos efetivos: as filhas (rule_triggers) ou, se nao houver, o legado
-     * (match_type/match_value) como gatilho unico. Cada item: ['type','value'].
+     * (match_type/match_value) como gatilho unico. Cada item:
+     * ['type','value','precision','fuzzy_level'].
      */
     public function triggerList(): Collection
     {
         $filhos = $this->relationLoaded('triggers') ? $this->triggers : $this->triggers()->get();
 
         if ($filhos->isNotEmpty()) {
-            return $filhos->map(fn ($t) => ['type' => $t->match_type, 'value' => (string) $t->match_value]);
+            return $filhos->map(fn ($t) => [
+                'type' => $t->match_type,
+                'value' => (string) $t->match_value,
+                'precision' => $t->precision ?: 'exato',
+                'fuzzy_level' => $t->fuzzy_level,
+            ]);
         }
 
         if ((string) $this->match_value !== '') {
-            return collect([['type' => $this->match_type ?: 'contains', 'value' => (string) $this->match_value]]);
+            return collect([[
+                'type' => $this->match_type ?: 'contains',
+                'value' => (string) $this->match_value,
+                'precision' => 'exato',
+                'fuzzy_level' => null,
+            ]]);
         }
 
         return collect();
