@@ -67,6 +67,8 @@ nas filhas:
 | auto_reply_rule_id | FK auto_reply_rules | cascadeOnDelete |
 | match_type | string(16) | `exact`/`contains`/`starts_with`/`regex` |
 | match_value | string | gatilho |
+| precision | string(16) | `exato` (default) / `tolerante` (fuzzy, S5) |
+| fuzzy_level | string(8) null | `baixa`/`media`/`alta` (quando tolerante) |
 
 ### rule_responses
 | coluna | tipo | nota |
@@ -75,10 +77,18 @@ nas filhas:
 | auto_reply_rule_id | FK auto_reply_rules | cascadeOnDelete |
 | response_text | text | uma das respostas (sorteio no envio) |
 
-Engine: `RuleMatcher` casa a regra se **qualquer** gatilho casa (cai pro legado se nao ha filhas).
-`RuleResponder` escolhe **uma** resposta (aleatoria) e processa placeholders **no envio**
-(`{nome}`,`{saudacao}`,`{data}`,`{hora}`). Migracao `..._000011` backfilla as regras antigas.
+### Regras v2 (aditivo — migracao `..._000012`)
+`auto_reply_rules` ganhou: **`cooldown_mode`** (`global`/`sempre`/`1x_dia`/`cada_n`),
+**`cooldown_minutes`** (p/ `cada_n`), **`scope`** (`global`/`contatos`). Nova tabela
+**`rule_contacts`** (`auto_reply_rule_id`, `contact_id`, unique) liga regra a contatos do
+escopo `contatos`. Defaults preservam o comportamento atual (global/exato) — sem backfill.
+
+Engine: `RuleMatcher` filtra por **escopo** (S3) e casa se **qualquer** gatilho casa, exato ou
+**tolerante** (S5: Levenshtein por token whole-word, com guarda-corpos). `RuleResponder` sorteia
+**uma** resposta + placeholders **no envio** (`{nome}`,`{saudacao}`,`{data}`,`{hora}`). `AntiBanGuard`
+aplica o **cooldown por regra** (S2, via `auto_reply_logs`) substituindo o rate-global da regra,
+com os **tetos de volume** como piso. `RuleTester` (S4) faz dry-run sem enviar.
 
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000011`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000012`).

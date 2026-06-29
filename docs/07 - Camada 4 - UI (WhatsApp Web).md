@@ -75,5 +75,21 @@ O webhook da Evolution aponta pra `host.docker.internal:8080`. Trocou a porta ->
 - **Janela dos freios (C2):** `AntiBanGuard::withinWindow` avalia o "agora" em
   `America/Sao_Paulo` (so o fuso mudou; valores/tetos/rate intactos). Ex.: janela 08-20 -> 19:30 SP
   DENTRO, 21:00 SP FORA.
-- Pendente: paginacao, websockets no lugar do polling; render real de midia;
-  variantes Pro do Flux nao usadas de proposito. **Kill switch real = OFF.**
+## Regras v2 (controle fino — ver schema na doc 02)
+- **Modal corrigido (S1):** altura maxima 85vh, corpo rolavel, **Cancelar/Salvar fixos no rodape**
+  (Salvar via `form="rule-form"`) — alcancavel mesmo com 15+ gatilhos. `x-modal` ganhou
+  `maxWidth` + slot `footer`.
+- **Frequencia por regra (S2):** por contato — `Padrao (rate global)` | `Sempre` | `1x por dia`
+  (reset meia-noite SP) | `A cada N min`. **Composicao:** a frequencia da regra **substitui** o
+  rate-por-contato global daquela regra; os **tetos de volume** (intervalo minimo, por minuto, por
+  dia) **continuam valendo** como piso. Rastreio em `auto_reply_logs`.
+- **Escopo por contato (S3):** `global` (todos aprovados) ou `contatos` (lista). Filtrado no matcher
+  antes do match; prioridade decide entre as elegiveis.
+- **Testador / dry-run (S4):** botao **Testar** em /regras — digita mensagem (+ contato opcional) e
+  ve qual regra/gatilho casaria, a resposta resolvida e se algum freio bloquearia. **Nao envia** nem
+  mexe em contadores.
+- **Precisao por gatilho (S5):** `exato` (default) ou `tolerante a erros` (baixa/media/alta).
+  Levenshtein por token whole-word; guarda-corpos: token < 4 chars = exato, folga escala com o
+  tamanho (teto baixo). Calibravel no Testador. Default seguro = exato.
+- Pendente: paginacao, websockets no lugar do polling; render real de midia; multiselect de contatos
+  com busca (hoje `<select multiple>`); variantes Pro do Flux nao usadas. **Kill switch real = OFF.**
