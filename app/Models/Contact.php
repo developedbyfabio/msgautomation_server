@@ -14,12 +14,14 @@ class Contact extends Model
         'auto_reply_opt_out', // DEPRECIADO: usar auto_reply_mode
         'auto_reply_mode',    // default | on | off
         'notes',
+        'saved',              // true = nomeado/adicionado pelo usuario (S4)
     ];
 
     protected function casts(): array
     {
         return [
             'auto_reply_opt_out' => 'boolean',
+            'saved' => 'boolean',
         ];
     }
 

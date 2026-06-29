@@ -20,10 +20,16 @@ class Conversas extends Component
     public ?string $sendStatus = null;
     public ?string $confirmingMuteJid = null;
 
+    // S4 — painel de info do contato.
+    public bool $showContactPanel = false;
+    public string $panelName = '';
+    public string $panelNotes = '';
+
     public function select(string $jid): void
     {
         $this->selectedJid = $jid;
         $this->sendStatus = null;
+        $this->showContactPanel = false;
     }
 
     public function approveJid(string $jid): void
@@ -32,7 +38,110 @@ class Conversas extends Component
             ['account_id' => $this->accountId(), 'remote_jid' => $jid],
             ['auto_reply_mode' => 'on'],
         );
-        $this->dispatch('toast', message: 'Contato aprovado.');
+        $this->dispatch('toast', message: 'Contato aprovado: o robo passa a responder este contato automaticamente.');
+    }
+
+    /** Define on/default direto (off passa por confirmacao via confirmMute). */
+    public function setSelectedMode(string $mode): void
+    {
+        if (! $this->selectedJid || ! in_array($mode, ['default', 'on'], true)) {
+            return;
+        }
+
+        Contact::updateOrCreate(
+            ['account_id' => $this->accountId(), 'remote_jid' => $this->selectedJid],
+            ['auto_reply_mode' => $mode],
+        );
+
+        $this->dispatch('toast', message: $mode === 'on'
+            ? 'Robo passa a responder este contato (on).'
+            : 'Contato volta a seguir a politica (default).');
+    }
+
+    // ---- S4: painel de info do contato -------------------------------------
+
+    public function openContactPanel(): void
+    {
+        if (! $this->selectedJid || str_ends_with($this->selectedJid, '@g.us')) {
+            return;
+        }
+
+        $contact = $this->selectedContact();
+        $this->panelName = (string) ($contact?->push_name ?? '');
+        $this->panelNotes = (string) ($contact?->notes ?? '');
+        $this->showContactPanel = true;
+    }
+
+    public function closeContactPanel(): void
+    {
+        $this->showContactPanel = false;
+    }
+
+    /** Salva nome/notas e marca o contato como "salvo" (adicionado pelo usuario). */
+    public function saveContact(): void
+    {
+        if (! $this->selectedJid) {
+            return;
+        }
+
+        Contact::updateOrCreate(
+            ['account_id' => $this->accountId(), 'remote_jid' => $this->selectedJid],
+            [
+                'push_name' => trim($this->panelName) !== '' ? trim($this->panelName) : null,
+                'notes' => trim($this->panelNotes) !== '' ? trim($this->panelNotes) : null,
+                'saved' => true,
+            ],
+        );
+
+        $this->dispatch('toast', message: 'Contato salvo.');
+    }
+
+    private function selectedContact(): ?Contact
+    {
+        return $this->selectedJid
+            ? Contact::query()->where('account_id', $this->accountId())->where('remote_jid', $this->selectedJid)->first()
+            : null;
+    }
+
+    /**
+     * Midias recentes da conversa (S4). So a LISTA/referencia (tipo + hora).
+     * O render real da imagem fica pra fatia futura (baixar/guardar midia da
+     * Evolution -> disco/LGPD).
+     */
+    private function recentMedia(): array
+    {
+        if (! $this->selectedJid) {
+            return [];
+        }
+
+        $tipos = ['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage', 'stickerMessage'];
+
+        return IncomingMessage::query()
+            ->where('account_id', $this->accountId())
+            ->where('remote_jid', $this->selectedJid)
+            ->whereIn('type', $tipos)
+            ->orderByDesc('received_at')
+            ->limit(20)
+            ->get()
+            ->map(fn ($m) => [
+                'label' => match ($m->type) {
+                    'imageMessage' => 'Imagem',
+                    'videoMessage' => 'Video',
+                    'documentMessage' => 'Documento',
+                    'audioMessage' => 'Audio',
+                    'stickerMessage' => 'Figurinha',
+                    default => $m->type,
+                },
+                'icon' => match ($m->type) {
+                    'imageMessage' => 'photo',
+                    'videoMessage' => 'video-camera',
+                    'documentMessage' => 'document',
+                    'audioMessage' => 'musical-note',
+                    default => 'paper-clip',
+                },
+                'at' => $m->received_at,
+            ])
+            ->all();
     }
 
     public function confirmMute(string $jid): void
@@ -193,6 +302,7 @@ class Conversas extends Component
             'selectedContact' => $selectedContact,
             'isGroup' => $this->selectedJid ? str_ends_with($this->selectedJid, '@g.us') : false,
             'mutingName' => $this->confirmingMuteJid ? ($selectedContact?->push_name ?: $this->numberFromJid($this->confirmingMuteJid)) : null,
+            'recentMedia' => $this->showContactPanel ? $this->recentMedia() : [],
         ]);
     }
 }

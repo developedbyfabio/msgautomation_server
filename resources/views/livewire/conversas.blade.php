@@ -60,25 +60,58 @@
                 <p class="text-sm">Selecione uma conversa.</p>
             </div>
         @else
+            @php $modoAtual = $selectedContact?->auto_reply_mode ?? 'default'; @endphp
             <div class="flex shrink-0 items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-                <div class="min-w-0 flex-1">
-                    <div class="truncate font-medium">{{ $selectedContact?->push_name ?: \Illuminate\Support\Str::before($selectedJid, '@') }}</div>
-                    <div class="truncate text-xs text-zinc-500">{{ $selectedJid }}</div>
-                </div>
+                {{-- Nome/numero clicavel -> abre painel de info (S4). --}}
+                <button type="button" wire:click="openContactPanel" @disabled($isGroup)
+                    class="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left transition enabled:hover:bg-zinc-100 disabled:cursor-default dark:enabled:hover:bg-zinc-800">
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-full {{ $isGroup ? 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200' : 'text-white' }}"
+                        @unless($isGroup) style="background-color: {{ '#' . substr(md5($selectedJid), 0, 6) }}" @endunless>
+                        {{ mb_strtoupper(mb_substr($selectedContact?->push_name ?: \Illuminate\Support\Str::before($selectedJid, '@'), 0, 1)) }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-1.5">
+                            <span class="truncate font-medium">{{ $selectedContact?->push_name ?: \Illuminate\Support\Str::before($selectedJid, '@') }}</span>
+                            @if ($selectedContact?->saved)
+                                <flux:icon icon="bookmark" variant="micro" class="text-emerald-500" title="Salvo nos contatos" />
+                            @endif
+                        </div>
+                        <div class="truncate text-xs text-zinc-500">{{ \Illuminate\Support\Str::before($selectedJid, '@') }}@unless($isGroup) · toque para ver/editar @endunless</div>
+                    </div>
+                </button>
+
                 @unless ($isGroup)
                     <div class="flex items-center gap-2 text-xs">
-                        <span @class([
-                            'rounded-full px-2 py-0.5 font-medium',
-                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => ($selectedContact?->auto_reply_mode) === 'on',
-                            'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' => ($selectedContact?->auto_reply_mode) === 'off',
-                            'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' => ! in_array($selectedContact?->auto_reply_mode, ['on','off'], true),
-                        ])>auto: {{ $selectedContact?->auto_reply_mode ?? 'default' }}</span>
-                        <button type="button" wire:click="approveJid('{{ $selectedJid }}')" class="inline-flex items-center gap-1 rounded-lg border border-emerald-300 px-2 py-1 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950">
-                            <flux:icon icon="check-circle" variant="micro" /> Aprovar
-                        </button>
-                        <button type="button" wire:click="confirmMute('{{ $selectedJid }}')" class="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-                            <flux:icon icon="no-symbol" variant="micro" /> Silenciar
-                        </button>
+                        @php
+                            [$badgeCls, $badgeTxt] = match ($modoAtual) {
+                                'on' => ['bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', 'responde (on)'],
+                                'off' => ['bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300', 'silenciado (off)'],
+                                default => ['bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300', 'segue a politica (default)'],
+                            };
+                        @endphp
+                        <flux:tooltip content="Estado atual da auto-resposta deste contato. on = robo responde (sob allowlist); off = nunca; default = segue a politica de Configuracoes.">
+                            <span class="rounded-full px-2 py-0.5 font-medium {{ $badgeCls }}">auto: {{ $badgeTxt }}</span>
+                        </flux:tooltip>
+
+                        <flux:tooltip content="Aprovar = o robo passa a responder ESTE contato automaticamente (auto_reply_mode = on).">
+                            <button type="button" wire:click="approveJid('{{ $selectedJid }}')" @class([
+                                'inline-flex items-center gap-1 rounded-lg border px-2 py-1',
+                                'border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $modoAtual === 'on',
+                                'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950' => $modoAtual !== 'on',
+                            ])>
+                                <flux:icon icon="check-circle" variant="micro" /> Aprovar
+                            </button>
+                        </flux:tooltip>
+
+                        <flux:tooltip content="Silenciar = o robo NUNCA responde este contato (auto_reply_mode = off). Voce ainda pode mandar mensagem manual.">
+                            <button type="button" wire:click="confirmMute('{{ $selectedJid }}')" @class([
+                                'inline-flex items-center gap-1 rounded-lg border px-2 py-1',
+                                'border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300' => $modoAtual === 'off',
+                                'border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800' => $modoAtual !== 'off',
+                            ])>
+                                <flux:icon icon="no-symbol" variant="micro" /> Silenciar
+                            </button>
+                        </flux:tooltip>
                     </div>
                 @endunless
             </div>
@@ -133,6 +166,101 @@
             </div>
         @endif
     </section>
+
+    {{-- PAINEL DE INFO DO CONTATO (S4) — drawer lateral --}}
+    @if ($showContactPanel && $selectedJid && ! $isGroup)
+        @php $numero = \Illuminate\Support\Str::before($selectedJid, '@'); @endphp
+        <div class="fixed inset-0 z-40" x-data>
+            <div class="absolute inset-0 bg-black/40" wire:click="closeContactPanel"></div>
+            <aside class="absolute right-0 top-0 flex h-full w-full max-w-sm flex-col overflow-y-auto border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                    <h2 class="font-semibold">Dados do contato</h2>
+                    <button type="button" wire:click="closeContactPanel" class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Fechar">
+                        <flux:icon icon="x-mark" variant="micro" />
+                    </button>
+                </div>
+
+                <div class="flex flex-col items-center gap-2 px-4 py-5">
+                    <div class="flex size-20 items-center justify-center rounded-full text-2xl font-semibold text-white" style="background-color: {{ '#' . substr(md5($selectedJid), 0, 6) }}">
+                        {{ mb_strtoupper(mb_substr($selectedContact?->push_name ?: $numero, 0, 1)) }}
+                    </div>
+                    <div class="text-center">
+                        <div class="flex items-center justify-center gap-1.5 font-medium">
+                            {{ $selectedContact?->push_name ?: 'Sem nome' }}
+                            @if ($selectedContact?->saved)
+                                <flux:icon icon="bookmark" variant="micro" class="text-emerald-500" title="Salvo" />
+                            @endif
+                        </div>
+                        <div class="text-sm text-zinc-500">{{ $numero }}</div>
+                    </div>
+                </div>
+
+                {{-- Auto-resposta (mesmo vocabulario do S5) --}}
+                <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Auto-resposta</div>
+                    <p class="mb-3 text-xs text-zinc-500">
+                        <strong>on</strong> = robo responde (sob allowlist) · <strong>off</strong> = nunca responde ·
+                        <strong>default</strong> = segue a politica de Configuracoes.
+                    </p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" wire:click="setSelectedMode('on')" @class([
+                            'rounded-lg border px-2 py-2 text-sm font-medium',
+                            'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $modoAtual === 'on',
+                            'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800' => $modoAtual !== 'on',
+                        ])>on</button>
+                        <button type="button" wire:click="setSelectedMode('default')" @class([
+                            'rounded-lg border px-2 py-2 text-sm font-medium',
+                            'border-zinc-500 bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' => $modoAtual === 'default',
+                            'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800' => $modoAtual !== 'default',
+                        ])>default</button>
+                        <button type="button" wire:click="confirmMute('{{ $selectedJid }}')" @class([
+                            'rounded-lg border px-2 py-2 text-sm font-medium',
+                            'border-red-500 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300' => $modoAtual === 'off',
+                            'border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800' => $modoAtual !== 'off',
+                        ])>off</button>
+                    </div>
+                </div>
+
+                {{-- Nome/notas --}}
+                <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Adicionar aos contatos</div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="mb-1 block text-xs font-medium">Nome</label>
+                            <input type="text" wire:model="panelName" placeholder="Dar um nome..."
+                                class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium">Notas</label>
+                            <textarea wire:model="panelNotes" rows="3" placeholder="Anotacoes internas..."
+                                class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                        </div>
+                        <button type="button" wire:click="saveContact"
+                            class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                            <flux:icon icon="check" variant="micro" /> Salvar contato
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Midias recentes (so lista; render real e fatia futura) --}}
+                <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+                    <div class="mb-2 flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Midias recentes</span>
+                        <span class="text-[10px] text-zinc-400">render na fatia futura</span>
+                    </div>
+                    @forelse ($recentMedia as $m)
+                        <div class="flex items-center gap-2 py-1.5 text-sm" wire:key="media-{{ $loop->index }}">
+                            <flux:icon :icon="$m['icon']" variant="micro" class="text-zinc-400" />
+                            <span class="flex-1">{{ $m['label'] }}</span>
+                            <span class="text-xs text-zinc-400">{{ $m['at']?->paraExibicao()->format('d/m H:i') }}</span>
+                        </div>
+                    @empty
+                        <p class="text-xs text-zinc-400">Nenhuma midia trocada nesta conversa.</p>
+                    @endforelse
+                </div>
+            </aside>
+        </div>
+    @endif
 
     {{-- MODAL: confirmar silenciar --}}
     @if ($confirmingMuteJid)
