@@ -129,6 +129,28 @@ Evolution); `ensure` dispara `ResolveGroupName` (job, dedupe 5 min) que busca o 
 - **Preview (display):** `MessagePreview::for(type,text,raw)` deriva icone/label/legenda/emoji
   (componente `x-msg-preview`), sem tocar em matcher/freios.
 
+## Precedencia de regras (Fatia 0)
+Sem setas manuais. Quando >1 regra casa, vence a de gatilho MAIS ESPECIFICO:
+tipo (exact>starts_with>contains>regex) -> tamanho -> escopo (contatos>global) ->
+precisao (exato>tolerante) -> id menor. `RuleMatcher::allMatching()` ordena todas;
+`match()` = a primeira. `priority` mantido no schema (sem uso/UI). `RuleConflictDetector`
+avisa sobreposicao (regra×regra; extensivel a fluxo).
+
+## Fluxos — menus condicionais (Fatia A, `..._000016`)
+Determinístico, sem IA. Tabelas (escopo account): `flows` (name, enabled, scope,
+timeout_seconds, invalid_message, root_node_id), `flow_triggers` (gatilhos de entrada,
+mesmo formato de rule_triggers), `flow_contacts` (escopo contatos), `flow_nodes`
+(arvore: parent_node_id, kind menu|final, message, ordem), `flow_options`
+(input, label, next_node_id), `flow_sessions` (estado por contato: current_node_id,
+status active|completed|expired|cancelled, last_activity_at, expires_at).
+
+`FlowEngine` (sem enviar — devolve diretiva texto+status): sessao ativa tem prioridade
+(navegacao, nunca cai nas regras); fluxo de entrada vence regra; timeout expira
+preguicosamente; opcao invalida re-pergunta; final encerra; reentrada reinicia; sair/
+cancelar encerra. No envio, resposta de fluxo e ISENTA do intervalo-por-contato
+(flag `flow` no Sender/AntiBanGuard); resto dos freios + placeholders/{senha}/redacao
+mantidos. **Robô inalterado enquanto nenhum fluxo estiver enabled (0 hoje). UI = Fatia B.**
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000015`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000016`).
