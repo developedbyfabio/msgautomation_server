@@ -3,20 +3,25 @@
     "instance": "fabio-pessoal",
     "data": {
         "key": {
-            "remoteJid": "5511999998888@s.whatsapp.net",
+            "id": "3AREALSTRUCTUREINBOUND01",
             "fromMe": false,
-            "id": "3EB0FIXTUREPLACEHOLDER01"
+            "remoteJid": "5541999990000@s.whatsapp.net",
+            "remoteJidAlt": "5541999990000@s.whatsapp.net",
+            "addressingMode": "pn"
         },
-        "pushName": "Fulano de Teste",
-        "messageType": "conversation",
+        "source": "android",
+        "status": "DELIVERY_ACK",
         "message": {
-            "conversation": "Ola, esta e uma mensagem de teste (fixture)."
+            "conversation": "Qual o horario de funcionamento?"
         },
-        "messageTimestamp": 1751200000
+        "pushName": "Cliente Teste",
+        "instanceId": "00000000-0000-0000-0000-000000000000",
+        "messageType": "conversation",
+        "messageTimestamp": 1782699162
     },
-    "destination": "http://host.docker.internal:8190/webhook/evolution",
-    "date_time": "2026-06-29T12:00:00.000Z",
-    "sender": "5511999998888@s.whatsapp.net",
+    "apikey": "REDACTED-INSTANCE-APIKEY-FIXTURE",
+    "sender": "5541999990000@s.whatsapp.net",
+    "date_time": "2026-06-29T02:12:42.000Z",
     "server_url": "http://127.0.0.1:8090",
-    "apikey": "REDACTED-INSTANCE-APIKEY-FIXTURE"
+    "destination": "http://host.docker.internal:8190/webhook/evolution"
 }

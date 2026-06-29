@@ -56,11 +56,11 @@ class WebhookEvolutionTest extends TestCase
         $this->assertDatabaseCount('incoming_messages', 1);
         $this->assertDatabaseHas('incoming_messages', [
             'instance' => 'fabio-pessoal',
-            'evolution_message_id' => '3EB0FIXTUREPLACEHOLDER01',
-            'remote_jid' => '5511999998888@s.whatsapp.net',
+            'evolution_message_id' => '3AREALSTRUCTUREINBOUND01',
+            'remote_jid' => '5541999990000@s.whatsapp.net',
             'from_me' => false,
             'type' => 'conversation',
-            'text' => 'Ola, esta e uma mensagem de teste (fixture).',
+            'text' => 'Qual o horario de funcionamento?',
         ]);
 
         // raw_payload preservado integralmente.
