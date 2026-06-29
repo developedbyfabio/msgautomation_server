@@ -7,6 +7,7 @@ use App\Livewire\Contatos;
 use App\Livewire\Conversas;
 use App\Livewire\Login;
 use App\Livewire\Regras;
+use App\Livewire\Senhas;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +29,8 @@ Route::post('/logout', function () {
 Route::middleware('auth')->group(function () {
     Route::redirect('/', '/conversas');
     Route::get('/conexao', Conexao::class)->name('conexao');
+    // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).
+    Route::get('/senhas', Senhas::class)->name('senhas');
 
     Route::middleware('whatsapp.connected')->group(function () {
         Route::get('/conversas', Conversas::class)->name('conversas');

@@ -3,6 +3,7 @@
     $nav = [
         ['conversas', 'Conversas', 'chat-bubble-left-right'],
         ['contatos', 'Contatos', 'users'],
+        ['senhas', 'Senhas', 'key'],
         ['regras', 'Regras', 'bolt'],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth'],
     ];
