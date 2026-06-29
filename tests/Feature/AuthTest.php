@@ -75,18 +75,75 @@ class AuthTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_seeder_cria_usuario_unico_do_env(): void
+    public function test_seeder_garante_usuario_sem_senha_em_texto(): void
     {
-        config()->set('auth.single_user', [
-            'name' => 'Operador',
-            'email' => 'unico@exemplo.local',
-            'password' => 'abc123def456',
-        ]);
+        config()->set('auth.single_user', ['name' => 'Operador', 'email' => 'unico@exemplo.local']);
 
         $this->seed(\Database\Seeders\SingleUserSeeder::class);
 
+        // Usuario existe, mas a senha e um hash aleatorio (conta trancada ate o comando).
         $this->assertDatabaseHas('users', ['email' => 'unico@exemplo.local']);
-        $user = User::where('email', 'unico@exemplo.local')->first();
-        $this->assertTrue(Hash::check('abc123def456', $user->password));
+        $this->assertFalse(\Illuminate\Support\Facades\Auth::attempt([
+            'email' => 'unico@exemplo.local', 'password' => '',
+        ]));
+    }
+
+    public function test_seeder_nao_clobbera_senha_existente(): void
+    {
+        $user = $this->user('senha-do-fabio-1');
+
+        $this->seed(\Database\Seeders\SingleUserSeeder::class);
+
+        // Seeder roda mas NAO troca a senha ja definida.
+        $this->assertTrue(Hash::check('senha-do-fabio-1', $user->fresh()->password));
+    }
+
+    // ---- C1: comando msg:auth:senha (input oculto, hash no banco) -----------
+
+    public function test_comando_define_senha_e_loga(): void
+    {
+        config()->set('auth.single_user.email', 'op@exemplo.local');
+
+        $this->artisan('msg:auth:senha')
+            ->expectsQuestion('Nova senha (nao aparece na tela)', 'senhaforte9')
+            ->expectsQuestion('Confirme a senha', 'senhaforte9')
+            ->assertExitCode(0);
+
+        $this->assertTrue(\Illuminate\Support\Facades\Auth::attempt([
+            'email' => 'op@exemplo.local', 'password' => 'senhaforte9',
+        ]));
+    }
+
+    public function test_comando_senha_curta_falha(): void
+    {
+        $this->artisan('msg:auth:senha')
+            ->expectsQuestion('Nova senha (nao aparece na tela)', 'curta')
+            ->assertExitCode(1);
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_comando_confirmacao_diferente_falha(): void
+    {
+        $this->artisan('msg:auth:senha')
+            ->expectsQuestion('Nova senha (nao aparece na tela)', 'senhaforte9')
+            ->expectsQuestion('Confirme a senha', 'outracoisa9')
+            ->assertExitCode(1);
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_comando_troca_email(): void
+    {
+        $this->user('qualquer-1');
+
+        $this->artisan('msg:auth:senha --email=novo@exemplo.local')
+            ->expectsQuestion('Nova senha (nao aparece na tela)', 'senhaforte9')
+            ->expectsQuestion('Confirme a senha', 'senhaforte9')
+            ->assertExitCode(0);
+
+        $this->assertTrue(\Illuminate\Support\Facades\Auth::attempt([
+            'email' => 'novo@exemplo.local', 'password' => 'senhaforte9',
+        ]));
     }
 }
