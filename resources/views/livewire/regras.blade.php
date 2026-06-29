@@ -75,8 +75,8 @@
 
     {{-- MODAL: criar/editar regra (rico) --}}
     @if ($showForm)
-        <x-modal wireClose="closeForm" title="{{ $editingId ? 'Editar regra' : 'Nova regra' }}">
-            <form wire:submit="save" class="space-y-4">
+        <x-modal wireClose="closeForm" title="{{ $editingId ? 'Editar regra' : 'Nova regra' }}" maxWidth="2xl">
+            <form id="rule-form" wire:submit="save" class="space-y-4">
                 {{-- GATILHOS --}}
                 <div>
                     <div class="mb-1 flex items-center justify-between">
@@ -154,16 +154,18 @@
                 <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" wire:model="enabled" class="rounded border-zinc-300 dark:border-zinc-700"> Habilitada
                 </label>
+            </form>
 
-                <div class="flex justify-end gap-2 pt-2">
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
                     <button type="button" wire:click="closeForm" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
-                    <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                    <button type="submit" form="rule-form" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
                         <flux:icon icon="check" variant="micro" wire:loading.remove wire:target="save" />
                         <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="save" />
                         Salvar
                     </button>
                 </div>
-            </form>
+            </x-slot:footer>
         </x-modal>
     @endif
 
