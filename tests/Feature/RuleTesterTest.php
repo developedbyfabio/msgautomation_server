@@ -141,12 +141,30 @@ class RuleTesterTest extends TestCase
 
         $this->assertNotEmpty($r['freios']);
         // Cada freio esperado aparece no quadro.
-        foreach (['fromMe', 'Idempotencia', 'Pular grupos', 'Aprovacao do contato', 'Politica', 'kill switch', 'Janela', 'Intervalo por contato', 'Cooldown da regra', 'Intervalo minimo', 'Teto / minuto', 'Teto / dia'] as $label) {
+        foreach (['fromMe', 'Idempotencia', 'Pular grupos', 'Aprovacao do contato', 'Politica', 'kill switch', 'Janela', 'Intervalo por contato', 'Frequencia desta regra', 'Intervalo minimo', 'Teto / minuto', 'Teto / dia'] as $label) {
             $this->assertNotNull($this->freio($r, $label), "freio ausente: {$label}");
         }
         // Estruturais sempre passam.
         $this->assertSame('passa', $this->freio($r, 'fromMe')['status']);
         $this->assertSame('passa', $this->freio($r, 'Idempotencia')['status']);
+    }
+
+    public function test_breakdown_texto_cooldown_sempre(): void
+    {
+        // Regra com frequencia propria "sempre".
+        $rule = AutoReplyRule::create([
+            'account_id' => $this->account->id, 'match_type' => 'contains', 'match_value' => 'wifi',
+            'response_text' => 'ok', 'enabled' => true, 'priority' => 0, 'cooldown_mode' => 'sempre',
+        ]);
+        $rule->triggers()->create(['match_type' => 'contains', 'match_value' => 'wifi']);
+        $rule->responses()->create(['response_text' => 'ok']);
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id);
+
+        // Global nao se aplica; a frequencia da regra governa e diz "responde sempre".
+        $this->assertSame('na', $this->freio($r, 'Intervalo por contato (global)')['status']);
+        $this->assertStringContainsString('responde sempre', $this->freio($r, 'Frequencia desta regra')['detalhe']);
     }
 
     public function test_breakdown_respeita_toggle_desligado(): void

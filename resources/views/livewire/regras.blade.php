@@ -225,7 +225,10 @@
                             @error('cooldownMinutes') <p class="w-full text-xs text-red-500">{{ $message }}</p> @enderror
                         @endif
                     </div>
-                    <p class="mt-1 text-[11px] text-zinc-400">Substitui o rate global so para esta regra. Os tetos de volume (intervalo/min/dia) continuam valendo.</p>
+                    <p class="mt-1 text-[11px] text-zinc-400">
+                        Escolher uma frequencia especifica <strong>substitui o "Intervalo por contato" global</strong> para esta regra.
+                        "Sempre" = sem limite por contato. Os tetos de volume (intervalo minimo, por minuto, por dia) continuam valendo.
+                    </p>
                 </div>
 
                 {{-- ESCOPO (S2 textos + S3 checkboxes) --}}

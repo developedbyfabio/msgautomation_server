@@ -204,23 +204,24 @@ class AntiBanGuard
             $add('Janela de horario', $this->withinWindow($settings) ? 'passa' : 'bloqueia', null);
         }
 
-        // Intervalo por contato (so quando a regra usa o modo global).
+        // S3 — deixar claro QUEM governa a frequencia: o intervalo global OU o cooldown
+        // proprio da regra (um substitui o outro).
+        $freqRegra = $this->cooldownLabel($mode, $rule);
         if ($mode !== 'global') {
-            $add('Intervalo por contato', 'na', 'a regra usa cooldown proprio');
-        } elseif (! $settings->contact_rate_enabled || (int) $settings->contact_rate_seconds <= 0) {
-            $add('Intervalo por contato', 'desligado', null);
-        } else {
-            $bloqueia = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings)->reason === 'rate_contato';
-            $add('Intervalo por contato', $bloqueia ? 'bloqueia' : 'passa', $settings->contact_rate_seconds . 's');
-        }
-
-        // Cooldown da regra (so quando a regra define modo proprio).
-        if ($mode === 'global') {
-            $add('Cooldown da regra', 'na', 'usa intervalo por contato');
-        } else {
+            // A regra define a propria frequencia -> o global nao se aplica.
+            $add('Intervalo por contato (global)', 'na', 'nao se aplica — esta regra define a propria frequencia');
             $dec = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings);
             $bloqueia = in_array($dec->reason, ['cooldown', 'cooldown_dia'], true);
-            $add('Cooldown da regra', $bloqueia ? 'bloqueia' : 'passa', $mode);
+            $add('Frequencia desta regra', $bloqueia ? 'bloqueia' : 'passa', $freqRegra);
+        } else {
+            // A regra usa o global -> o global governa.
+            if (! $settings->contact_rate_enabled || (int) $settings->contact_rate_seconds <= 0) {
+                $add('Intervalo por contato (global)', 'desligado', 'esta regra usa o global');
+            } else {
+                $bloqueia = $this->rateOrCooldown($accountId, $jid, $ruleId, $settings)->reason === 'rate_contato';
+                $add('Intervalo por contato (global)', $bloqueia ? 'bloqueia' : 'passa', $settings->contact_rate_seconds . 's (governa esta regra)');
+            }
+            $add('Frequencia desta regra', 'na', 'usa o intervalo por contato (global)');
         }
 
         // Tetos de volume.
@@ -242,6 +243,17 @@ class AntiBanGuard
         }
 
         return $itens;
+    }
+
+    /** S3 — descricao amigavel da frequencia propria da regra (pro testador). */
+    private function cooldownLabel(string $mode, ?AutoReplyRule $rule): string
+    {
+        return match ($mode) {
+            'sempre' => 'responde sempre (sem limite por contato)',
+            '1x_dia' => '1x por dia por contato',
+            'cada_n' => 'a cada ' . max(1, (int) ($rule->cooldown_minutes ?? 0)) . ' min por contato',
+            default => 'intervalo por contato (global)',
+        };
     }
 
     public function isGroup(string $jid): bool
