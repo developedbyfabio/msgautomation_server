@@ -75,6 +75,19 @@ class RuleTesterTest extends TestCase
         $this->assertNull($r['bloqueio']);
     }
 
+    public function test_rotulo_de_tipo_em_pt_br(): void
+    {
+        $this->assertSame('Contem', \App\Whatsapp\AutoReply\RuleMatcher::typeLabel('contains'));
+        $this->assertSame('Mensagem exata', \App\Whatsapp\AutoReply\RuleMatcher::typeLabel('exact'));
+        $this->assertSame('Comeca com', \App\Whatsapp\AutoReply\RuleMatcher::typeLabel('starts_with'));
+        $this->assertSame('Regex (avancado)', \App\Whatsapp\AutoReply\RuleMatcher::typeLabel('regex'));
+
+        $this->rule();
+        $contact = Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'j@s.whatsapp.net', 'push_name' => 'Joao', 'auto_reply_mode' => 'on']);
+        $r = $this->tester()->test($this->account->id, null, 'wifi', $contact->id);
+        $this->assertStringStartsWith('Contem:', (string) $r['trigger']);
+    }
+
     public function test_sem_match(): void
     {
         $this->rule();

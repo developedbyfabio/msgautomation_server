@@ -228,6 +228,15 @@ class RegrasAvancadasTest extends TestCase
         $this->assertSame(0, AutoReplyRule::where('scope', 'contatos')->count());
     }
 
+    public function test_ui_tipos_em_pt_br_no_modal(): void
+    {
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->assertSee('Mensagem exata')
+            ->assertSee('Comeca com')
+            ->assertSee('Regex (avancado)');
+    }
+
     public function test_ui_escopo_mostra_esconde_lista_de_contatos(): void
     {
         \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'push_name' => 'Alpha', 'auto_reply_mode' => 'on']);

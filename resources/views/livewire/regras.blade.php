@@ -16,7 +16,7 @@
 
         <p class="text-sm text-zinc-500">
             Varios gatilhos levam a mesma regra; varias respostas variam (escolha aleatoria no envio,
-            ajuda anti-ban). <strong>contains</strong> casa palavra inteira; acento/maiusculas ignorados.
+            ajuda anti-ban). <strong>Contem</strong> casa palavra inteira; acento/maiusculas ignorados.
             Primeira regra (de cima) que casa vence.
         </p>
 
@@ -36,7 +36,7 @@
                         <div class="flex flex-wrap items-center gap-1.5">
                             @foreach ($trigs as $t)
                                 <span class="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-800">
-                                    <span class="font-mono text-[10px] text-zinc-400">{{ $t['type'] }}</span>
+                                    <span class="text-[10px] text-zinc-400">{{ \App\Whatsapp\AutoReply\RuleMatcher::typeLabel($t['type']) }}</span>
                                     <span class="font-medium">{{ $t['value'] }}</span>
                                 </span>
                             @endforeach
@@ -113,10 +113,10 @@
                             {{-- S4: [tipo] [precisao] [texto] [x] na MESMA linha. --}}
                             <div wire:key="trg-{{ $i }}" class="flex flex-wrap items-start gap-2 sm:flex-nowrap">
                                 <select wire:model.live="triggers.{{ $i }}.type" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                    <option value="contains">contains</option>
-                                    <option value="exact">exact</option>
-                                    <option value="starts_with">starts_with</option>
-                                    <option value="regex">regex</option>
+                                    <option value="contains">Contem</option>
+                                    <option value="exact">Mensagem exata</option>
+                                    <option value="starts_with">Comeca com</option>
+                                    <option value="regex">Regex (avancado)</option>
                                 </select>
 
                                 @if ($t['type'] !== 'regex')

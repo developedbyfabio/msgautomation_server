@@ -106,6 +106,17 @@ class RuleMatcher
         return null;
     }
 
+    /** Rotulo pt-BR do tipo de match (so exibicao; o valor interno nao muda). */
+    public static function typeLabel(string $type): string
+    {
+        return [
+            'contains' => 'Contem',
+            'exact' => 'Mensagem exata',
+            'starts_with' => 'Comeca com',
+            'regex' => 'Regex (avancado)',
+        ][$type] ?? $type;
+    }
+
     public function normalize(string $value): string
     {
         $value = Str::ascii($value);          // fold de acento -> ascii
