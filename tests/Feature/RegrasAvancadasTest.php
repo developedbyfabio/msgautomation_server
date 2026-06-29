@@ -228,6 +228,59 @@ class RegrasAvancadasTest extends TestCase
         $this->assertSame(0, AutoReplyRule::where('scope', 'contatos')->count());
     }
 
+    public function test_s5_bloqueia_senha_com_escopo_todos(): void
+    {
+        app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'segredo');
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'wifi')
+            ->set('responses.0', 'A senha e {senha:wifi}')
+            ->set('scope', 'global') // Todos os Aprovados -> proibido com senha
+            ->call('save')
+            ->assertHasErrors('scope');
+
+        $this->assertSame(0, AutoReplyRule::count());
+    }
+
+    public function test_s5_bloqueia_senha_com_gatilho_fuzzy(): void
+    {
+        app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'segredo');
+        $c = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'senha wifi')
+            ->set('triggers.0.precision', 'tolerante')
+            ->set('responses.0', '{senha:wifi}')
+            ->set('scope', 'contatos')
+            ->set('scopeContactIds', [$c->id])
+            ->call('save')
+            ->assertHasErrors('triggers');
+
+        $this->assertSame(0, AutoReplyRule::count());
+    }
+
+    public function test_s5_passa_com_contatos_e_estrito(): void
+    {
+        app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'segredo');
+        $c = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'senha wifi') // exato (default)
+            ->set('responses.0', 'A senha e {senha:wifi}')
+            ->set('scope', 'contatos')
+            ->set('scopeContactIds', [$c->id])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $rule = AutoReplyRule::first();
+        $this->assertSame('contatos', $rule->scope);
+        // A regra guarda a REFERENCIA, nao o valor.
+        $this->assertStringContainsString('{senha:wifi}', $rule->responseList()->first());
+    }
+
     public function test_ui_picker_insere_referencia_de_senha(): void
     {
         app(\App\Whatsapp\Secrets\SecretVault::class)->put($this->account->id, 'wifi', 'segredo');

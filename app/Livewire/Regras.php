@@ -158,7 +158,7 @@ class Regras extends Component
         $this->resetValidation();
     }
 
-    public function save(): void
+    public function save(SecretVault $vault): void
     {
         $this->validate();
 
@@ -205,6 +205,22 @@ class Regras extends Component
                 ->whereIn('id', $this->scopeContactIds)->pluck('id')->all();
             if ($contactIds === []) {
                 $this->addError('scopeContactIds', 'Escopo "contatos": selecione ao menos um contato.');
+
+                return;
+            }
+        }
+
+        // S5 — guarda de escopo para regras que devolvem SENHA ({senha:...}).
+        $temSenha = collect($responses)->contains(fn ($r) => $vault->hasRef((string) $r));
+        if ($temSenha) {
+            if ($scope !== 'contatos') {
+                $this->addError('scope', 'Esta regra envia uma senha ({senha:...}). A senha iria em texto pra QUALQUER contato que disparasse. Use escopo "Contatos Especificos" e selecione quem pode receber.');
+
+                return;
+            }
+            $temFuzzy = collect($triggers)->contains(fn ($t) => ($t['precision'] ?? 'exato') === 'tolerante');
+            if ($temFuzzy) {
+                $this->addError('triggers', 'Regra que envia senha deve usar match ESTRITO (exato). Tire a tolerancia a erros dos gatilhos pra nao disparar por engano e vazar a senha.');
 
                 return;
             }

@@ -108,6 +108,7 @@
                         </button>
                     </div>
                     <p class="mb-2 text-[11px] text-zinc-400">Qualquer gatilho que casar dispara a regra.</p>
+                    @error('triggers') <p class="mb-2 text-xs text-red-500">{{ $message }}</p> @enderror
                     <div class="space-y-2">
                         @foreach ($triggers as $i => $t)
                             {{-- S4: [tipo] [precisao] [texto] [x] na MESMA linha. --}}
@@ -234,6 +235,7 @@
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os Aprovados</label>
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> Contatos Especificos</label>
                     </div>
+                    @error('scope') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     @if ($scope === 'contatos')
                         <div class="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
                             <div class="flex items-center gap-2 border-b border-zinc-100 p-2 dark:border-zinc-800">
