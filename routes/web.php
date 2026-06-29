@@ -5,6 +5,7 @@ use App\Livewire\Conexao;
 use App\Livewire\Configuracoes;
 use App\Livewire\Contatos;
 use App\Livewire\Conversas;
+use App\Livewire\Fluxos;
 use App\Livewire\Login;
 use App\Livewire\Regras;
 use App\Livewire\Senhas;
@@ -31,6 +32,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/conexao', Conexao::class)->name('conexao');
     // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).
     Route::get('/senhas', Senhas::class)->name('senhas');
+    // Fluxos (construtor): config, editavel mesmo offline.
+    Route::get('/fluxos', Fluxos::class)->name('fluxos');
 
     Route::middleware('whatsapp.connected')->group(function () {
         Route::get('/conversas', Conversas::class)->name('conversas');

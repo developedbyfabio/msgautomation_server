@@ -5,6 +5,7 @@
         ['contatos', 'Contatos', 'users'],
         ['senhas', 'Senhas', 'key'],
         ['regras', 'Regras', 'bolt'],
+        ['fluxos', 'Fluxos', 'rectangle-stack'],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth'],
     ];
 @endphp
