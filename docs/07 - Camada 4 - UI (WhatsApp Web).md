@@ -30,5 +30,21 @@ npm run build                                       # assets (NUNCA npm run dev 
 ## Notas
 - Stack Flux: free traz so button/dropdown/icon/separator/tooltip; o resto da UI e Tailwind puro.
 - Componentes Livewire class-based em `app/Livewire/` + views em `resources/views/livewire/`.
-- Pendente/possivel refino: busca na lista de conversas, paginacao, websockets no lugar do polling,
-  autenticacao se algum dia sair do tunel.
+
+## Refino (modais, dropdowns, icones, status)
+- **Zero dialogo nativo**: nenhum `confirm()`/`alert()`/`prompt()`/`wire:confirm`. Confirmacoes em
+  **modal** (`<x-modal>` Alpine+Tailwind — Flux modal e Pro, evitado); feedback em **toast** global
+  (Alpine ouve evento `toast` despachado pelos componentes).
+- **Modais de confirmacao**: excluir regra; silenciar contato; e **LIGAR o kill switch** (com aviso).
+  **Desligar o kill switch e INSTANTANEO** (sem modal) — freio de emergencia.
+- **Modais de formulario**: criar/editar regra; editar contato (nome/notas).
+- **Dropdowns** (`flux:dropdown`/`flux:menu`, free): kebab de acoes por item em conversas/contatos/
+  regras (Editar/Ativar-Desativar/Excluir/Aprovar/Silenciar). `match_type`/`auto_reply_mode` seguem
+  como `<select>` nativo (dropdown de form; `flux:select` e Pro).
+- **Icones**: `flux:icon` (Heroicons, free) consistentes em nav, acoes e status.
+- **UX**: empty states com icone, loading no envio (`wire:loading`), toasts, badges, avatar inicial.
+- **Status vivo da conexao** (`StatusConexao`): poll leve do estado real (open/connecting/desconectado),
+  sincroniza `channels.status` e oferece **Reconectar** -> modal com **QR** quando a sessao cai.
+- Flux **free** apenas; modal/toast/badge/input/select feitos com Alpine+Tailwind.
+- Pendente: busca na lista de conversas, paginacao, websockets no lugar do polling, autenticacao se
+  sair do tunel; variantes Pro do Flux (modal/toast/table) nao usadas de proposito.
