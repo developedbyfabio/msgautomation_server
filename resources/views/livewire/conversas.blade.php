@@ -129,7 +129,27 @@
                 @endunless
             </div>
 
-            <div class="flex-1 overflow-y-auto p-4">
+            <div class="relative flex min-h-0 flex-1 flex-col" wire:key="thread-{{ $selectedJid }}"
+                x-data="{
+                    atBottom: true,
+                    obs: null,
+                    scrollToBottom(behavior = 'smooth') {
+                        const el = this.$refs.scroller; if (!el) return;
+                        el.scrollTo({ top: el.scrollHeight, behavior });
+                        this.atBottom = true;
+                    },
+                    onScroll() {
+                        const el = this.$refs.scroller; if (!el) return;
+                        this.atBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 60;
+                    },
+                    init() {
+                        this.$nextTick(() => this.scrollToBottom('auto'));
+                        this.obs = new MutationObserver(() => { if (this.atBottom) this.scrollToBottom('auto'); });
+                        this.obs.observe(this.$refs.scroller, { childList: true, subtree: true });
+                    },
+                    destroy() { this.obs?.disconnect(); }
+                }">
+                <div x-ref="scroller" @scroll="onScroll" class="flex-1 overflow-y-auto p-4">
                 @forelse ($thread as $msg)
                     @php
                         $isIn = $msg['side'] === 'in';
@@ -175,6 +195,14 @@
                 @empty
                     <div class="text-center text-sm text-zinc-400">Sem mensagens nesta conversa.</div>
                 @endforelse
+                </div>
+
+                {{-- S1: ir para a ultima mensagem (aparece so quando rolado pra cima) --}}
+                <button type="button" x-show="!atBottom" x-transition @click="scrollToBottom()"
+                    class="absolute bottom-3 right-4 inline-flex size-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-lg hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                    aria-label="Ir para a ultima mensagem">
+                    <flux:icon icon="chevron-down" variant="micro" />
+                </button>
             </div>
 
             <div class="shrink-0 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
