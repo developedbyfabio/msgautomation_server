@@ -36,6 +36,7 @@ class Regras extends Component
     public string $scope = 'global';
     /** @var array<int,int> */
     public array $scopeContactIds = [];
+    public string $scopeSearch = '';
 
     // S4 — testador (dry-run).
     public bool $showTester = false;
@@ -80,6 +81,7 @@ class Regras extends Component
         $this->cooldownMinutes = 60;
         $this->scope = 'global';
         $this->scopeContactIds = [];
+        $this->scopeSearch = '';
         $this->resetValidation();
         $this->showForm = true;
     }
@@ -106,6 +108,7 @@ class Regras extends Component
         $this->cooldownMinutes = (int) ($rule->cooldown_minutes ?: 60);
         $this->scope = $rule->scope ?: 'global';
         $this->scopeContactIds = $rule->contacts->pluck('id')->all();
+        $this->scopeSearch = '';
         $this->resetValidation();
         $this->showForm = true;
     }
@@ -332,6 +335,17 @@ class Regras extends Component
                 ->get(['id', 'push_name', 'remote_jid'])
             : collect();
 
-        return view('livewire.regras', ['rules' => $rules, 'deleting' => $deleting, 'contacts' => $contacts]);
+        // Lista do escopo (S3): filtrada pela busca (nome/numero), server-side.
+        $busca = mb_strtolower(trim($this->scopeSearch), 'UTF-8');
+        $scopeContacts = ($this->showForm && $this->scope === 'contatos' && $busca !== '')
+            ? $contacts->filter(fn ($c) => str_contains(mb_strtolower(($c->push_name ?? '') . ' ' . $c->remote_jid, 'UTF-8'), $busca))->values()
+            : $contacts;
+
+        return view('livewire.regras', [
+            'rules' => $rules,
+            'deleting' => $deleting,
+            'contacts' => $contacts,
+            'scopeContacts' => $scopeContacts,
+        ]);
     }
 }

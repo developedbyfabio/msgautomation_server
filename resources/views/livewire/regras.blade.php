@@ -110,13 +110,22 @@
                     <p class="mb-2 text-[11px] text-zinc-400">Qualquer gatilho que casar dispara a regra.</p>
                     <div class="space-y-2">
                         @foreach ($triggers as $i => $t)
-                            <div wire:key="trg-{{ $i }}" class="flex items-start gap-2">
-                                <select wire:model.live="triggers.{{ $i }}.type" class="w-32 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            {{-- S4: [tipo] [precisao] [texto] [x] na MESMA linha. --}}
+                            <div wire:key="trg-{{ $i }}" class="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+                                <select wire:model.live="triggers.{{ $i }}.type" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                                     <option value="contains">contains</option>
                                     <option value="exact">exact</option>
                                     <option value="starts_with">starts_with</option>
                                     <option value="regex">regex</option>
                                 </select>
+
+                                @if ($t['type'] !== 'regex')
+                                    <select wire:model.live="triggers.{{ $i }}.precision" title="Precisao do match" class="w-32 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                        <option value="exato">exato</option>
+                                        <option value="tolerante">tolerante</option>
+                                    </select>
+                                @endif
+
                                 <div class="min-w-0 flex-1">
                                     <input type="text" wire:model="triggers.{{ $i }}.value" placeholder="{{ $t['type'] === 'regex' ? 'ex.: ^pre[cç]o' : 'ex.: horario' }}"
                                         class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
@@ -126,26 +135,20 @@
                                             <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
                                             Regex avancado: validado e protegido, mas teste antes. Sem delimitadores; flags i+u aplicadas.
                                         </p>
-                                    @else
-                                        {{-- Precisao por gatilho (S5): exato (default) ou tolerante a erros --}}
+                                    @elseif (($t['precision'] ?? 'exato') === 'tolerante')
                                         <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                                            <select wire:model.live="triggers.{{ $i }}.precision" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-                                                <option value="exato">exato</option>
-                                                <option value="tolerante">tolerante a erros</option>
+                                            <select wire:model="triggers.{{ $i }}.fuzzy_level" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                                                <option value="baixa">baixa</option>
+                                                <option value="media">media</option>
+                                                <option value="alta">alta</option>
                                             </select>
-                                            @if (($t['precision'] ?? 'exato') === 'tolerante')
-                                                <select wire:model="triggers.{{ $i }}.fuzzy_level" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-                                                    <option value="baixa">baixa</option>
-                                                    <option value="media">media</option>
-                                                    <option value="alta">alta</option>
-                                                </select>
-                                                <span class="text-amber-600 dark:text-amber-400">tolera erro de digitacao; palavra curta (&lt;4) segue exata. Teste no "Testar".</span>
-                                            @endif
+                                            <span class="text-amber-600 dark:text-amber-400">tolera erro de digitacao; palavra curta (&lt;4) segue exata. Teste no "Testar".</span>
                                         </div>
                                     @endif
                                 </div>
+
                                 <button type="button" wire:click="removeTrigger({{ $i }})" @disabled(count($triggers) <= 1)
-                                    class="mt-1.5 text-zinc-400 hover:text-red-500 disabled:opacity-30" aria-label="Remover gatilho">
+                                    class="mt-2.5 text-zinc-400 hover:text-red-500 disabled:opacity-30" aria-label="Remover gatilho">
                                     <flux:icon icon="x-mark" variant="micro" />
                                 </button>
                             </div>
@@ -210,20 +213,40 @@
                     <p class="mt-1 text-[11px] text-zinc-400">Substitui o rate global so para esta regra. Os tetos de volume (intervalo/min/dia) continuam valendo.</p>
                 </div>
 
-                {{-- ESCOPO (S3) --}}
+                {{-- ESCOPO (S2 textos + S3 checkboxes) --}}
                 <div>
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Escopo</label>
                     <div class="flex items-center gap-4 text-sm">
-                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os aprovados</label>
-                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> So contatos especificos</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os Aprovados</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> Contatos Especificos</label>
                     </div>
                     @if ($scope === 'contatos')
-                        <select multiple wire:model="scopeContactIds" size="5" class="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                            @foreach ($contacts as $c)
-                                <option value="{{ $c->id }}">{{ $c->push_name ?: \Illuminate\Support\Str::before($c->remote_jid, '@') }}</option>
-                            @endforeach
-                        </select>
-                        <p class="mt-1 text-[11px] text-zinc-400">Segure Ctrl/Cmd para escolher varios. A regra so dispara para esses contatos.</p>
+                        <div class="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                            <div class="flex items-center gap-2 border-b border-zinc-100 p-2 dark:border-zinc-800">
+                                <div class="relative flex-1">
+                                    <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-zinc-400">
+                                        <flux:icon icon="magnifying-glass" variant="micro" />
+                                    </span>
+                                    <input type="search" wire:model.live.debounce.250ms="scopeSearch" placeholder="Buscar nome ou numero..."
+                                        class="w-full rounded-lg border border-zinc-300 bg-white py-1.5 pl-8 pr-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                </div>
+                                <span class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                    {{ count($scopeContactIds) }} selecionado(s)
+                                </span>
+                            </div>
+                            <div class="max-h-48 overflow-y-auto p-1">
+                                @forelse ($scopeContacts as $c)
+                                    <label wire:key="sc-{{ $c->id }}" class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">
+                                        <input type="checkbox" value="{{ $c->id }}" wire:model.live="scopeContactIds" class="rounded border-zinc-300 dark:border-zinc-700">
+                                        <span class="min-w-0 flex-1 truncate">{{ $c->push_name ?: \Illuminate\Support\Str::before($c->remote_jid, '@') }}</span>
+                                        <span class="shrink-0 text-xs text-zinc-400">{{ \Illuminate\Support\Str::before($c->remote_jid, '@') }}</span>
+                                    </label>
+                                @empty
+                                    <p class="px-2 py-3 text-center text-xs text-zinc-400">{{ $scopeSearch !== '' ? 'Nenhum contato encontrado.' : 'Nenhum contato na agenda ainda.' }}</p>
+                                @endforelse
+                            </div>
+                        </div>
+                        <p class="mt-1 text-[11px] text-zinc-400">Marque os contatos. A regra so dispara para esses contatos.</p>
                         @error('scopeContactIds') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
                     @endif
                 </div>

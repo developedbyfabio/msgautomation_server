@@ -228,6 +228,43 @@ class RegrasAvancadasTest extends TestCase
         $this->assertSame(0, AutoReplyRule::where('scope', 'contatos')->count());
     }
 
+    public function test_ui_escopo_mostra_esconde_lista_de_contatos(): void
+    {
+        \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'push_name' => 'Alpha', 'auto_reply_mode' => 'on']);
+
+        $c = Livewire::test(Regras::class)->call('novo');
+
+        // Global: sem lista de contatos.
+        $c->set('scope', 'global')->assertDontSee('Buscar nome ou numero');
+        // Contatos especificos: mostra busca + contato.
+        $c->set('scope', 'contatos')->assertSee('Buscar nome ou numero')->assertSee('Alpha');
+    }
+
+    public function test_ui_busca_filtra_contatos_do_escopo(): void
+    {
+        \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'push_name' => 'Alpha', 'auto_reply_mode' => 'on']);
+        \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'b@s.whatsapp.net', 'push_name' => 'Beta', 'auto_reply_mode' => 'on']);
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('scope', 'contatos')
+            ->assertSee('Alpha')->assertSee('Beta')
+            ->set('scopeSearch', 'alph')
+            ->assertSee('Alpha')->assertDontSee('Beta');
+    }
+
+    public function test_ui_contagem_de_selecionados(): void
+    {
+        $a = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'push_name' => 'Alpha', 'auto_reply_mode' => 'on']);
+        $b = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'b@s.whatsapp.net', 'push_name' => 'Beta', 'auto_reply_mode' => 'on']);
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('scope', 'contatos')
+            ->set('scopeContactIds', [$a->id, $b->id])
+            ->assertSee('2 selecionado(s)');
+    }
+
     public function test_ui_regex_invalido_bloqueia_save(): void
     {
         Livewire::test(Regras::class)
