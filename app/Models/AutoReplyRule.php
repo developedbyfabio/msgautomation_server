@@ -5,26 +5,33 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Contact extends Model
+class AutoReplyRule extends Model
 {
     protected $fillable = [
         'account_id',
-        'remote_jid',
-        'push_name',
-        'auto_reply_opt_out', // DEPRECIADO: usar auto_reply_mode
-        'auto_reply_mode',    // default | on | off
-        'notes',
+        'channel_id',
+        'match_type',
+        'match_value',
+        'response_text',
+        'enabled',
+        'priority',
     ];
 
     protected function casts(): array
     {
         return [
-            'auto_reply_opt_out' => 'boolean',
+            'enabled' => 'boolean',
+            'priority' => 'integer',
         ];
     }
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
     }
 }

@@ -51,6 +51,9 @@ class AutoReplySendTest extends TestCase
         AutoReplySetting::create(array_merge([
             'account_id' => $account->id,
             'enabled' => true,
+            // Estes testes focam nos OUTROS freios; politica 'all' evita o portao de
+            // allowlist barrar tudo. O comportamento do portao tem testes proprios.
+            'reply_policy' => 'all',
             'window_start' => '08:00:00',
             'window_end' => '20:00:00',
             'min_interval_seconds' => 30,
@@ -198,7 +201,7 @@ class AutoReplySendTest extends TestCase
         Contact::create([
             'account_id' => $account->id,
             'remote_jid' => '5541999990000@s.whatsapp.net',
-            'auto_reply_opt_out' => true,
+            'auto_reply_mode' => 'off',
         ]);
         $im = $this->incoming($account, $channel, '5541999990000@s.whatsapp.net');
 

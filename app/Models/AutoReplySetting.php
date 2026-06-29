@@ -10,6 +10,7 @@ class AutoReplySetting extends Model
     protected $fillable = [
         'account_id',
         'enabled',
+        'reply_policy',
         'window_start',
         'window_end',
         'min_interval_seconds',

@@ -5,7 +5,10 @@ namespace App\Jobs;
 use App\Contracts\WhatsappGateway;
 use App\Models\Account;
 use App\Models\Channel;
+use App\Models\Contact;
 use App\Models\IncomingMessage;
+use App\Whatsapp\AutoReply\AntiBanGuard;
+use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\IncomingMessageData;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,10 +18,16 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Normaliza o payload do webhook (via driver) e persiste em incoming_messages
- * com idempotencia. Roda FORA do request (fila) — o webhook so enfileira.
+ * Recebe (Camada 1): normaliza + persiste com idempotencia.
+ * Liga a auto-resposta (Camada 2 Fatia 3): popula a agenda de contatos e, se um
+ * contato APROVADO casa uma regra, enfileira a resposta com delay humano.
  *
- * Camada 1: somente RECEBER e REGISTRAR. Nao responde, nao envia, sem IA.
+ * DORMENTE por padrao: kill switch OFF + politica allowlist (contato novo entra como
+ * 'default' -> nao responde ate o Fabio aprovar e ligar o kill switch). Tudo na fila.
+ *
+ * auto_reply_logs registra as TENTATIVAS de resposta (contato aprovado + regra casou):
+ * o resultado/freio (kill switch, janela, rate, tetos) sai do Sender. Silencios
+ * estruturais (fromMe, grupo, sem regra, contato nao-aprovado) NAO geram log.
  */
 class ProcessIncomingWhatsappMessage implements ShouldQueue
 {
@@ -29,7 +38,7 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
     ) {
     }
 
-    public function handle(WhatsappGateway $gateway): void
+    public function handle(WhatsappGateway $gateway, RuleMatcher $matcher, AntiBanGuard $guard): void
     {
         $data = $gateway->normalizeIncoming($this->payload);
 
@@ -43,7 +52,15 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
 
         $channel->forceFill(['last_event_at' => now()])->save();
 
-        $this->persistir($account, $channel, $data);
+        $message = $this->persistir($account, $channel, $data);
+
+        // Re-entrega duplicada — ja tratada, nao reavalia.
+        if ($message === null) {
+            return;
+        }
+
+        $this->popularContato($account, $data, $guard);
+        $this->avaliarAutoResposta($account, $channel, $message, $data, $matcher, $guard);
     }
 
     private function resolverAccount(): Account
@@ -61,10 +78,10 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         );
     }
 
-    private function persistir(Account $account, Channel $channel, IncomingMessageData $data): void
+    private function persistir(Account $account, Channel $channel, IncomingMessageData $data): ?IncomingMessage
     {
         try {
-            IncomingMessage::create([
+            return IncomingMessage::create([
                 'account_id' => $account->id,
                 'channel_id' => $channel->id,
                 'instance' => $data->instance,
@@ -79,7 +96,65 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             ]);
         } catch (UniqueConstraintViolationException) {
             // Re-entrega do webhook (mesmo instance + evolution_message_id): ignora.
-            // A idempotencia e garantida pelo indice unico no banco.
+            return null;
         }
+    }
+
+    /** Agenda automatica: cada mensagem individual RECEBIDA cria/atualiza o contato. */
+    private function popularContato(Account $account, IncomingMessageData $data, AntiBanGuard $guard): void
+    {
+        if ($data->fromMe || $guard->isGroup($data->remoteJid)) {
+            return;
+        }
+
+        $contact = Contact::firstOrNew([
+            'account_id' => $account->id,
+            'remote_jid' => $data->remoteJid,
+        ]);
+
+        if (! $contact->exists) {
+            // Contato novo entra sob allowlist como 'default' -> nao responde ate aprovar.
+            $contact->auto_reply_mode = 'default';
+        }
+
+        if ($data->pushName) {
+            $contact->push_name = $data->pushName;
+        }
+
+        $contact->save();
+    }
+
+    private function avaliarAutoResposta(
+        Account $account,
+        Channel $channel,
+        IncomingMessage $message,
+        IncomingMessageData $data,
+        RuleMatcher $matcher,
+        AntiBanGuard $guard,
+    ): void {
+        // Guarda fromMe (anti-loop) e pula grupos.
+        if ($data->fromMe || $guard->isGroup($data->remoteJid)) {
+            return;
+        }
+
+        // Sem regra que case -> silencio.
+        $rule = $matcher->match($account->id, $channel->id, $data->text);
+        if ($rule === null) {
+            return;
+        }
+
+        // Portao de contato (allowlist/all + auto_reply_mode) -> silencio se nao aprovado.
+        if (! $guard->contactGatePasses($account->id, $data->remoteJid)) {
+            return;
+        }
+
+        // Delay humano: a auto-resposta vai pra fila com atraso aleatorio. O envio real
+        // (e o re-check R2 + freios volateis) acontece no SendAutoReply via Sender.
+        $settings = $guard->settingsFor($account->id);
+        $min = (int) $settings->delay_min_seconds;
+        $max = (int) max($min, $settings->delay_max_seconds);
+
+        SendAutoReply::dispatch($message->id, $rule->id, $rule->response_text)
+            ->delay(now()->addSeconds(random_int($min, $max)));
     }
 }

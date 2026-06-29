@@ -34,4 +34,9 @@ class Account extends Model
     {
         return $this->hasMany(AutoReplyLog::class);
     }
+
+    public function autoReplyRules(): HasMany
+    {
+        return $this->hasMany(AutoReplyRule::class);
+    }
 }

@@ -32,8 +32,9 @@ class AntiBanGuard
             if ($settings->skip_groups && $this->isGroup($jid)) {
                 return GuardDecision::block('grupo');
             }
-            if ($this->isOptedOut($accountId, $jid)) {
-                return GuardDecision::block('opt_out');
+            $gate = $this->contactGate($accountId, $jid, $settings);
+            if (! $gate->allowed) {
+                return $gate;
             }
             if (! $settings->enabled) {
                 return GuardDecision::block('kill_switch');
@@ -61,8 +62,9 @@ class AntiBanGuard
         if (! $settings->enabled) {
             return GuardDecision::block('kill_switch');
         }
-        if ($this->isOptedOut($accountId, $jid)) {
-            return GuardDecision::block('opt_out');
+        $gate = $this->contactGate($accountId, $jid, $settings);
+        if (! $gate->allowed) {
+            return $gate;
         }
         if (! $this->withinWindow($settings)) {
             return GuardDecision::block('fora_da_janela');
@@ -97,13 +99,38 @@ class AntiBanGuard
         return GuardDecision::allow();
     }
 
-    private function isOptedOut(int $accountId, string $jid): bool
+    /**
+     * Portao de contato (Fatia 3): combina reply_policy (account) + auto_reply_mode (contato).
+     *  - allowlist: responde SO se mode = 'on'. ('default'/'off' -> bloqueia)
+     *  - all:       responde todos, EXCETO mode = 'off'.
+     */
+    private function contactGate(int $accountId, string $jid, AutoReplySetting $settings): GuardDecision
     {
-        return Contact::query()
+        $mode = $this->contactMode($accountId, $jid);
+
+        if ($mode === 'off') {
+            return GuardDecision::block('opt_out');
+        }
+
+        $policy = $settings->reply_policy ?: 'allowlist';
+        if ($policy === 'allowlist' && $mode !== 'on') {
+            return GuardDecision::block('nao_aprovado');
+        }
+
+        return GuardDecision::allow();
+    }
+
+    public function contactGatePasses(int $accountId, string $jid): bool
+    {
+        return $this->contactGate($accountId, $jid, $this->settingsFor($accountId))->allowed;
+    }
+
+    public function contactMode(int $accountId, string $jid): string
+    {
+        return (string) (Contact::query()
             ->where('account_id', $accountId)
             ->where('remote_jid', $jid)
-            ->where('auto_reply_opt_out', true)
-            ->exists();
+            ->value('auto_reply_mode') ?? 'default');
     }
 
     private function withinWindow(AutoReplySetting $settings): bool
