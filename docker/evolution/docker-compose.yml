@@ -1,0 +1,110 @@
+# 2a Evolution API (WhatsApp) — DEV, ISOLADA do Nextgest (D1).
+# Perfil de risco diferente: o msgautomation vai RECEBER e (em camadas futuras)
+# responder automaticamente -> nao pode compartilhar instancia com o Nextgest.
+#
+# Isolamento:
+#  - Evolution + Postgres + Redis PROPRIOS, na rede evonet_msg. So a API publica porta,
+#    e SO em 127.0.0.1:8090 (a do Nextgest fica em 127.0.0.1:8088).
+#  - O Redis do APP (fila/cache do Laravel) fica em OUTRA rede (appnet_msg) e e o unico
+#    publicado pro host (127.0.0.1:6380). Nada de internet.
+#  - Segredos vem do .env (chmod 600, gitignored). Subir: docker compose up -d
+#
+# Nome de projeto explicito (o diretorio se chama "evolution", igual ao do Nextgest;
+# fixar o name evita qualquer cruzamento de projeto/volumes/redes com a stack do Nextgest).
+name: msgautomation_evo
+
+services:
+  evolution-api:
+    # Namespace oficial atual (o antigo atendai/* foi descontinuado). v2.3.7 = ultima v2 estavel.
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: evolution_msg
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"
+    env_file: .env
+    # Permite ao container alcancar o app Laravel que roda no HOST (webhook):
+    # http://host.docker.internal:8190/webhook/evolution
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - evolution_msg_instances:/evolution/instances
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - evonet_msg
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: evolution_msg_postgres
+    restart: unless-stopped
+    # SEM publicar porta — so na rede interna evonet_msg.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - evolution_msg_pgdata:/var/lib/postgresql/data
+    networks:
+      - evonet_msg
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: evolution_msg_redis
+    restart: unless-stopped
+    # Redis DA EVOLUTION — interno, nao publicado. A parte do Redis do app.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_msg_redis:/data
+    networks:
+      - evonet_msg
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Redis do APP Laravel (fila + cache). Rede separada (appnet_msg) -> isolado
+  # do Redis da Evolution. Publicado em 127.0.0.1:6380 pro artisan no host usar.
+  app-redis:
+    image: redis:7-alpine
+    container_name: msgautomation_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - msgautomation_app_redis:/data
+    networks:
+      - appnet_msg
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  evolution_msg_instances:
+  evolution_msg_pgdata:
+  evolution_msg_redis:
+  msgautomation_app_redis:
+
+networks:
+  evonet_msg:
+    driver: bridge
+  appnet_msg:
+    driver: bridge
