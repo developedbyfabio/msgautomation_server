@@ -30,6 +30,13 @@ class Regras extends Component
     public array $responses = [];
     public bool $enabled = true;
 
+    // S2 frequencia + S3 escopo.
+    public string $cooldownMode = 'global';
+    public int $cooldownMinutes = 60;
+    public string $scope = 'global';
+    /** @var array<int,int> */
+    public array $scopeContactIds = [];
+
     // S4 — testador (dry-run).
     public bool $showTester = false;
     public string $testSample = '';
@@ -45,6 +52,11 @@ class Regras extends Component
             'responses' => 'required|array|min:1',
             'responses.*' => 'required|string|max:4000',
             'enabled' => 'boolean',
+            'cooldownMode' => 'required|in:global,sempre,1x_dia,cada_n',
+            'cooldownMinutes' => 'required_if:cooldownMode,cada_n|integer|min:1|max:100000',
+            'scope' => 'required|in:global,contatos',
+            'scopeContactIds' => 'array',
+            'scopeContactIds.*' => 'integer',
         ];
     }
 
@@ -64,35 +76,43 @@ class Regras extends Component
         $this->triggers = [['type' => 'contains', 'value' => '']];
         $this->responses = [''];
         $this->enabled = true;
+        $this->cooldownMode = 'global';
+        $this->cooldownMinutes = 60;
+        $this->scope = 'global';
+        $this->scopeContactIds = [];
         $this->resetValidation();
         $this->showForm = true;
     }
 
     public function edit(int $id): void
     {
-        $rule = $this->query()->with(['triggers', 'responses'])->findOrFail($id);
+        $rule = $this->query()->with(['triggers', 'responses', 'contacts'])->findOrFail($id);
 
         $this->editingId = $rule->id;
         $this->triggers = $rule->triggerList()
-            ->map(fn ($t) => ['type' => $t['type'], 'value' => $t['value']])
+            ->map(fn ($t) => ['type' => $t['type'], 'value' => $t['value'], 'precision' => $t['precision'] ?? 'exato', 'fuzzy_level' => $t['fuzzy_level'] ?? 'media'])
             ->values()->all();
         $this->responses = $rule->responseList()->values()->all();
 
         if ($this->triggers === []) {
-            $this->triggers = [['type' => 'contains', 'value' => '']];
+            $this->triggers = [['type' => 'contains', 'value' => '', 'precision' => 'exato', 'fuzzy_level' => 'media']];
         }
         if ($this->responses === []) {
             $this->responses = [''];
         }
 
         $this->enabled = (bool) $rule->enabled;
+        $this->cooldownMode = $rule->cooldown_mode ?: 'global';
+        $this->cooldownMinutes = (int) ($rule->cooldown_minutes ?: 60);
+        $this->scope = $rule->scope ?: 'global';
+        $this->scopeContactIds = $rule->contacts->pluck('id')->all();
         $this->resetValidation();
         $this->showForm = true;
     }
 
     public function addTrigger(): void
     {
-        $this->triggers[] = ['type' => 'contains', 'value' => ''];
+        $this->triggers[] = ['type' => 'contains', 'value' => '', 'precision' => 'exato', 'fuzzy_level' => 'media'];
     }
 
     public function removeTrigger(int $i): void
@@ -136,10 +156,21 @@ class Regras extends Component
             }
         }
 
-        $triggers = array_values(array_map(
-            fn ($t) => ['match_type' => $t['type'], 'match_value' => trim((string) $t['value'])],
-            $this->triggers,
-        ));
+        $triggers = array_values(array_map(function ($t) {
+            $precision = ($t['precision'] ?? 'exato') === 'tolerante' ? 'tolerante' : 'exato';
+            // Regex nao usa fuzzy (e ja um padrao); so exato/tolerante valem p/ texto.
+            if ($t['type'] === 'regex') {
+                $precision = 'exato';
+            }
+
+            return [
+                'match_type' => $t['type'],
+                'match_value' => trim((string) $t['value']),
+                'precision' => $precision,
+                'fuzzy_level' => $precision === 'tolerante' ? ($t['fuzzy_level'] ?? 'media') : null,
+            ];
+        }, $this->triggers));
+
         $responses = array_values(array_filter(array_map(
             fn ($r) => trim((string) $r),
             $this->responses,
@@ -151,20 +182,36 @@ class Regras extends Component
             return;
         }
 
+        $scope = $this->scope === 'contatos' ? 'contatos' : 'global';
+        // Contatos do escopo, validados como do mesmo account.
+        $contactIds = [];
+        if ($scope === 'contatos') {
+            $contactIds = Contact::query()->where('account_id', $this->accountId())
+                ->whereIn('id', $this->scopeContactIds)->pluck('id')->all();
+            if ($contactIds === []) {
+                $this->addError('scopeContactIds', 'Escopo "contatos": selecione ao menos um contato.');
+
+                return;
+            }
+        }
+
         // Colunas legadas = cache do 1o gatilho / 1a resposta (back-compat).
-        $legado = [
+        $dados = [
             'match_type' => $triggers[0]['match_type'],
             'match_value' => $triggers[0]['match_value'],
             'response_text' => $responses[0],
             'enabled' => $this->enabled,
+            'cooldown_mode' => $this->cooldownMode,
+            'cooldown_minutes' => $this->cooldownMode === 'cada_n' ? $this->cooldownMinutes : null,
+            'scope' => $scope,
         ];
 
         if ($this->editingId) {
             $rule = $this->query()->findOrFail($this->editingId);
-            $rule->update($legado);
+            $rule->update($dados);
         } else {
             $next = (int) ($this->query()->max('priority') ?? -1) + 1;
-            $rule = AutoReplyRule::create(array_merge($legado, [
+            $rule = AutoReplyRule::create(array_merge($dados, [
                 'account_id' => $this->accountId(),
                 'priority' => $next,
             ]));
@@ -175,6 +222,7 @@ class Regras extends Component
         $rule->triggers()->createMany($triggers);
         $rule->responses()->delete();
         $rule->responses()->createMany(array_map(fn ($r) => ['response_text' => $r], $responses));
+        $rule->contacts()->sync($contactIds);
 
         $this->closeForm();
         $this->dispatch('toast', message: 'Regra salva.');

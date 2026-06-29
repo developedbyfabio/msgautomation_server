@@ -180,6 +180,54 @@ class RegrasAvancadasTest extends TestCase
         $this->assertCount(2, $rule->responses);
     }
 
+    public function test_ui_salva_cooldown_cada_n(): void
+    {
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'oi')
+            ->set('responses.0', 'ola')
+            ->set('cooldownMode', 'cada_n')
+            ->set('cooldownMinutes', 30)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('auto_reply_rules', ['cooldown_mode' => 'cada_n', 'cooldown_minutes' => 30]);
+    }
+
+    public function test_ui_salva_escopo_contatos(): void
+    {
+        // O componente usa o oldest account (= $this->account do setUp).
+        $c1 = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'a@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+        $c2 = \App\Models\Contact::create(['account_id' => $this->account->id, 'remote_jid' => 'b@s.whatsapp.net', 'auto_reply_mode' => 'on']);
+
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'oi')
+            ->set('responses.0', 'ola')
+            ->set('scope', 'contatos')
+            ->set('scopeContactIds', [$c1->id, $c2->id])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $rule = AutoReplyRule::where('scope', 'contatos')->first();
+        $this->assertNotNull($rule);
+        $this->assertEqualsCanonicalizing([$c1->id, $c2->id], $rule->contacts->pluck('id')->all());
+    }
+
+    public function test_ui_escopo_contatos_sem_selecao_falha(): void
+    {
+        Livewire::test(Regras::class)
+            ->call('novo')
+            ->set('triggers.0.value', 'oi')
+            ->set('responses.0', 'ola')
+            ->set('scope', 'contatos')
+            ->set('scopeContactIds', [])
+            ->call('save')
+            ->assertHasErrors('scopeContactIds');
+
+        $this->assertSame(0, AutoReplyRule::where('scope', 'contatos')->count());
+    }
+
     public function test_ui_regex_invalido_bloqueia_save(): void
     {
         Livewire::test(Regras::class)

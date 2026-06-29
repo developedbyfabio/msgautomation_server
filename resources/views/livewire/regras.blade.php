@@ -48,6 +48,22 @@
                                 <span class="shrink-0 rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">+{{ $resps->count() - 1 }} resp.</span>
                             @endif
                         </div>
+                        {{-- Meta: frequencia (S2) + escopo (S3) --}}
+                        @php
+                            $freqLabel = match ($rule->cooldown_mode) {
+                                'sempre' => 'sempre', '1x_dia' => '1x/dia',
+                                'cada_n' => 'a cada ' . (int) $rule->cooldown_minutes . 'min',
+                                default => 'rate global',
+                            };
+                        @endphp
+                        <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-400">
+                            <span class="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800"><flux:icon icon="clock" variant="micro" class="size-3" /> {{ $freqLabel }}</span>
+                            @if ($rule->scope === 'contatos')
+                                <span class="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300"><flux:icon icon="user" variant="micro" class="size-3" /> {{ $rule->contacts->count() }} contato(s)</span>
+                            @else
+                                <span class="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800"><flux:icon icon="globe-alt" variant="micro" class="size-3" /> todos</span>
+                            @endif
+                        </div>
                     </div>
 
                     <span @class([
@@ -155,6 +171,45 @@
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{saudacao}</code> bom dia/tarde/noite ·
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{data}</code> ·
                     <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">{hora}</code>
+                </div>
+
+                {{-- FREQUENCIA (S2) --}}
+                <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Frequencia (por contato)</label>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select wire:model.live="cooldownMode" class="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <option value="global">Padrao (rate global por contato)</option>
+                            <option value="sempre">Sempre que casar</option>
+                            <option value="1x_dia">1x por dia</option>
+                            <option value="cada_n">A cada N minutos</option>
+                        </select>
+                        @if ($cooldownMode === 'cada_n')
+                            <div class="flex items-center gap-1">
+                                <input type="number" min="1" wire:model="cooldownMinutes" class="w-24 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                <span class="text-xs text-zinc-500">min</span>
+                            </div>
+                            @error('cooldownMinutes') <p class="w-full text-xs text-red-500">{{ $message }}</p> @enderror
+                        @endif
+                    </div>
+                    <p class="mt-1 text-[11px] text-zinc-400">Substitui o rate global so para esta regra. Os tetos de volume (intervalo/min/dia) continuam valendo.</p>
+                </div>
+
+                {{-- ESCOPO (S3) --}}
+                <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Escopo</label>
+                    <div class="flex items-center gap-4 text-sm">
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os aprovados</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> So contatos especificos</label>
+                    </div>
+                    @if ($scope === 'contatos')
+                        <select multiple wire:model="scopeContactIds" size="5" class="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            @foreach ($contacts as $c)
+                                <option value="{{ $c->id }}">{{ $c->push_name ?: \Illuminate\Support\Str::before($c->remote_jid, '@') }}</option>
+                            @endforeach
+                        </select>
+                        <p class="mt-1 text-[11px] text-zinc-400">Segure Ctrl/Cmd para escolher varios. A regra so dispara para esses contatos.</p>
+                        @error('scopeContactIds') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
                 </div>
 
                 <label class="inline-flex items-center gap-2 text-sm">
