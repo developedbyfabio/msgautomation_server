@@ -97,6 +97,23 @@ class FluxosTest extends TestCase
         $this->assertDatabaseHas('flow_nodes', ['id' => $rootId]); // raiz nao foi apagada
     }
 
+    public function test_guarda_de_senha_bloqueia_ligar_fluxo_global(): void
+    {
+        $flow = Flow::create(['account_id' => $this->account->id, 'name' => 'F', 'enabled' => false, 'scope' => 'global']);
+        $root = FlowNode::create(['flow_id' => $flow->id, 'kind' => 'final', 'message' => 'A senha e {senha:wifi}']);
+        $flow->update(['root_node_id' => $root->id]);
+        $flow->triggers()->create(['match_type' => 'contains', 'match_value' => 'senha']);
+
+        // Global + {senha:} -> nao liga.
+        Livewire::test(Fluxos::class)->call('toggleFluxo', $flow->id);
+        $this->assertFalse((bool) $flow->fresh()->enabled);
+
+        // Contatos -> liga.
+        $flow->update(['scope' => 'contatos']);
+        Livewire::test(Fluxos::class)->call('toggleFluxo', $flow->id);
+        $this->assertTrue((bool) $flow->fresh()->enabled);
+    }
+
     public function test_definir_destino_no_existente(): void
     {
         $c = Livewire::test(Fluxos::class)->call('novoFluxo');

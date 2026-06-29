@@ -149,7 +149,14 @@ status active|completed|expired|cancelled, last_activity_at, expires_at).
 preguicosamente; opcao invalida re-pergunta; final encerra; reentrada reinicia; sair/
 cancelar encerra. No envio, resposta de fluxo e ISENTA do intervalo-por-contato
 (flag `flow` no Sender/AntiBanGuard); resto dos freios + placeholders/{senha}/redacao
-mantidos. **Robô inalterado enquanto nenhum fluxo estiver enabled (0 hoje). UI = Fatia B.**
+mantidos. **Robô inalterado enquanto nenhum fluxo estiver enabled (0 hoje).**
+
+UI (Fatia B): pagina `/fluxos` (construtor arvore-outline) — lista, criar rascunho + nó raiz,
+ligar/desligar (valida gatilho+raiz; **guarda de senha: nó com `{senha:...}` exige escopo
+contatos pra ligar**), editor de config + gatilhos de entrada + nós/opcoes (destino: nó
+existente | novo sub-menu | nova resposta final) + preview. So construcao; runtime intacta.
+**Atencao:** ligar um fluxo com o kill switch ON deixa o menu AO VIVO. Guarda de segredo
+completa (gatilho estrito) + testador estendido = Fatia C.
 
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.

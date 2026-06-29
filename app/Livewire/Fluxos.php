@@ -110,6 +110,14 @@ class Fluxos extends Component
 
                 return;
             }
+            // Guarda de segredo (como nas regras): nó com {senha:...} exige escopo contatos.
+            $vault = app(SecretVault::class);
+            $temSenha = $flow->nodes()->get()->contains(fn ($n) => $vault->hasRef((string) $n->message));
+            if ($temSenha && ($flow->scope ?: 'global') !== 'contatos') {
+                $this->dispatch('toast', message: 'Este fluxo usa senha ({senha:...}) em um nó. Use escopo "Contatos Especificos" antes de ligar (senao a senha vaza pra quem disparar).', type: 'error');
+
+                return;
+            }
         }
         $flow->update(['enabled' => ! $flow->enabled]);
         $this->dispatch('toast', message: $flow->enabled ? 'Fluxo ligado.' : 'Fluxo desligado.');
