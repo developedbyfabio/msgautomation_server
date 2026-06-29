@@ -1,0 +1,22 @@
+{
+    "event": "messages.upsert",
+    "instance": "fabio-pessoal",
+    "data": {
+        "key": {
+            "remoteJid": "5511999998888@s.whatsapp.net",
+            "fromMe": false,
+            "id": "3EB0FIXTUREPLACEHOLDER01"
+        },
+        "pushName": "Fulano de Teste",
+        "messageType": "conversation",
+        "message": {
+            "conversation": "Ola, esta e uma mensagem de teste (fixture)."
+        },
+        "messageTimestamp": 1751200000
+    },
+    "destination": "http://host.docker.internal:8190/webhook/evolution",
+    "date_time": "2026-06-29T12:00:00.000Z",
+    "sender": "5511999998888@s.whatsapp.net",
+    "server_url": "http://127.0.0.1:8090",
+    "apikey": "REDACTED-INSTANCE-APIKEY-FIXTURE"
+}
