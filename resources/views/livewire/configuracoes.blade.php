@@ -39,6 +39,54 @@
             </div>
         </div>
 
+        {{-- IA (Camada 3) — kill switch PROPRIO, separado do robo --}}
+        <div @class([
+            'rounded-xl border p-5',
+            'border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40' => $ai_enabled,
+            'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900' => ! $ai_enabled,
+        ])>
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-1 font-semibold">
+                        <flux:icon icon="sparkles" variant="micro" class="text-indigo-500" />
+                        IA classificadora
+                        <x-info-tip text="Interruptor PROPRIO da IA (separado do robo). OFF = a IA nao age. Ligada, a IA so entra quando NENHUMA regra/fluxo casou: classifica a intencao e responde com a SUA resposta de regra, ou escala. Respeita todos os freios." />
+                    </div>
+                    <p class="mt-1 max-w-md text-sm text-zinc-500">
+                        Ultimo recurso, so quando nenhuma regra casa. A IA <strong>nao inventa resposta</strong>:
+                        casa uma regra sua (com "IA casa parecidas" ligada) e usa a resposta da regra.
+                        Sensivel ou pouca certeza -> escala (nao envia). Precisa do robo ligado e do contato com IA ligada.
+                    </p>
+                </div>
+                <button type="button" wire:click="requestAiSwitch"
+                    @class([
+                        'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition',
+                        'bg-indigo-500' => $ai_enabled,
+                        'bg-zinc-300 dark:bg-zinc-700' => ! $ai_enabled,
+                    ])
+                    role="switch" aria-checked="{{ $ai_enabled ? 'true' : 'false' }}">
+                    <span @class([
+                        'inline-block size-5 transform rounded-full bg-white shadow transition',
+                        'translate-x-6' => $ai_enabled,
+                        'translate-x-1' => ! $ai_enabled,
+                    ])></span>
+                </button>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <span class="font-medium">Estado: {{ $ai_enabled ? 'ON' : 'OFF (desligada)' }}</span>
+                <span class="text-zinc-500">Limiar de confianca: <strong>{{ number_format($ai_confidence_threshold, 2) }}</strong> <span class="text-xs">(ajuste fino em breve)</span></span>
+            </div>
+            <div class="mt-2 text-xs text-zinc-500">
+                Sempre exige aprovacao (nunca responde direto):
+                @php $topicLabels = ['pagamento' => 'pagamento/PIX', 'dados_bancarios' => 'dados bancarios/senhas', 'compromissos' => 'compromissos', 'conteudo_high' => 'conteudo sensivel']; @endphp
+                @forelse ($ai_approval_topics as $t)
+                    <span class="ml-1 inline-flex rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">{{ $topicLabels[$t] ?? $t }}</span>
+                @empty
+                    <span class="ml-1">nenhum configurado</span>
+                @endforelse
+            </div>
+        </div>
+
         {{-- DEMAIS FREIOS --}}
         <form wire:submit="save" class="rounded-xl border border-zinc-200 bg-white p-5 space-y-5 dark:border-zinc-800 dark:bg-zinc-900">
             @if ($salvo)
@@ -181,6 +229,27 @@
                 <button type="button" wire:click="cancelEnable" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
                 <button type="button" wire:click="enableConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
                     <flux:icon icon="bolt" variant="micro" /> Ligar robo
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: confirmar LIGAR a IA (desligar e instantaneo) --}}
+    @if ($confirmingAiEnable)
+        <x-modal wireClose="cancelAiEnable" title="Ligar a IA classificadora?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-indigo-500"><flux:icon icon="sparkles" class="size-6" /></div>
+                <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                    Liga a IA como <strong>ultimo recurso</strong>: quando nenhuma regra/fluxo casar, a IA
+                    classifica a intencao e pode responder com a sua resposta de regra (nos contatos com IA
+                    ligada, passando por todos os freios). Ela <strong>nao inventa texto</strong> e escala o
+                    que for sensivel. Confirmar?
+                </p>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelAiEnable" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="aiEnableConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                    <flux:icon icon="sparkles" variant="micro" /> Ligar IA
                 </button>
             </div>
         </x-modal>

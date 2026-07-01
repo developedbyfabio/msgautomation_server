@@ -97,6 +97,32 @@ class RuleMatcher
         return $matches;
     }
 
+    /**
+     * Camada 3 (IA) — regras candidatas pra a IA casar por intencao: habilitadas, com
+     * `ai_match_enabled=true` e elegiveis pro remetente (mesmo filtro de escopo do
+     * match determinístico). NAO casa texto aqui — quem decide a intencao e a IA.
+     *
+     * @return \Illuminate\Support\Collection<int,AutoReplyRule>
+     */
+    public function aiCandidates(int $accountId, ?int $channelId, ?string $remoteJid): \Illuminate\Support\Collection
+    {
+        return AutoReplyRule::query()
+            ->with(['triggers', 'responses', 'contacts', 'aiExamples'])
+            ->where('account_id', $accountId)
+            ->where('enabled', true)
+            ->where('ai_match_enabled', true)
+            ->where(function ($q) use ($channelId) {
+                $q->whereNull('channel_id');
+                if ($channelId !== null) {
+                    $q->orWhere('channel_id', $channelId);
+                }
+            })
+            ->orderBy('id')
+            ->get()
+            ->filter(fn ($rule) => $this->scopeEligible($rule, $remoteJid))
+            ->values();
+    }
+
     /** Escore do gatilho MAIS especifico da regra que casa, ou null. */
     private function bestTriggerScore(AutoReplyRule $rule, string $raw, string $normText): ?array
     {

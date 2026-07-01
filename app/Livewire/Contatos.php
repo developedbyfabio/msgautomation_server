@@ -15,6 +15,8 @@ class Contatos extends Component
     public ?int $editingId = null;
     public string $editName = '';
     public string $editNotes = '';
+    public bool $editAiEnabled = false;
+    public string $editAiMode = 'intencao';
 
     public ?int $confirmingMuteId = null;
 
@@ -57,6 +59,8 @@ class Contatos extends Component
         $this->editingId = $contact->id;
         $this->editName = (string) $contact->push_name;
         $this->editNotes = (string) $contact->notes;
+        $this->editAiEnabled = (bool) $contact->ai_enabled;
+        $this->editAiMode = (string) ($contact->ai_mode ?: 'intencao');
     }
 
     public function saveEdit(): void
@@ -65,10 +69,16 @@ class Contatos extends Component
             return;
         }
 
+        $aiMode = in_array($this->editAiMode, ['rules_only', 'intencao', 'conhecimento', 'aprovacao'], true)
+            ? $this->editAiMode
+            : 'intencao';
+
         Contact::query()->where('id', $this->editingId)->where('account_id', $this->accountId())
             ->update([
                 'push_name' => $this->editName !== '' ? $this->editName : null,
                 'notes' => $this->editNotes !== '' ? $this->editNotes : null,
+                'ai_enabled' => $this->editAiEnabled,
+                'ai_mode' => $aiMode,
             ]);
 
         $this->cancelEdit();
@@ -80,6 +90,8 @@ class Contatos extends Component
         $this->editingId = null;
         $this->editName = '';
         $this->editNotes = '';
+        $this->editAiEnabled = false;
+        $this->editAiMode = 'intencao';
     }
 
     private function accountId(): int

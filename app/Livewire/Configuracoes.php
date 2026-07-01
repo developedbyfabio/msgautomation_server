@@ -30,8 +30,15 @@ class Configuracoes extends Component
     public bool $per_day_enabled = true;
     public bool $contact_rate_enabled = true;
 
+    // Camada 3 (IA) — kill switch proprio + config (leitura por ora; fino na Fatia 4).
+    public bool $ai_enabled = false;
+    public float $ai_confidence_threshold = 0.75;
+    /** @var array<int,string> */
+    public array $ai_approval_topics = [];
+
     public bool $salvo = false;
     public bool $confirmingEnable = false;
+    public bool $confirmingAiEnable = false;
 
     public function mount(): void
     {
@@ -53,6 +60,9 @@ class Configuracoes extends Component
         $this->per_minute_enabled = (bool) $s->per_minute_enabled;
         $this->per_day_enabled = (bool) $s->per_day_enabled;
         $this->contact_rate_enabled = (bool) $s->contact_rate_enabled;
+        $this->ai_enabled = (bool) $s->ai_enabled;
+        $this->ai_confidence_threshold = (float) $s->ai_confidence_threshold;
+        $this->ai_approval_topics = $s->aiApprovalTopics();
     }
 
     private function settings(): AutoReplySetting
@@ -91,6 +101,37 @@ class Configuracoes extends Component
     public function cancelEnable(): void
     {
         $this->confirmingEnable = false;
+    }
+
+    /**
+     * Kill switch PROPRIO da IA (separado do robo). Ligar pede confirmacao (passa a
+     * classificar mensagens sem regra e pode responder sozinho pela sua resposta).
+     * Desligar e INSTANTANEO (freio de emergencia). Nasce OFF.
+     */
+    public function requestAiSwitch(): void
+    {
+        if ($this->settings()->ai_enabled) {
+            $this->settings()->update(['ai_enabled' => false]);
+            $this->ai_enabled = false;
+            $this->dispatch('toast', message: 'IA desligada.');
+
+            return;
+        }
+
+        $this->confirmingAiEnable = true;
+    }
+
+    public function aiEnableConfirmed(): void
+    {
+        $this->settings()->update(['ai_enabled' => true]);
+        $this->ai_enabled = true;
+        $this->confirmingAiEnable = false;
+        $this->dispatch('toast', message: 'IA LIGADA.', type: 'error');
+    }
+
+    public function cancelAiEnable(): void
+    {
+        $this->confirmingAiEnable = false;
     }
 
     protected function rules(): array

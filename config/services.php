@@ -50,4 +50,16 @@ return [
         'webhook_url' => env('EVOLUTION_WEBHOOK_URL', 'http://host.docker.internal:8190/webhook/evolution'),
     ],
 
+    // IA classificadora (Camada 3) — Gemini free tier (Flash-Lite). Chave SO no .env
+    // (chmod 600, gitignored). Chave vazia = a IA nao chama a API (silencia e loga).
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash-lite'),
+        'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+        'timeout' => (int) env('GEMINI_TIMEOUT', 12),
+        'max_attempts' => (int) env('GEMINI_MAX_ATTEMPTS', 3),
+        'retry_sleep_ms' => (int) env('GEMINI_RETRY_SLEEP_MS', 500),
+        'daily_cap' => (int) env('GEMINI_DAILY_CAP', 1000),
+    ],
+
 ];

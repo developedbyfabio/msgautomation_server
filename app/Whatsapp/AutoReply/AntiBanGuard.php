@@ -264,6 +264,44 @@ class AntiBanGuard
         return str_ends_with($jid, '@g.us');
     }
 
+    // ---- Camada 3 (IA): elegibilidade e limiar (somente leitura) -------------
+
+    /**
+     * A IA pode SEQUER classificar este contato? Pre-checagem barata ANTES de gastar
+     * chamada de API: kill switch da IA (global) + IA ligada no contato + nao-grupo +
+     * portao de contato (allowlist/on/off). Nao substitui os freios de ENVIO — a
+     * resposta ainda passa pelo Sender (todos os freios + R2).
+     */
+    public function aiEligible(int $accountId, string $jid): bool
+    {
+        $settings = $this->settingsFor($accountId);
+
+        if (! $settings->ai_enabled) {
+            return false;
+        }
+        if ($this->isGroup($jid)) {
+            return false;
+        }
+        if (! $this->aiContactEnabled($accountId, $jid)) {
+            return false;
+        }
+
+        return $this->contactGate($accountId, $jid, $settings)->allowed;
+    }
+
+    public function aiContactEnabled(int $accountId, string $jid): bool
+    {
+        return (bool) (Contact::query()
+            ->where('account_id', $accountId)
+            ->where('remote_jid', $jid)
+            ->value('ai_enabled') ?? false);
+    }
+
+    public function aiConfidenceThreshold(int $accountId): float
+    {
+        return (float) $this->settingsFor($accountId)->ai_confidence_threshold;
+    }
+
     public function settingsFor(int $accountId): AutoReplySetting
     {
         return AutoReplySetting::firstOrCreate(['account_id' => $accountId]);

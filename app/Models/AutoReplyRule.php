@@ -21,6 +21,7 @@ class AutoReplyRule extends Model
         'cooldown_mode',     // global | sempre | 1x_dia | cada_n  (S2)
         'cooldown_minutes',  // usado por cada_n
         'scope',             // global | contatos  (S3)
+        'ai_match_enabled',  // deixe a IA casar mensagens parecidas com esta regra (Camada 3)
     ];
 
     protected function casts(): array
@@ -29,6 +30,7 @@ class AutoReplyRule extends Model
             'enabled' => 'boolean',
             'priority' => 'integer',
             'cooldown_minutes' => 'integer',
+            'ai_match_enabled' => 'boolean',
         ];
     }
 
@@ -56,6 +58,25 @@ class AutoReplyRule extends Model
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class, 'rule_contacts');
+    }
+
+    /** Frases-exemplo da intencao (Camada 3). Opcionais; ajudam a IA a casar a regra. */
+    public function aiExamples(): HasMany
+    {
+        return $this->hasMany(RuleAiExample::class);
+    }
+
+    /**
+     * Frases-exemplo efetivas (so as nao-vazias). Nunca contem resposta/segredo —
+     * sao exemplos de MENSAGEM que o contato mandaria.
+     *
+     * @return array<int,string>
+     */
+    public function aiExampleList(): array
+    {
+        $filhos = $this->relationLoaded('aiExamples') ? $this->aiExamples : $this->aiExamples()->get();
+
+        return $filhos->pluck('phrase')->filter(fn ($p) => (string) $p !== '')->values()->all();
     }
 
     /**

@@ -15,6 +15,8 @@ class Contact extends Model
         'auto_reply_mode',    // default | on | off
         'notes',
         'saved',              // true = nomeado/adicionado pelo usuario (S4)
+        'ai_enabled',         // IA por contato (Camada 3). Default false.
+        'ai_mode',            // rules_only | intencao | conhecimento | aprovacao
     ];
 
     protected function casts(): array
@@ -22,6 +24,7 @@ class Contact extends Model
         return [
             'auto_reply_opt_out' => 'boolean',
             'saved' => 'boolean',
+            'ai_enabled' => 'boolean',
         ];
     }
 

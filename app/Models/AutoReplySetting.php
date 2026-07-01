@@ -26,7 +26,14 @@ class AutoReplySetting extends Model
         'per_minute_enabled',
         'per_day_enabled',
         'contact_rate_enabled',
+        // Camada 3 (IA) — configuracao global.
+        'ai_enabled',
+        'ai_confidence_threshold',
+        'ai_approval_topics',
     ];
+
+    /** Temas que SEMPRE exigem aprovacao (a IA nunca responde direto). */
+    public const AI_APPROVAL_TOPICS = ['pagamento', 'dados_bancarios', 'compromissos', 'conteudo_high'];
 
     protected function casts(): array
     {
@@ -45,7 +52,23 @@ class AutoReplySetting extends Model
             'contact_rate_seconds' => 'integer',
             'delay_min_seconds' => 'integer',
             'delay_max_seconds' => 'integer',
+            'ai_enabled' => 'boolean',
+            'ai_confidence_threshold' => 'float',
+            'ai_approval_topics' => 'array',
         ];
+    }
+
+    /**
+     * Temas de aprovacao efetivos. NULL (nunca configurado) = TODOS ligados
+     * (conservador — o Fabio aprovou "sempre exige aprovacao" nos 4 temas).
+     *
+     * @return array<int,string>
+     */
+    public function aiApprovalTopics(): array
+    {
+        $t = $this->ai_approval_topics;
+
+        return is_array($t) ? array_values($t) : self::AI_APPROVAL_TOPICS;
     }
 
     public function account(): BelongsTo

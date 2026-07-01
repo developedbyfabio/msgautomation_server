@@ -165,9 +165,17 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        // (3) Regras normais (inalterado). Sem regra que case -> silencio.
+        // (3) Regras normais (inalterado). Sem regra que case -> IA (fallback) ou silencio.
         $rule = $matcher->match($account->id, $channel->id, $data->text, $jid);
         if ($rule === null) {
+            // (4) Camada 3 — FALLBACK: nada casou. Se a IA esta elegivel pro contato
+            // (kill switch da IA ON + IA ligada no contato + portao passa), classifica
+            // em job SEPARADO (a API tem latencia/429; nao trava o pipeline). Tudo OFF
+            // por padrao -> este ramo nao dispara ate o Fabio ligar a IA.
+            if ($guard->aiEligible($account->id, $jid)) {
+                ClassifyWithAi::dispatch($message->id);
+            }
+
             return;
         }
 

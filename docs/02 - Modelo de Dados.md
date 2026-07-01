@@ -164,6 +164,28 @@ segredo completa** (ligar fluxo com `{senha:}` exige escopo contatos + gatilho e
 vence" e em /regras "fluxo intercepta"); **avisos de arvore** (menu sem opcao, opcao sem
 destino/rotulo, sem gatilho).
 
+## Camada 3 (IA) — Fatia 1 (`..._000017`.. `..._000020`, aditivo)
+IA como FALLBACK (so quando fluxo/regra nao casaram). Tudo nasce OFF. Detalhe em
+`08 - Camada 3 - IA e Camada 5 - Aprendizado.md`.
+- `contacts` += `ai_enabled` (bool, default false) + `ai_mode` (`rules_only|intencao|conhecimento|
+  aprovacao`, default `intencao`). So age com `ai_enabled=true` e o kill switch da IA ligado.
+- `auto_reply_settings` += `ai_enabled` (kill switch PROPRIO da IA, default false),
+  `ai_confidence_threshold` (default 0.75), `ai_approval_topics` (JSON; NULL = os 4 temas ligados —
+  pagamento, dados_bancarios, compromissos, conteudo_high). `AutoReplySetting::aiApprovalTopics()`
+  resolve o default.
+- `auto_reply_rules` += `ai_match_enabled` (bool, default false). Filha `rule_ai_examples`
+  (`auto_reply_rule_id`, `phrase`) — frases-exemplo OPCIONAIS da intencao (exemplo de MENSAGEM,
+  nunca resposta/segredo).
+- `ai_decisions` — log de CADA decisao da IA (nao substitui `auto_reply_logs`, que segue no ENVIO):
+  `account_id`, `contact_id` null, `incoming_message_id` null, `matched_rule_id` (sem FK dura),
+  `remote_jid`, `intent`, `confidence`, `acao` (`respondeu|escalou|silenciou`), `motivo`, `model`.
+  Uma decisao por mensagem (idempotente por `incoming_message_id`). NUNCA guarda valor de segredo
+  nem a mensagem crua.
+
+Engine: `ClassifyWithAi` (job) usa `RuleMatcher::aiCandidates` + `AntiBanGuard::aiEligible`, chama o
+`AiClassifier` (Gemini) e, se responder, despacha `SendAutoReply` com a resposta DA REGRA (Sender
+aplica todos os freios + R2 + `{senha}` local). Guarda dura: a IA nunca auto-envia `{senha:...}`.
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000016`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000020`).

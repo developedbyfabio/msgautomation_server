@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Ai\Drivers\GeminiDriver;
+use App\Contracts\AiClassifier;
 use App\Contracts\WhatsappGateway;
 use App\Whatsapp\Drivers\EvolutionDriver;
 use Illuminate\Support\Carbon;
@@ -16,6 +18,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Abstracao de driver: hoje Evolution; troca de provedor sem mexer no resto.
         $this->app->bind(WhatsappGateway::class, EvolutionDriver::class);
+
+        // Classificador de IA (Camada 3): hoje Gemini; contrato abstrato pra trocar depois.
+        $this->app->bind(AiClassifier::class, GeminiDriver::class);
     }
 
     /**

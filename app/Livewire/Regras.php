@@ -39,6 +39,11 @@ class Regras extends Component
     public array $scopeContactIds = [];
     public string $scopeSearch = '';
 
+    // Camada 3 (IA) — "deixe a IA casar mensagens parecidas" + frases-exemplo.
+    public bool $aiMatchEnabled = false;
+    /** @var array<int,string> */
+    public array $aiExamples = [];
+
     // S4 — testador (dry-run).
     public bool $showTester = false;
     public string $testSample = '';
@@ -84,13 +89,15 @@ class Regras extends Component
         $this->scope = 'global';
         $this->scopeContactIds = [];
         $this->scopeSearch = '';
+        $this->aiMatchEnabled = false;
+        $this->aiExamples = [];
         $this->resetValidation();
         $this->showForm = true;
     }
 
     public function edit(int $id): void
     {
-        $rule = $this->query()->with(['triggers', 'responses', 'contacts'])->findOrFail($id);
+        $rule = $this->query()->with(['triggers', 'responses', 'contacts', 'aiExamples'])->findOrFail($id);
 
         $this->editingId = $rule->id;
         $this->triggers = $rule->triggerList()
@@ -111,8 +118,21 @@ class Regras extends Component
         $this->scope = $rule->scope ?: 'global';
         $this->scopeContactIds = $rule->contacts->pluck('id')->all();
         $this->scopeSearch = '';
+        $this->aiMatchEnabled = (bool) $rule->ai_match_enabled;
+        $this->aiExamples = $rule->aiExampleList();
         $this->resetValidation();
         $this->showForm = true;
+    }
+
+    public function addAiExample(): void
+    {
+        $this->aiExamples[] = '';
+    }
+
+    public function removeAiExample(int $i): void
+    {
+        unset($this->aiExamples[$i]);
+        $this->aiExamples = array_values($this->aiExamples);
     }
 
     public function addTrigger(): void
@@ -227,6 +247,12 @@ class Regras extends Component
             }
         }
 
+        // Frases-exemplo da IA (opcionais; so as nao-vazias). Exemplos de MENSAGEM.
+        $aiExamples = array_values(array_filter(array_map(
+            fn ($p) => trim((string) $p),
+            $this->aiExamples,
+        ), fn ($p) => $p !== ''));
+
         // Colunas legadas = cache do 1o gatilho / 1a resposta (back-compat).
         $dados = [
             'match_type' => $triggers[0]['match_type'],
@@ -236,6 +262,7 @@ class Regras extends Component
             'cooldown_mode' => $this->cooldownMode,
             'cooldown_minutes' => $this->cooldownMode === 'cada_n' ? $this->cooldownMinutes : null,
             'scope' => $scope,
+            'ai_match_enabled' => $this->aiMatchEnabled,
         ];
 
         if ($this->editingId) {
@@ -255,6 +282,12 @@ class Regras extends Component
         $rule->responses()->delete();
         $rule->responses()->createMany(array_map(fn ($r) => ['response_text' => $r], $responses));
         $rule->contacts()->sync($contactIds);
+
+        // Frases-exemplo da IA: re-sincroniza (substitui).
+        $rule->aiExamples()->delete();
+        if ($aiExamples !== []) {
+            $rule->aiExamples()->createMany(array_map(fn ($p) => ['phrase' => $p], $aiExamples));
+        }
 
         $this->closeForm();
         $this->dispatch('toast', message: 'Regra salva.');

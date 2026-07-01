@@ -275,6 +275,42 @@
                     @endif
                 </div>
 
+                {{-- IA CASA PARECIDAS (Camada 3) --}}
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium">
+                        <input type="checkbox" wire:model.live="aiMatchEnabled" class="rounded border-zinc-300 dark:border-zinc-700">
+                        <flux:icon icon="sparkles" variant="micro" class="text-indigo-500" /> Permitir a IA casar mensagens parecidas
+                    </label>
+                    <p class="mt-1 text-[11px] text-zinc-500">
+                        Quando nenhuma regra casar exatamente, a IA pode identificar que uma mensagem tem a
+                        <strong>mesma intencao</strong> desta regra (ex.: "me fala a hora ai" -> "que horas sao?") e
+                        responder com <strong>a resposta desta regra</strong>. So funciona com o kill switch da IA
+                        e a IA do contato ligados. A IA nunca inventa texto.
+                    </p>
+                    @if ($aiMatchEnabled)
+                        <div class="mt-3">
+                            <div class="mb-1 flex items-center justify-between">
+                                <label class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Frases-exemplo (opcional)</label>
+                                <button type="button" wire:click="addAiExample" class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline">
+                                    <flux:icon icon="plus" variant="micro" /> exemplo
+                                </button>
+                            </div>
+                            <p class="mb-2 text-[11px] text-zinc-400">Exemplos de como o contato pode pedir isto (ajuda a IA a acertar). Nunca coloque senha/valor aqui — sao exemplos de MENSAGEM.</p>
+                            @forelse ($aiExamples as $i => $ex)
+                                <div wire:key="aiex-{{ $i }}" class="mb-2 flex items-center gap-2">
+                                    <input type="text" wire:model="aiExamples.{{ $i }}" placeholder="ex.: me fala a hora ai"
+                                        class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                    <button type="button" wire:click="removeAiExample({{ $i }})" class="text-zinc-400 hover:text-red-500" aria-label="Remover exemplo">
+                                        <flux:icon icon="x-mark" variant="micro" />
+                                    </button>
+                                </div>
+                            @empty
+                                <p class="text-[11px] text-zinc-400">Sem exemplos. A IA usa os gatilhos acima como referencia da intencao.</p>
+                            @endforelse
+                        </div>
+                    @endif
+                </div>
+
                 <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" wire:model="enabled" class="rounded border-zinc-300 dark:border-zinc-700"> Habilitada
                 </label>
@@ -322,7 +358,26 @@
                         @if (! ($testResult['ok'] ?? false))
                             <p class="text-amber-600 dark:text-amber-400">{{ $testResult['erro'] ?? 'Erro.' }}</p>
                         @elseif (! $testResult['matched'])
-                            <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="x-circle" variant="micro" /> Nenhuma regra casaria.</p>
+                            <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="x-circle" variant="micro" /> Nenhuma regra casaria (determinístico).</p>
+                            @php $ai = $testResult['ai'] ?? null; @endphp
+                            @if ($ai)
+                                <div class="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-2 text-xs dark:border-indigo-900 dark:bg-indigo-950/30">
+                                    @if ($ai['contato_ligada'] && $ai['global_ligada'] && $ai['candidatas'] > 0)
+                                        <p class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
+                                            <flux:icon icon="sparkles" variant="micro" /> A IA classificaria esta mensagem ({{ $ai['candidatas'] }} regra(s) candidata(s), modo {{ $ai['modo'] }}).
+                                        </p>
+                                        <p class="mt-0.5 text-[11px] text-zinc-500">Se reconhecer a intencao com confianca suficiente, responde com a resposta da regra; senao, escala. (Este teste nao chama a IA.)</p>
+                                    @elseif ($ai['contato_ligada'] && ! $ai['global_ligada'])
+                                        <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada no contato, mas o kill switch da IA esta OFF (Configuracoes). Nao atuaria.</p>
+                                    @elseif ($ai['contato_ligada'] && $ai['candidatas'] === 0)
+                                        <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada, mas nenhuma regra tem "IA casa parecidas" habilitada. Nao ha o que casar.</p>
+                                    @else
+                                        <p class="flex items-center gap-1.5 text-zinc-400"><flux:icon icon="sparkles" variant="micro" /> IA desligada para este contato.</p>
+                                    @endif
+                                </div>
+                            @else
+                                <p class="mt-1 text-[11px] text-zinc-400">Escolha um contato para ver se a IA atuaria.</p>
+                            @endif
                         @else
                             <div class="space-y-1.5">
                                 <p class="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-300">

@@ -56,11 +56,15 @@ class RuleTester
         $matching = $this->matcher->allMatching($accountId, $channelId, $sample, $jid);
         $rule = $matching[0] ?? null;
 
+        // Camada 3 — info da IA (dry-run, SEM chamar a API). So com contato escolhido.
+        $ai = $this->aiInfo($accountId, $channelId, $contact, $jid);
+
         if ($rule === null) {
             return [
                 'ok' => true,
                 'matched' => false,
                 'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
+                'ai' => $ai,
             ];
         }
 
@@ -119,6 +123,30 @@ class RuleTester
             'bloqueio_label' => $bloqueioLabel,
             'freios' => $freios,
             'tambem' => $tambem, // outras regras que tambem casariam (perderam por especificidade)
+            'ai' => $ai,
+        ];
+    }
+
+    /**
+     * Camada 3 — quadro da IA no dry-run (NAO chama a API). Diz se a IA esta ligada
+     * (global + contato) e quantas regras candidatas existem pro contato. Serve pra
+     * mostrar "a IA classificaria esta mensagem" quando nada casa determinístico.
+     *
+     * @return array{global_ligada:bool,contato_ligada:bool,modo:string,candidatas:int}|null
+     */
+    private function aiInfo(int $accountId, ?int $channelId, ?\App\Models\Contact $contact, ?string $jid): ?array
+    {
+        if ($contact === null || $jid === null) {
+            return null;
+        }
+
+        $modo = (string) ($contact->ai_mode ?: 'intencao');
+
+        return [
+            'global_ligada' => (bool) $this->guard->settingsFor($accountId)->ai_enabled,
+            'contato_ligada' => (bool) $contact->ai_enabled && $modo !== 'rules_only',
+            'modo' => $modo,
+            'candidatas' => $this->matcher->aiCandidates($accountId, $channelId, $jid)->count(),
         ];
     }
 
