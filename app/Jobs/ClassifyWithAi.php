@@ -11,12 +11,14 @@ use App\Models\AutoReplyRule;
 use App\Models\Contact;
 use App\Models\IncomingMessage;
 use App\Models\Knowledge;
+use App\Models\PendingApproval;
 use App\Whatsapp\AutoReply\AntiBanGuard;
 use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\AutoReply\RuleResponder;
 use App\Whatsapp\Secrets\SecretVault;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -147,8 +149,8 @@ class ClassifyWithAi implements ShouldQueue
         AntiBanGuard $guard,
         SecretVault $vault,
     ): bool {
-        $log = function (string $acao, ?string $motivo, ?AutoReplyRule $rule) use ($incoming, $contact, $result) {
-            AiDecision::create([
+        $log = function (string $acao, ?string $motivo, ?AutoReplyRule $rule) use ($incoming, $contact, $result): AiDecision {
+            return AiDecision::create([
                 'account_id' => $incoming->account_id,
                 'contact_id' => $contact?->id,
                 'incoming_message_id' => $incoming->id,
@@ -161,6 +163,23 @@ class ClassifyWithAi implements ShouldQueue
                 'motivo' => $motivo,
                 'model' => $result->model,
             ]);
+        };
+
+        // Fatia 3: toda escala vira pendencia revisavel no /revisao (nada e enviado
+        // sem clique humano). Sugestao = a resposta DA REGRA candidata (template cru,
+        // placeholders intactos — {senha:} nunca expandido aqui).
+        $escala = function (string $motivo, AutoReplyRule $rule) use ($log, $incoming, $contact, $result): void {
+            $decision = $log('escalou', $motivo, $rule);
+            $this->abrirPendencia(
+                $incoming,
+                $contact,
+                $decision,
+                origin: 'regra',
+                reason: $motivo,
+                suggestion: (string) ($rule->responseList()->first() ?? '') !== '' ? (string) $rule->responseList()->first() : null,
+                intent: $result->intent !== '' ? $result->intent : null,
+                confidence: $result->confidence,
+            );
         };
 
         // Erro/cota/resposta invalida -> silencia (a API esta com problema; nao gasta
@@ -189,28 +208,28 @@ class ClassifyWithAi implements ShouldQueue
         // ({senha:...}). Resolve o tema "dados bancarios/senhas" sem depender do modelo.
         $temSenha = $rule->responseList()->contains(fn ($r) => $vault->hasRef((string) $r));
         if ($temSenha) {
-            $log('escalou', 'contem_senha', $rule);
+            $escala('contem_senha', $rule);
 
             return true;
         }
 
-        // Modo do contato = aprovacao: nunca responde direto (so sugere -> Fatia 3).
+        // Modo do contato = aprovacao: nunca responde direto (so sugere na fila).
         if ($aiMode === 'aprovacao') {
-            $log('escalou', 'modo_aprovacao', $rule);
+            $escala('modo_aprovacao', $rule);
 
             return true;
         }
 
         // Tema sensivel sinalizado pelo modelo (pagamento, compromissos, ...).
         if ($result->needsApproval) {
-            $log('escalou', 'tema_aprovacao', $rule);
+            $escala('tema_aprovacao', $rule);
 
             return true;
         }
 
         // Abaixo do limiar de confianca -> escala (humano decide).
         if ($result->confidence < $guard->aiConfidenceThreshold($incoming->account_id)) {
-            $log('escalou', 'baixa_confianca', $rule);
+            $escala('baixa_confianca', $rule);
 
             return true;
         }
@@ -269,8 +288,8 @@ class ClassifyWithAi implements ShouldQueue
             ?string $resumo = null,
             ?float $confidence = null,
             ?string $model = null,
-        ) use ($incoming, $contact, $vault) {
-            AiDecision::create([
+        ) use ($incoming, $contact, $vault): AiDecision {
+            return AiDecision::create([
                 'account_id' => $incoming->account_id,
                 'contact_id' => $contact->id,
                 'incoming_message_id' => $incoming->id,
@@ -288,6 +307,21 @@ class ClassifyWithAi implements ShouldQueue
             ]);
         };
 
+        // Fatia 3: escala da base tambem vira pendencia (sugestao = resposta
+        // fundamentada quando existe e e confiavel; template cru, sem expandir nada).
+        $escala = function (AiDecision $decision, string $motivo, ?string $suggestion, ?float $confidence = null) use ($incoming, $contact): void {
+            $this->abrirPendencia(
+                $incoming,
+                $contact,
+                $decision,
+                origin: 'base',
+                reason: $motivo,
+                suggestion: $suggestion !== null && trim($suggestion) !== '' ? $suggestion : null,
+                intent: null,
+                confidence: $confidence,
+            );
+        };
+
         // Candidatas: ativas + permitidas pro contato (pivo vazio = qualquer contato
         // com IA). Separa low/medium (vao ao modelo) de high (NUNCA vai).
         $todas = Knowledge::query()->candidatesFor($accountId, (int) $contact->id)->get();
@@ -297,8 +331,8 @@ class ClassifyWithAi implements ShouldQueue
         if ($entradas->isEmpty()) {
             if ($temHigh) {
                 // A resposta pode estar no conteudo high (que o modelo nao ve) ->
-                // nunca responde direto; humano revisa (fila visual na Fatia 3).
-                $log('escalou', 'conteudo_high');
+                // nunca responde direto; humano revisa no /revisao (sem sugestao).
+                $escala($log('escalou', 'conteudo_high'), 'conteudo_high', null);
 
                 return;
             }
@@ -314,7 +348,7 @@ class ClassifyWithAi implements ShouldQueue
         // Tema sensivel ja sinalizado na classificacao por regra -> escala direto
         // (temas de aprovacao NUNCA sao respondidos; poupa a 2a chamada de API).
         if ($sensitiveFlagged) {
-            $log('escalou', 'tema_aprovacao');
+            $escala($log('escalou', 'tema_aprovacao'), 'tema_aprovacao', null);
 
             return;
         }
@@ -340,9 +374,15 @@ class ClassifyWithAi implements ShouldQueue
         $usadas = $entradas->whereIn('id', $result->sourceIds)->values();
         $usadasIds = $usadas->pluck('id')->map(fn ($id) => (int) $id)->all();
 
+        // Sugestao confiavel pro humano = so resposta FUNDAMENTADA em entradas
+        // validas (nunca sugere texto sem grounding — IA nao inventa nem na fila).
+        $sugestao = ($result->grounded && $result->answer !== '' && $usadas->isNotEmpty())
+            ? $result->answer
+            : null;
+
         // Tema sensivel sinalizado pelo modelo -> nunca responde direto.
         if ($result->needsApproval) {
-            $log('escalou', 'tema_aprovacao', $usadasIds, $result->answer, $result->confidence, $result->model);
+            $escala($log('escalou', 'tema_aprovacao', $usadasIds, $result->answer, $result->confidence, $result->model), 'tema_aprovacao', $sugestao, $result->confidence);
 
             return;
         }
@@ -350,7 +390,7 @@ class ClassifyWithAi implements ShouldQueue
         // IA nunca inventa: sem grounding (ou sem entradas validas) nao ha resposta.
         if (! $result->grounded || $result->answer === '' || $usadas->isEmpty()) {
             if ($temHigh) {
-                $log('escalou', 'conteudo_high', confidence: $result->confidence, model: $result->model);
+                $escala($log('escalou', 'conteudo_high', confidence: $result->confidence, model: $result->model), 'conteudo_high', null, $result->confidence);
             } else {
                 $log('silenciou', 'sem_grounding', confidence: $result->confidence, model: $result->model);
             }
@@ -363,14 +403,14 @@ class ClassifyWithAi implements ShouldQueue
         $temSenha = $vault->hasRef($result->answer)
             || $usadas->contains(fn (Knowledge $k) => $vault->hasRef((string) $k->content));
         if ($temSenha) {
-            $log('escalou', 'contem_senha', $usadasIds, $result->answer, $result->confidence, $result->model);
+            $escala($log('escalou', 'contem_senha', $usadasIds, $result->answer, $result->confidence, $result->model), 'contem_senha', $sugestao, $result->confidence);
 
             return;
         }
 
         // Abaixo do limiar de confianca -> escala (humano decide).
         if ($result->confidence < $guard->aiConfidenceThreshold($accountId)) {
-            $log('escalou', 'baixa_confianca', $usadasIds, $result->answer, $result->confidence, $result->model);
+            $escala($log('escalou', 'baixa_confianca', $usadasIds, $result->answer, $result->confidence, $result->model), 'baixa_confianca', $sugestao, $result->confidence);
 
             return;
         }
@@ -391,5 +431,41 @@ class ClassifyWithAi implements ShouldQueue
             ->delay(now()->addSeconds(random_int($min, $max)));
 
         $log('respondeu', null, $usadasIds, $result->answer, $result->confidence, $result->model);
+    }
+
+    /**
+     * Fatia 3 — abre a pendencia de aprovacao humana pra uma decisao `escalou`.
+     * NADA e enviado aqui: a pendencia so vira envio com clique no /revisao.
+     * Idempotente por incoming_message_id (indice UNICO; corrida/re-entrega mantem
+     * a primeira). `suggestion` guarda o TEMPLATE cru (placeholders intactos —
+     * {senha:} nunca expandido; valor de segredo nunca persistido).
+     */
+    private function abrirPendencia(
+        IncomingMessage $incoming,
+        ?Contact $contact,
+        AiDecision $decision,
+        string $origin,
+        ?string $reason,
+        ?string $suggestion,
+        ?string $intent = null,
+        ?float $confidence = null,
+    ): void {
+        try {
+            PendingApproval::create([
+                'account_id' => $incoming->account_id,
+                'contact_id' => $contact?->id,
+                'incoming_message_id' => $incoming->id,
+                'ai_decision_id' => $decision->id,
+                'remote_jid' => $incoming->remote_jid,
+                'suggested_response' => $suggestion,
+                'origin' => $origin,
+                'reason' => $reason,
+                'intent' => $intent,
+                'confidence' => $confidence,
+                'status' => 'pending',
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // Ja existe pendencia pra esta mensagem (corrida) -> mantem a primeira.
+        }
     }
 }

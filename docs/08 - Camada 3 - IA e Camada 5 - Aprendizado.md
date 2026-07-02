@@ -1,12 +1,13 @@
 # Camada 3 (IA classificadora) + Camada 5 (aprendizado via UI)
 
-Status: **Fatias 1 e 2 ENTREGUES** (driver Gemini + classificador + toggles + escalar; base de
-conhecimento + modo `conhecimento` + valores locais). Fatias 3-4 pendentes (ver fim). A IA e
-**FALLBACK** que encaixa no pipeline atual — NAO reescreve o que funciona. Kill switch do robo
-(`auto_reply_settings.enabled`) intocado. **Tudo nasce OFF:** com as Fatias 1-2 no ar e nada
-ligado, o robo se comporta EXATAMENTE como antes (`ai_mode=conhecimento` e opt-in por contato).
+Status: **Fatias 1, 2 e 3 ENTREGUES** (driver Gemini + classificador + toggles + escalar; base de
+conhecimento + modo `conhecimento` + valores locais; fila de aprovacao + painel /revisao). Fatia 4
+pendente (ver fim). A IA e **FALLBACK** que encaixa no pipeline atual — NAO reescreve o que
+funciona. Kill switch do robo (`auto_reply_settings.enabled`) intocado. **Tudo nasce OFF:** com as
+Fatias 1-3 no ar e nada ligado, o robo se comporta EXATAMENTE como antes (pendencias so nascem de
+contatos com IA ligada; NADA e enviado sem clique humano no /revisao).
 
-> Detalhe do que foi construido: ver secoes "Fatia 1 — entregue" e "Fatia 2 — entregue" no fim.
+> Detalhe do que foi construido: ver secoes "Fatia N — entregue" no fim.
 
 ## Principio
 A IA entra como **ultimo recurso**: so quando fluxo/regra NAO resolveram. Nao e um
@@ -112,7 +113,7 @@ recebimento — latencia/429 nao seguram o webhook nem a persistencia. Pre-checa
   contato + `ai_match_enabled` na regra + escalar + `ai_decisions`. Testada com MOCK (sem enviar),
   respeitando freios. Default `intencao` conservador.
 - **Fatia 2** — base de conhecimento + sensibilidade + resolucao local de valores. **ENTREGUE.**
-- **Fatia 3** — `pending_approvals` + painel `/revisao` (Enviar/Editar/Ignorar).
+- **Fatia 3** — `pending_approvals` + painel `/revisao` (Enviar/Editar/Ignorar). **ENTREGUE.**
 - **Fatia 4 (Camada 5)** — "virar regra" + limiar/temas finos na UI + polimento.
 
 ## Decisoes da direcao (aprovadas)
@@ -241,8 +242,56 @@ FUNDAMENTADA SO no conteudo da base. Sem grounding = "nao sei" = silencio. IA nu
 **Testes:** `KnowledgeModeTest` (28) + `ConhecimentoUiTest` (8) + `GeminiDriverTest` (+6 do answer),
 driver e envio MOCKADOS (nunca API/envio real). Suite completa: 279 verdes, sequencial.
 
-## Pendente (Fatias 3-4)
-- **Fatia 3:** fila de aprovacao (`pending_approvals`) + painel `/revisao` (Enviar/Editar/Ignorar) —
-  hoje o `escalou` (incl. `conteudo_high` e `contem_senha` da base) so fica logado em `ai_decisions`.
-- **Fatia 4 (Camada 5):** "virar regra" (e "virar entrada da base") + limiar/temas editaveis na UI +
-  polimento.
+---
+
+## Fatia 3 — entregue
+
+**O que e:** toda decisao `escalou` da IA vira **pendencia revisavel** no painel `/revisao`
+(Enviar / Editar / Ignorar). NADA e enviado sem clique humano. Este padrao de gate (revisar ->
+aprovar -> enviar) sera reusado pelas campanhas proativas (doc 09).
+
+**Schema (migration aditiva `2026_07_02_000023`):** `pending_approvals` — account, contact,
+incoming_message (UNIQUE = uma pendencia por mensagem, idempotencia dura), ai_decision_id
+(liga decisao <-> pendencia), remote_jid, `suggested_response` (nullable; template CRU com
+placeholders intactos — valor de segredo NUNCA persistido), `origin` (regra|base; 'ia'
+reservado), `reason`, `intent`, `confidence`, `status` (pending|approved|edited|rejected|
+expired), `decided_at`, `sent_auto_reply_log_id`. Indices (account,status) e (account,created_at).
+
+**De onde nascem:** `ClassifyWithAi::abrirPendencia`, chamada em TODA escala — degrau regra
+(`decideByRule`: contem_senha, modo_aprovacao, tema_aprovacao, baixa_confianca; sugestao = a
+resposta DA REGRA candidata) e degrau base (`answerFromKnowledge`: conteudo_high sem sugestao,
+tema_aprovacao/contem_senha/baixa_confianca com a resposta fundamentada quando grounded).
+Sugestao nunca inclui texto sem grounding (IA nao inventa nem na fila). Erro/cota segue
+`silenciou` (nao vira pendencia — sem sugestao confiavel nao ha o que aprovar).
+
+**Envio aprovado (modo novo `aprovacao` no Sender/AntiBanGuard):** politica do envio manual
+(R1) quanto a kill switch/janela/allowlist — decisao humana e override —, MAS: **opt-out vale**
+(contato 'off' nunca recebe, com re-check R2 proprio antes do POST), **tetos protetivos valem**,
+**claim de idempotencia por incoming_message_id vale** (uma resposta por mensagem, mesmo com
+duplo clique/corrida). Placeholders comuns renderizados no clique; `{senha:}` resolvido SO no
+POST; log com redacao. Envio bloqueado NAO decide a pendencia (continua na fila, com o motivo
+no toast).
+
+**Painel `/revisao` (rota atras do gate de conexao):** filtros Pendentes/Decididas/Expiradas +
+aba "Decisoes da IA" (`ai_decisions` recentes, somente leitura, resumo ja redigido). Card:
+contato, idade, mensagem original, sugestao MASCARADA (`[senha: x ....]` — valor nunca), chips
+origem/motivo/confianca/intent. Acoes so em pendencia acionavel; decidida TRAVA (botoes somem,
+acoes viram no-op). Enviar/Editar com modal de confirmacao. **Editar nao pode inserir
+`{senha:...}` NOVO** — so manter referencias que ja vieram na sugestao (aquelas nasceram de
+regra/entrada cuja guarda de escopo ja validou o contato); bloqueio com mensagem clara.
+**Badge no menu** com o contador de pendencias da conta.
+
+**Expiracao leve:** `ai.approval_expire_days` (config/ai.php, default 7; 0 = nunca).
+`PendingApproval::expireStale` roda lazy no mount do /revisao + comando `ai:expire-approvals`
+agendado diario (routes/console.php — cobre quando o scheduler estiver no ar). Expirada = nada
+enviado, visivel no filtro proprio.
+
+**Testes:** `RevisaoTest` (19): geracao por limiar/tema/high/senha, sem duplicata, envio
+aprovado (kill switch OFF envia — politica manual; opt-out e teto seguram; R2), edicao (texto
+editado sai; senha nova bloqueada; senha herdada ok com valor so no POST), ignorar, trava,
+segredo mascarado na tela, expiracao (lazy + comando), **isolamento entre contas** (pendencia
+da conta B invisivel e inacionavel na conta A). Suite completa: **298 verdes**, sequencial.
+
+## Pendente (Fatia 4)
+- **Fatia 4 (Camada 5):** "virar regra" (e "virar entrada da base") a partir de pendencia/decisao +
+  limiar/temas de aprovacao editaveis na UI + polimento.

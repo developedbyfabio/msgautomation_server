@@ -42,8 +42,10 @@ class Sender
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
-        // 1. claim/log
-        if ($mode === 'auto' && $incomingMessageId !== null) {
+        // 1. claim/log. O claim por incoming_message_id vale pro 'auto' E pro
+        //    'aprovacao' (Fatia 3): UMA resposta por mensagem recebida, mesmo com
+        //    duplo clique/corrida entre robo e humano.
+        if (in_array($mode, ['auto', 'aprovacao'], true) && $incomingMessageId !== null) {
             try {
                 $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId));
             } catch (UniqueConstraintViolationException) {
@@ -71,6 +73,14 @@ class Sender
 
                 return $log;
             }
+        }
+
+        // 3b. R2 do envio APROVADO (Fatia 3): re-checa SO o opt-out antes do POST
+        //     (o contato pode ter virado 'off' entre abrir a tela e clicar).
+        if ($mode === 'aprovacao' && $this->guard->contactMode($accountId, $jid) === 'off') {
+            $log->update(['status' => 'blocked', 'motivo' => 'opt_out']);
+
+            return $log;
         }
 
         // 3.5 — resolve {senha:nome} EM MEMORIA, so agora (no envio). O log ja guarda a

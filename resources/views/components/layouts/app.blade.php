@@ -1,13 +1,22 @@
 @php
     $robo = \App\Models\AutoReplySetting::query()->value('enabled');
+    // Fatia 3: contador de pendencias da IA (escopado pela conta-ancora, como as telas).
+    $navAccountId = (int) \App\Models\Account::query()->oldest('id')->value('id');
+    $expDias = (int) config('ai.approval_expire_days', 7);
+    $pendencias = \App\Models\PendingApproval::query()
+        ->where('account_id', $navAccountId)
+        ->where('status', 'pending')
+        ->when($expDias > 0, fn ($q) => $q->where('created_at', '>=', now()->subDays($expDias)))
+        ->count();
     $nav = [
-        ['conversas', 'Conversas', 'chat-bubble-left-right'],
-        ['contatos', 'Contatos', 'users'],
-        ['senhas', 'Senhas', 'key'],
-        ['regras', 'Regras', 'bolt'],
-        ['fluxos', 'Fluxos', 'rectangle-stack'],
-        ['conhecimento', 'Conhecimento', 'book-open'],
-        ['configuracoes', 'Configuracoes', 'cog-6-tooth'],
+        ['conversas', 'Conversas', 'chat-bubble-left-right', 0],
+        ['contatos', 'Contatos', 'users', 0],
+        ['senhas', 'Senhas', 'key', 0],
+        ['regras', 'Regras', 'bolt', 0],
+        ['fluxos', 'Fluxos', 'rectangle-stack', 0],
+        ['conhecimento', 'Conhecimento', 'book-open', 0],
+        ['revisao', 'Revisao', 'inbox', $pendencias],
+        ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
     ];
 @endphp
 <!DOCTYPE html>
@@ -24,7 +33,7 @@
         <div class="flex items-center gap-4 px-4 h-12">
             <span class="font-semibold tracking-tight">msgautomation</span>
             <nav class="flex items-center gap-1 text-sm">
-                @foreach ($nav as [$route, $label, $icon])
+                @foreach ($nav as [$route, $label, $icon, $badge])
                     <a href="{{ route($route) }}"
                        wire:navigate
                        @class([
@@ -34,6 +43,9 @@
                        ])>
                         <flux:icon :icon="$icon" variant="micro" />
                         <span>{{ $label }}</span>
+                        @if ($badge > 0)
+                            <span class="inline-flex min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">{{ $badge > 99 ? '99+' : $badge }}</span>
+                        @endif
                     </a>
                 @endforeach
             </nav>

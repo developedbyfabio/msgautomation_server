@@ -8,11 +8,15 @@ use App\Models\AutoReplySetting;
 use App\Models\Contact;
 
 /**
- * Freios anti-ban. Dois caminhos (R1):
- *  - 'auto'   (auto-resposta, Fatia 3): fromMe, grupos, opt-out, kill switch, janela,
- *              rate por contato + tetos protetivos.
- *  - 'manual' (envio humano/prova): SO tetos protetivos. NAO passa pelo kill switch,
- *              janela ou opt-out (intervencao manual e override).
+ * Freios anti-ban. Tres caminhos (R1):
+ *  - 'auto'      (auto-resposta, Fatia 3): fromMe, grupos, opt-out, kill switch,
+ *                 janela, rate por contato + tetos protetivos.
+ *  - 'manual'    (envio humano/prova): SO tetos protetivos. NAO passa pelo kill
+ *                 switch, janela ou opt-out (intervencao manual e override).
+ *  - 'aprovacao' (Camada 3 Fatia 3 — envio APROVADO por humano no /revisao): mesma
+ *                 politica do manual quanto a kill switch/janela/allowlist (decisao
+ *                 humana e override), MAS a guarda protetiva de OPT-OUT vale: contato
+ *                 'off' nunca recebe, nem aprovado. + tetos protetivos.
  *
  * Idempotencia da auto-resposta NAO vive aqui: e garantida pelo claim com indice
  * unico em auto_reply_logs.incoming_message_id (ver Sender).
@@ -56,7 +60,13 @@ class AntiBanGuard
             }
         }
 
-        // Tetos protetivos: valem para AMBOS os caminhos.
+        // Envio aprovado (Fatia 3): kill switch/janela/allowlist NAO se aplicam
+        // (decisao humana, como o manual) — mas opt-out e guarda protetiva dura.
+        if ($mode === 'aprovacao' && $this->contactMode($accountId, $jid) === 'off') {
+            return GuardDecision::block('opt_out');
+        }
+
+        // Tetos protetivos: valem para TODOS os caminhos.
         return $this->checkCaps($accountId, $settings);
     }
 

@@ -9,6 +9,7 @@ use App\Livewire\Conversas;
 use App\Livewire\Fluxos;
 use App\Livewire\Login;
 use App\Livewire\Regras;
+use App\Livewire\Revisao;
 use App\Livewire\Senhas;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/conversas', Conversas::class)->name('conversas');
         Route::get('/contatos', Contatos::class)->name('contatos');
         Route::get('/regras', Regras::class)->name('regras');
+        // Fila de aprovacao da IA (Fatia 3): envia mensagens -> atras do gate de conexao.
+        Route::get('/revisao', Revisao::class)->name('revisao');
         Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
     });
 });
