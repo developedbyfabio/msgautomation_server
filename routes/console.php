@@ -10,3 +10,7 @@ Artisan::command('inspire', function () {
 // Fatia 3 — expira pendencias de aprovacao velhas (nada e enviado). O /revisao
 // tambem expira lazy no mount; este agendamento cobre quando o scheduler rodar.
 Illuminate\Support\Facades\Schedule::command('ai:expire-approvals')->dailyAt('03:00');
+
+// Proativas P-3 — tick por minuto: so ENFILEIRA envios vencidos de contas com o
+// interruptor proativo ligado (hoje nenhuma; roda barato e nao faz nada).
+Illuminate\Support\Facades\Schedule::command('proactive:tick')->everyMinute();

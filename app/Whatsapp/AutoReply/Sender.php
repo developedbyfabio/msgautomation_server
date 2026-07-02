@@ -39,21 +39,23 @@ class Sender
         ?int $ruleId = null,
         bool $fromMe = false,
         bool $flow = false,
+        ?int $campaignId = null,
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
         // 1. claim/log. O claim por incoming_message_id vale pro 'auto' E pro
         //    'aprovacao' (Fatia 3): UMA resposta por mensagem recebida, mesmo com
-        //    duplo clique/corrida entre robo e humano.
+        //    duplo clique/corrida entre robo e humano. 'proactive' (P-3) nao tem
+        //    incoming (INICIA conversa): a idempotencia e do claim do TARGET.
         if (in_array($mode, ['auto', 'aprovacao'], true) && $incomingMessageId !== null) {
             try {
-                $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId));
+                $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId, $campaignId));
             } catch (UniqueConstraintViolationException) {
                 // Ja existe resposta pra essa mensagem recebida -> nao reenvia.
                 return AutoReplyLog::where('incoming_message_id', $incomingMessageId)->first();
             }
         } else {
-            $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId));
+            $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId, $campaignId));
         }
 
         // 2. freios (ruleId habilita o cooldown por regra — S2; flow isenta o intervalo
@@ -81,6 +83,19 @@ class Sender
             $log->update(['status' => 'blocked', 'motivo' => 'opt_out']);
 
             return $log;
+        }
+
+        // 3c. R2 PROATIVO (P-3): re-executa as condicoes VOLATEIS da jaula (switch
+        //     proprio, opt-out/opt-in do contato, janela, segredo) no INSTANTE do
+        //     POST. Quem chamou (job) devolve o claim ao ver 'blocked' aqui.
+        if ($mode === 'proactive') {
+            $recheck = app(\App\Whatsapp\Proactive\ProactiveGuard::class)
+                ->volatileRecheck($accountId, $jid, $text);
+            if (! $recheck->allowed) {
+                $log->update(['status' => 'blocked', 'motivo' => $recheck->reason]);
+
+                return $log;
+            }
         }
 
         // 3.5 — resolve {senha:nome} EM MEMORIA, so agora (no envio). O log ja guarda a
@@ -124,13 +139,14 @@ class Sender
         return $log;
     }
 
-    private function base(int $accountId, Channel $channel, string $jid, string $text, string $mode, ?int $incomingMessageId, ?int $ruleId): array
+    private function base(int $accountId, Channel $channel, string $jid, string $text, string $mode, ?int $incomingMessageId, ?int $ruleId, ?int $campaignId = null): array
     {
         return [
             'account_id' => $accountId,
             'channel_id' => $channel->id,
             'incoming_message_id' => $incomingMessageId,
             'rule_id' => $ruleId,
+            'campaign_id' => $campaignId, // P-3: origem proactive rastreada
             'remote_jid' => $jid,
             'mode' => $mode,
             // S4: o log guarda a REDACAO ({senha:nome} -> [senha: nome]); nunca o valor.

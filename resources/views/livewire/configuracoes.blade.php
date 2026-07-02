@@ -139,7 +139,11 @@
                     ])></span>
                 </button>
             </div>
-            <div class="mt-3 text-sm font-medium">Estado: {{ $proactive_enabled ? 'ON (jaula armada; disparo so na P-3)' : 'OFF (desligadas)' }}</div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <span class="font-medium">Estado: {{ $proactive_enabled ? 'ON' : 'OFF (desligadas)' }}</span>
+                @php $consumoDia = app(\App\Whatsapp\Proactive\ProactiveGuard::class)->dayCount(app(\App\Tenancy\AccountContext::class)->id()); @endphp
+                <span class="text-zinc-500">Consumo de hoje: <strong>{{ $consumoDia }}</strong> / {{ $proactive_daily_cap }} proativas</span>
+            </div>
 
             <div class="mt-3 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3 sm:grid-cols-4 dark:border-zinc-800">
                 <div>

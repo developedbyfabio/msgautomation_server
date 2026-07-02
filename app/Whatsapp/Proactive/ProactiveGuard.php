@@ -106,6 +106,57 @@ class ProactiveGuard
         return GuardDecision::allow();
     }
 
+    /**
+     * P-3 — R2 PROPRIO das proativas: re-checa SO as condicoes VOLATEIS no instante
+     * do POST (o estado pode mudar entre o allows/claim do job e o envio): kill
+     * switch proprio, contato (off / opt-in revogado), janela e segredo. NAO
+     * re-checa tetos — o claim ja consumiu a vaga (quem bloqueou aqui DEVOLVE o
+     * claim via release()).
+     */
+    public function volatileRecheck(int $accountId, string $remoteJid, string $content, ?Carbon $now = null): GuardDecision
+    {
+        $now = $now ?: Carbon::now();
+        $settings = $this->settingsFor($accountId);
+
+        if (! $settings->proactive_enabled) {
+            return GuardDecision::block('proactive_off');
+        }
+
+        $contact = Contact::withoutAccountScope()
+            ->where('account_id', $accountId)->where('remote_jid', $remoteJid)->first();
+        if ($contact === null || str_ends_with((string) $contact->remote_jid, '@g.us')) {
+            return GuardDecision::block('grupo');
+        }
+        if ($contact->auto_reply_mode === 'off') {
+            return GuardDecision::block('opt_out');
+        }
+        if (! $contact->proactive_opt_in) {
+            return GuardDecision::block('sem_opt_in');
+        }
+        if (! $this->withinWindow($settings, $now)) {
+            return GuardDecision::block('fora_da_janela_proativa');
+        }
+        if ($this->vault->hasRef($content)) {
+            return GuardDecision::block('contem_senha');
+        }
+
+        return GuardDecision::allow();
+    }
+
+    /** P-3 — DEVOLVE um claim consumido (R2 abortou depois do claim; nada foi enviado). */
+    public function release(int $accountId, int $contactId, ?Carbon $now = null): void
+    {
+        $now = $now ?: Carbon::now();
+        $day = $this->dayKey($accountId, $now);
+        $week = $this->weekKey($accountId, $contactId, $now);
+        if ((int) Cache::get($day, 0) > 0) {
+            Cache::decrement($day);
+        }
+        if ((int) Cache::get($week, 0) > 0) {
+            Cache::decrement($week);
+        }
+    }
+
     // ---- contadores: check (leitura) vs claim (consumo atomico) ----------------
 
     public function dayCount(int $accountId, ?Carbon $now = null): int

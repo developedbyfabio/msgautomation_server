@@ -105,6 +105,11 @@ class Contatos extends Component
                 'action' => $this->editProactiveOptIn ? 'grant' : 'revoke',
                 'origin' => 'manual',
             ]);
+
+            // P-3: revogacao manual tambem pula o contato em todas as campanhas.
+            if (! $this->editProactiveOptIn) {
+                \App\Models\CampaignTarget::skipAllPendingFor($this->accountId(), $contato->id, 'opt_out_revogado');
+            }
         }
 
         $this->cancelEdit();

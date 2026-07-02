@@ -1,0 +1,17 @@
+# Proativas P-3 — scheduler do Laravel (roda o schedule: proactive:tick por minuto,
+# ai:expire-approvals diario). SEM ele o tick nao roda. Instalar (gate do Fabio):
+#   sudo cp deploy/systemd/msgautomation-scheduler.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now msgautomation-scheduler
+[Unit]
+Description=msgautomation scheduler (Laravel schedule:work)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/srv/www/msgautomation
+ExecStart=/usr/bin/php /srv/www/msgautomation/artisan schedule:work
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

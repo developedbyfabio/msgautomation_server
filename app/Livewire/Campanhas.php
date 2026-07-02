@@ -49,6 +49,8 @@ class Campanhas extends Component
     public ?int $confirmingApproveId = null;
     public ?int $confirmingCancelId = null;
     public ?int $confirmingUnapproveId = null;
+    public ?int $confirmingPauseId = null;   // P-3: pausar/retomar
+    public ?int $targetsOfId = null;         // P-3: modal de targets (status/motivo/hora)
 
     // ---- form (draft) ---------------------------------------------------------
 
@@ -286,6 +288,65 @@ class Campanhas extends Component
         $this->dispatch('toast', message: 'Aprovacao desfeita: agenda apagada, campanha editavel de novo.');
     }
 
+    // ---- P-3: pausar / retomar / targets ------------------------------------------------
+
+    public function askPause(int $id): void
+    {
+        $c = $this->find($id);
+        if ($c && in_array($c->status, ['approved', 'running'], true)) {
+            $this->confirmingPauseId = $id;
+        }
+    }
+
+    public function cancelPause(): void
+    {
+        $this->confirmingPauseId = null;
+    }
+
+    public function pauseConfirmed(): void
+    {
+        $c = $this->find($this->confirmingPauseId);
+        $this->confirmingPauseId = null;
+        if ($c && in_array($c->status, ['approved', 'running'], true)) {
+            $c->update(['status' => 'paused']);
+            $this->dispatch('toast', message: 'Campanha pausada: os agendamentos pendentes param de ser processados.');
+        }
+    }
+
+    /** Retomar: volta pra running e RECALCULA scheduled_at dos vencidos (janela+jitter). */
+    public function resume(int $id, AgendaBuilder $agenda): void
+    {
+        $c = $this->find($id);
+        if (! $c || $c->status !== 'paused') {
+            return;
+        }
+
+        $vencidos = CampaignTarget::query()->where('campaign_id', $c->id)
+            ->where('status', 'pending')->where('scheduled_at', '<=', now())->get();
+        if ($vencidos->isNotEmpty()) {
+            $settings = \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()]);
+            $novos = $agenda->build($settings, now(), $vencidos->count());
+            foreach ($vencidos as $i => $t) {
+                $t->update(['scheduled_at' => $novos[$i]]);
+            }
+        }
+
+        $c->update(['status' => 'running']);
+        $this->dispatch('toast', message: 'Campanha retomada (vencidos reagendados na janela).');
+    }
+
+    public function showTargets(int $id): void
+    {
+        if ($this->find($id)) {
+            $this->targetsOfId = $id;
+        }
+    }
+
+    public function closeTargets(): void
+    {
+        $this->targetsOfId = null;
+    }
+
     // ---- consulta -----------------------------------------------------------------------
 
     private function find(?int $id): ?ProactiveCampaign
@@ -302,8 +363,19 @@ class Campanhas extends Component
     {
         $campanhas = ProactiveCampaign::query()->withCount([
             'targets as pendentes_count' => fn ($q) => $q->where('status', 'pending'),
+            'targets as sent_count' => fn ($q) => $q->where('status', 'sent'),
+            'targets as skipped_count' => fn ($q) => $q->where('status', 'skipped'),
+            'targets as failed_count' => fn ($q) => $q->where('status', 'failed'),
             'targets as total_count',
         ])->latest('id')->get();
+
+        // P-3: honestidade na tela — aprovadas aguardando o interruptor.
+        $proativasLigadas = (bool) \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_enabled;
+
+        $targetsDe = $this->targetsOfId
+            ? CampaignTarget::query()->where('campaign_id', $this->targetsOfId)
+                ->with('contact:id,push_name,remote_jid')->orderBy('scheduled_at')->limit(200)->get()
+            : collect();
 
         // Preview: retrato AGORA (re-resolve ao abrir; snapshot so na aprovacao).
         $preview = null;
@@ -331,6 +403,9 @@ class Campanhas extends Component
                     $q->where(fn ($w) => $w->where('push_name', 'like', $b)->orWhere('remote_jid', 'like', $b));
                 })->orderByRaw('COALESCE(push_name, remote_jid)')->limit(200)->get(['id', 'push_name', 'remote_jid'])
                 : collect(),
+            'proativasLigadas' => $proativasLigadas,
+            'targetsDe' => $targetsDe,
+            'pausing' => $this->confirmingPauseId ? $this->find($this->confirmingPauseId) : null,
             'approving' => $this->confirmingApproveId ? $this->find($this->confirmingApproveId) : null,
             'cancelling' => $this->confirmingCancelId ? $this->find($this->confirmingCancelId) : null,
             'unapproving' => $this->confirmingUnapproveId ? $this->find($this->confirmingUnapproveId) : null,

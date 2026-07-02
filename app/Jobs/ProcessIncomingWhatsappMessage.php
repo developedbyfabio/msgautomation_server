@@ -117,6 +117,9 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             'action' => 'revoke',
             'origin' => 'palavra',
         ]);
+
+        // P-3: revogou = pula o contato em TODAS as campanhas (targets pendentes).
+        \App\Models\CampaignTarget::skipAllPendingFor((int) $account->id, (int) $contato->id, 'opt_out_revogado');
     }
 
     private function settingsDe(Account $account): \App\Models\AutoReplySetting

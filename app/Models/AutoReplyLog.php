@@ -15,6 +15,7 @@ class AutoReplyLog extends Model
         'channel_id',
         'incoming_message_id',
         'rule_id',
+        'campaign_id', // P-3: envio proativo rastreado (mode='proactive')
         'remote_jid',
         'mode',
         'response_text',

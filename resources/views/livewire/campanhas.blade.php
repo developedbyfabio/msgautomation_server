@@ -24,9 +24,16 @@
                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' => $c->status === 'draft',
                                 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300' => $c->status === 'previewed',
-                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $c->status === 'approved',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => in_array($c->status, ['approved', 'running'], true),
+                                'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' => $c->status === 'done',
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' => $c->status === 'paused',
                                 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' => $c->status === 'cancelled',
-                            ])>{{ ['draft' => 'rascunho', 'previewed' => 'em preview', 'approved' => 'aprovada (aguarda disparo)', 'cancelled' => 'cancelada'][$c->status] ?? $c->status }}</span>
+                            ])>{{ ['draft' => 'rascunho', 'previewed' => 'em preview', 'approved' => 'aprovada', 'running' => 'em andamento', 'done' => 'concluida', 'paused' => 'pausada', 'cancelled' => 'cancelada'][$c->status] ?? $c->status }}</span>
+                            @if (in_array($c->status, ['approved', 'running'], true) && ! $proativasLigadas)
+                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300" title="O disparo so acontece com o interruptor de proativas LIGADO em /configuracoes.">
+                                    <flux:icon icon="pause" variant="micro" class="size-3" /> aguardando interruptor
+                                </span>
+                            @endif
                         </div>
                         <div class="mt-0.5 truncate text-sm text-zinc-500">{{ \Illuminate\Support\Str::limit($c->message, 100) }}</div>
                         <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-400">
@@ -39,6 +46,15 @@
                                 <span class="rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">inicio: {{ $c->start_at->paraExibicao()->format('d/m H:i') }}</span>
                             @endif
                         </div>
+                        @if ($c->total_count > 0)
+                            @php $pct = fn ($n) => $c->total_count ? round($n / $c->total_count * 100) : 0; @endphp
+                            <div class="mt-1.5 flex h-2 w-full max-w-sm overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800" title="{{ $c->sent_count }} enviada(s) · {{ $c->skipped_count }} pulada(s) · {{ $c->failed_count }} falhada(s) · {{ $c->pendentes_count }} pendente(s)">
+                                <div class="bg-emerald-500" style="width: {{ $pct($c->sent_count) }}%"></div>
+                                <div class="bg-amber-400" style="width: {{ $pct($c->skipped_count) }}%"></div>
+                                <div class="bg-red-500" style="width: {{ $pct($c->failed_count) }}%"></div>
+                            </div>
+                            <div class="mt-0.5 text-[10px] text-zinc-400">{{ $c->sent_count }} enviada(s) · {{ $c->skipped_count }} pulada(s) · {{ $c->failed_count }} falhada(s) · {{ $c->pendentes_count }} pendente(s)</div>
+                        @endif
                     </div>
 
                     <flux:dropdown position="bottom" align="end">
@@ -49,6 +65,15 @@
                             @if (in_array($c->status, ['draft', 'previewed'], true))
                                 <flux:menu.item wire:click="openPreview({{ $c->id }})" icon="eye">Preview + aprovar</flux:menu.item>
                                 <flux:menu.item wire:click="edit({{ $c->id }})" icon="pencil-square">Editar</flux:menu.item>
+                            @endif
+                            @if ($c->total_count > 0)
+                                <flux:menu.item wire:click="showTargets({{ $c->id }})" icon="list-bullet">Ver destinatarios</flux:menu.item>
+                            @endif
+                            @if (in_array($c->status, ['approved', 'running'], true))
+                                <flux:menu.item wire:click="askPause({{ $c->id }})" icon="pause">Pausar</flux:menu.item>
+                            @endif
+                            @if ($c->status === 'paused')
+                                <flux:menu.item wire:click="resume({{ $c->id }})" icon="play">Retomar</flux:menu.item>
                             @endif
                             @if ($c->status === 'approved')
                                 <flux:menu.item wire:click="askUnapprove({{ $c->id }})" icon="arrow-uturn-left">Des-aprovar (voltar a rascunho)</flux:menu.item>
@@ -267,6 +292,45 @@
                     <flux:icon icon="arrow-uturn-left" variant="micro" /> Des-aprovar
                 </button>
             </div>
+        </x-modal>
+    @endif
+
+    {{-- P-3 MODAL: pausar --}}
+    @if ($pausing)
+        <x-modal wireClose="cancelPause" title="Pausar campanha">
+            <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                Pausar <strong>"{{ $pausing->name }}"</strong>? Os agendamentos pendentes param de ser
+                processados ate voce retomar (ao retomar, horarios vencidos sao reagendados na janela).
+            </p>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelPause" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Voltar</button>
+                <button type="button" wire:click="pauseConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
+                    <flux:icon icon="pause" variant="micro" /> Pausar
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- P-3 MODAL: destinatarios (status + motivo + hora) --}}
+    @if ($targetsOfId)
+        <x-modal wireClose="closeTargets" title="Destinatarios" maxWidth="lg">
+            <ul class="divide-y divide-zinc-100 text-sm dark:divide-zinc-800">
+                @forelse ($targetsDe as $t)
+                    <li class="flex items-center justify-between gap-2 py-2" wire:key="tg-{{ $t->id }}">
+                        <span class="min-w-0 flex-1 truncate">{{ $t->contact?->push_name ?: \Illuminate\Support\Str::before((string) $t->contact?->remote_jid, '@') }}</span>
+                        <span @class([
+                            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+                            'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' => in_array($t->status, ['pending', 'processing'], true),
+                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $t->status === 'sent',
+                            'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' => $t->status === 'skipped',
+                            'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' => $t->status === 'failed',
+                        ])>{{ ['pending' => 'agendada', 'processing' => 'processando', 'sent' => 'enviada', 'skipped' => 'pulada', 'failed' => 'falhou'][$t->status] ?? $t->status }}@if ($t->skip_reason) · {{ $t->skip_reason }}@endif</span>
+                        <span class="shrink-0 text-xs text-zinc-400">{{ ($t->sent_at ?? $t->scheduled_at)?->paraExibicao()->format('d/m H:i') ?? '-' }}</span>
+                    </li>
+                @empty
+                    <li class="py-4 text-center text-xs text-zinc-400">Sem destinatarios.</li>
+                @endforelse
+            </ul>
         </x-modal>
     @endif
 </div>

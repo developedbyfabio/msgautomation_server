@@ -467,6 +467,38 @@ class TenantIsolationTest extends TestCase
         Http::assertNothingSent();
     }
 
+    // ---- Proativas (P-3): tick/dispatch por conta -------------------------------------------
+
+    public function test_tick_da_conta_a_nao_enfileira_targets_da_b(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::create(2026, 7, 1, 10, 0, 0, 'America/Sao_Paulo'));
+
+        // SO a conta A liga o interruptor; as duas tem campanha aprovada vencida.
+        AutoReplySetting::withoutAccountScope()->where('account_id', $this->a->id)->update(['proactive_enabled' => true]);
+        foreach ([[$this->a, true], [$this->b, false]] as [$conta, $ligada]) {
+            $contato = Contact::withoutAccountScope()->where('account_id', $conta->id)->where('remote_jid', self::JID)->first();
+            $contato->update(['proactive_opt_in' => true]);
+            $camp = \App\Models\ProactiveCampaign::create([
+                'account_id' => $conta->id, 'name' => 'C', 'message' => 'oi',
+                'audience_type' => 'contatos', 'audience_config' => ['contact_ids' => [$contato->id]],
+                'status' => 'approved',
+            ]);
+            \App\Models\CampaignTarget::create([
+                'campaign_id' => $camp->id, 'contact_id' => $contato->id,
+                'status' => 'pending', 'scheduled_at' => now()->subMinute(),
+            ]);
+        }
+
+        $this->artisan('proactive:tick')->assertSuccessful();
+
+        // UM job (da A); NENHUM da B (switch OFF).
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\SendProactiveMessage::class, 1);
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\SendProactiveMessage::class,
+            fn ($job) => $job->accountId === $this->a->id);
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void
