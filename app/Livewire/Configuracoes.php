@@ -414,6 +414,8 @@ class Configuracoes extends Component
         // palavra que esta SALVA (o form pode ter valor ainda nao persistido).
         return view('livewire.configuracoes', [
             'footerPreview' => $responder->render($this->proactive_optout_footer),
+            // CH-1: badge somente-leitura do provedor do canal da conta.
+            'canal' => \App\Models\Channel::query()->oldest('id')->first(),
         ]);
     }
 }

@@ -25,14 +25,17 @@ class VerifyWebhookSecret
     {
         // Caminho 1 — token por canal na URL (bypass nomeado: lookup de canal e
         // pre-contexto por natureza; quem resolve a CONTA e o job, pela instancia).
+        // CH-1: o canal resolvido DELEGA a verificacao ao provider dele (Evolution:
+        // o proprio token, tempo constante; Cloud API no CH-2: challenge + HMAC).
         $token = (string) $request->route('token', '');
         if ($token !== '') {
-            $conhecido = Channel::withoutAccountScope()
+            $channel = Channel::withoutAccountScope()
                 ->whereNotNull('webhook_token')
                 ->where('webhook_token', $token)
-                ->exists();
+                ->first();
 
-            if ($conhecido) {
+            if ($channel !== null && app(\App\Channels\ProviderRegistry::class)
+                ->for($channel)->verifyWebhook($request, $channel)) {
                 return $next($request);
             }
 

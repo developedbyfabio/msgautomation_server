@@ -4,9 +4,10 @@ namespace App\Providers;
 
 use App\Ai\Drivers\GeminiDriver;
 use App\Contracts\AiClassifier;
+use App\Channels\Evolution\EvolutionProvider;
+use App\Channels\ProviderRegistry;
 use App\Contracts\WhatsappGateway;
 use App\Tenancy\AccountContext;
-use App\Whatsapp\Drivers\EvolutionDriver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
@@ -19,8 +20,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Abstracao de driver: hoje Evolution; troca de provedor sem mexer no resto.
-        $this->app->bind(WhatsappGateway::class, EvolutionDriver::class);
+        // CH-1 — canais multi-provedor: resolucao POR CANAL via registry.
+        $this->app->singleton(ProviderRegistry::class);
+        $this->app->singleton(EvolutionProvider::class);
+        // Alias DEPRECADO do webhook (normalizeIncoming): o job segue recebendo o
+        // mesmo contrato; morre quando a rota resolver o provider (CH-2).
+        $this->app->bind(WhatsappGateway::class, EvolutionProvider::class);
 
         // Classificador de IA (Camada 3): hoje Gemini; contrato abstrato pra trocar depois.
         $this->app->bind(AiClassifier::class, GeminiDriver::class);

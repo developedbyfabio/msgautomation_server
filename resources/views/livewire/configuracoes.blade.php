@@ -2,6 +2,21 @@
     <div class="mx-auto max-w-3xl p-6 space-y-6">
         <h1 class="text-xl font-semibold">Configuracoes / Freios</h1>
 
+        {{-- CANAL (CH-1: badge somente-leitura do provedor) --}}
+        @if ($canal)
+            <div class="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div class="flex items-center gap-2">
+                    <flux:icon icon="signal" variant="micro" class="text-zinc-400" />
+                    <span class="font-medium">Canal:</span>
+                    <span class="text-zinc-500">{{ $canal->instance }}</span>
+                </div>
+                <span class="rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                    title="Provedor deste canal. Outros provedores (WhatsApp Cloud API oficial) chegam nas fatias CH-2+.">
+                    {{ ['evolution' => 'Evolution', 'cloud_api' => 'Cloud API'][$canal->provider] ?? $canal->provider }}
+                </span>
+            </div>
+        @endif
+
         {{-- KILL SWITCH --}}
         <div @class([
             'rounded-xl border p-5',

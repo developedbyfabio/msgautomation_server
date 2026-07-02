@@ -29,6 +29,8 @@ use Illuminate\Support\Facades\Cache;
  *  g) teto_dia_proativo    — teto diario da CONTA (D5: 20/dia)
  *  h) teto_semana_contato  — limite por CONTATO/semana (D5: 1/semana)
  *  i) contem_senha         — {senha:} e PROIBIDO em proativa, SEM excecao
+ *  j) canal_sem_proativa_livre — CH-1: capacidade do provedor do canal (Cloud API
+ *     so envia proativa por TEMPLATE, CH-3). Evolution declara TRUE — nunca dispara.
  *
  * Contadores em cache (Redis em producao), por conta e por conta+contato, com
  * dia/semana no fuso de exibicao (SP). check (leitura) NAO consome; claim()
@@ -49,6 +51,16 @@ class ProactiveGuard
         // a) kill switch proprio (nasce OFF; independente do kill switch reativo).
         if (! $settings->proactive_enabled) {
             return GuardDecision::block('proactive_off');
+        }
+
+        // j estrutural, barato e cedo) CH-1 — capacidade do canal: provedor sem
+        // proativa de texto livre (Cloud API) nunca dispara campanha nesta fase.
+        // Evolution declara TRUE; conta sem canal nao decide aqui (falha adiante
+        // no envio por 'sem_canal', como sempre).
+        $canal = \App\Models\Channel::defaultFor($accountId);
+        if ($canal !== null && ! app(\App\Channels\ProviderRegistry::class)
+            ->for($canal)->capabilities()->proativaLivre) {
+            return GuardDecision::block('canal_sem_proativa_livre');
         }
 
         $contact = Contact::withoutAccountScope()

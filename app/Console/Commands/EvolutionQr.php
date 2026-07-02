@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Whatsapp\EvolutionApi;
+use App\Channels\Evolution\EvolutionProvider;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
@@ -16,8 +16,9 @@ class EvolutionQr extends Command
 
     protected $description = 'Gera/exibe o QR da instancia da Evolution para conectar o numero';
 
-    public function handle(EvolutionApi $api): int
+    public function handle(EvolutionProvider $provider): int
     {
+        $api = $provider->api(); // CH-1: comando opera VIA provider
         $resp = $api->connect();
 
         if (! $resp->successful()) {

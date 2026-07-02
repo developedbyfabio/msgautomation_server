@@ -1,7 +1,7 @@
 # 10 — Canais multi-provedor (Evolution + WhatsApp Cloud API oficial)
 
-**Status: DESENHO — AGUARDANDO APROVACAO DO FABIO. Nada implementado.**
-Data: 2026-07-02 · Baseline: commit `7ed3ef0`, suite 476 verdes.
+**Status: DESENHO APROVADO (decisoes CH-D1..D5 abaixo) · CH-1 ENTREGUE (2026-07-02).**
+Baseline do desenho: `7ed3ef0` (476 verdes) · Pos-CH-1: 485 verdes.
 
 ## Visao
 
@@ -271,9 +271,9 @@ grupos/skip_groups onde nao se aplica), onboarding (formulario por provedor).
   conta ja nasce com `provider`) -> **CH-2** -> MT-3+CH-4 juntos -> CH-3.
   Alternativa: MT-1..3 inteiros antes de CH-1, se a conta 2 (Evolution) for
   mais urgente que o canal oficial.
-- **CH-D2 — HTTPS.** Recomendo **Caddy + subdominio proprio** pra producao;
-  **tunel (Cloudflare/ngrok) so pra validar CH-2 em dev**. Precisa: um dominio
-  e a porta 443 liberada. Decidir antes de CH-2.
+- **CH-D2 — HTTPS. DECIDIDO (Fabio): Cloudflare Tunnel**, com ingress SO na
+  rota do webhook (o resto do app continua local). Sem porta aberta no servidor;
+  o tunel publica apenas `/webhook/cloud/*`. Implementacao na CH-2.
 - **CH-D3 — Oficial reativo-only na fase 1.** Recomendo **SIM**: e onde o custo
   e zero e o produto ja e forte; proativa oficial espera a CH-3 (templates).
 - **CH-D4 — Coluna `evolution_message_id`.** Recomendo **manter o nome da coluna**
@@ -289,3 +289,52 @@ grupos/skip_groups onde nao se aplica), onboarding (formulario por provedor).
 3. Limites do numero de teste (quantos destinatarios verificados).
 4. Tiers atuais de conversas iniciadas e mecanica da quality rating.
 5. Endpoint de sanity pra "testar conexao" sem custo.
+
+
+---
+
+## CH-1 — ENTREGUE (2026-07-02)
+
+Contrato + Evolution como primeiro provider, com ZERO mudanca de comportamento
+(disciplina do MT-0): os 476 testes anteriores passaram INTACTOS (ajuste de
+setup em 2 arquivos que instanciavam o driver antigo; NENHUMA expectativa
+mudou) + 9 testes novos = 485 verdes. Smoke do webhook vivo pos-restart:
+endpoint 200 com o secret retrocompat, worker processou via provider, evento
+nao-mensagem descartado sem persistir.
+
+O que entrou:
+- `channels.provider` (default evolution, backfill) + `channels.credentials`
+  (cifrado, encrypted:array, NULL — MT-2 preenche; accessor
+  `EvolutionProvider::credentialsFor` le canal -> fallback env, nunca loga);
+- `App\Channels\ChannelProvider` (key, capabilities, sendText(Channel,...),
+  verifyWebhook, normalizeIncoming, connectionState) + `ChannelCapabilities`
+  + `ProviderRegistry` (map extensivel; `for(Channel)`; desconhecido = excecao
+  alta) + `UnknownChannelProviderException`;
+- `EvolutionProvider` absorveu: sendText (ex-EvolutionDriver), adaptador
+  messages.upsert catch-all, verificacao do token do webhook (MT-0), estado de
+  conexao normalizado; `EvolutionApi` MOVIDO pra `App\Channels\Evolution` como
+  detalhe interno (`provider->api(canal)`); EvolutionDriver REMOVIDO;
+- consumidores rewired: Sender (registry POR CANAL do envio), middleware do
+  webhook (canal resolvido delega verify ao provider), Conexao/StatusConexao,
+  GroupNameResolver (consulta `capabilities()->grupos`), 3 comandos de console,
+  proativa com `Channel::defaultFor()` explicito (mesma semantica oldest-id);
+- capacidades CONSULTADAS: freio novo `canal_sem_proativa_livre` no
+  ProactiveGuard (10o freio; nunca dispara com Evolution) e gancho
+  `mensagemLivreForaDaJanela` no Sender pros modos manual/aprovacao (motivo
+  `janela_24h`; no-op com Evolution — CH-2 troca o "assume fechada" pelo
+  `last_inbound_at` real);
+- DTO renomeado (CH-D4): `IncomingMessageData::providerMessageId`; coluna
+  `evolution_message_id` MANTIDA (legado semantico documentado);
+- `WhatsappGateway` reduzido a alias DEPRECADO do webhook (so
+  normalizeIncoming; binding -> EvolutionProvider) — morre quando a rota
+  resolver o provider (CH-2);
+- UI: badge somente-leitura do provedor no card do canal em /configuracoes.
+
+**JID canonico (registrado):** o formato interno e o JID atual
+(`@s.whatsapp.net`/`@g.us`) em todo o dominio; adaptadores convertem NA BORDA
+(Cloud API: `wa_id` -> jid na entrada, digitos na saida). Nenhum codigo de
+dominio muda por provedor.
+
+**Proximo da ordem CH-D1:** MT-1/MT-2 pelo prompt estagiado
+`msgautomation-mt123-futuro.md` — **COM o Fabio presente (tem gates)**; CH-2
+(Cloud API reativo-only, com o Cloudflare Tunnel do CH-D2) depois.

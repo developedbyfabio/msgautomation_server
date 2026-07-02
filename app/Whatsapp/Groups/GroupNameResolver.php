@@ -4,7 +4,7 @@ namespace App\Whatsapp\Groups;
 
 use App\Jobs\ResolveGroupName;
 use App\Models\Group;
-use App\Whatsapp\EvolutionApi;
+use App\Channels\Evolution\EvolutionProvider;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class GroupNameResolver
 {
-    public function __construct(private EvolutionApi $api)
+    public function __construct(private EvolutionProvider $provider)
     {
     }
 
@@ -53,9 +53,14 @@ class GroupNameResolver
         if (! str_ends_with($jid, '@g.us')) {
             return null;
         }
+        // CH-1: capacidade CONSULTADA — provedor sem grupos (Cloud API) nao busca
+        // metadado nenhum. Evolution declara TRUE (no-op hoje).
+        if (! $this->provider->capabilities()->grupos) {
+            return null;
+        }
 
         try {
-            $resp = $this->api->groupInfo($jid);
+            $resp = $this->provider->api()->groupInfo($jid);
             if (! $resp->successful()) {
                 return null;
             }

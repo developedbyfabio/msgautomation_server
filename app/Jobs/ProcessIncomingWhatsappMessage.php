@@ -134,7 +134,7 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
                 'account_id' => $account->id,
                 'channel_id' => $channel->id,
                 'instance' => $data->instance,
-                'evolution_message_id' => $data->evolutionMessageId,
+                'evolution_message_id' => $data->providerMessageId, // CH-D4: coluna legada, DTO neutro
                 'remote_jid' => $data->remoteJid,
                 'from_me' => $data->fromMe,
                 'push_name' => $data->pushName,

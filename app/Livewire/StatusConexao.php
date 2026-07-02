@@ -3,7 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\Channel;
-use App\Whatsapp\EvolutionApi;
+use App\Channels\Evolution\EvolutionProvider;
 use Livewire\Component;
 
 /**
@@ -25,11 +25,11 @@ class StatusConexao extends Component
     public bool $confirmingDisconnect = false;
     public int $blips = 0;
 
-    public function refresh(EvolutionApi $api): void
+    public function refresh(EvolutionProvider $provider): void
     {
         $estado = 'desconhecido';
         try {
-            $resp = $api->connectionState();
+            $resp = $provider->api()->connectionState();
             if ($resp->successful()) {
                 $estado = (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido');
             }
@@ -84,12 +84,12 @@ class StatusConexao extends Component
     }
 
     /** Desconecta de verdade (logout na Evolution). So por acao explicita + confirmacao. */
-    public function disconnectConfirmed(EvolutionApi $api)
+    public function disconnectConfirmed(EvolutionProvider $provider)
     {
         $this->confirmingDisconnect = false;
 
         try {
-            $resp = $api->logout();
+            $resp = $provider->api()->logout();
             if (! $resp->successful()) {
                 $this->dispatch('toast', message: 'Falha ao desconectar (HTTP ' . $resp->status() . ').', type: 'error');
 
@@ -108,14 +108,14 @@ class StatusConexao extends Component
         return $this->redirectRoute('conexao', navigate: true);
     }
 
-    public function abrirQr(EvolutionApi $api): void
+    public function abrirQr(EvolutionProvider $provider): void
     {
         $this->showQr = true;
         $this->qr = null;
         $this->qrError = null;
 
         try {
-            $resp = $api->connect();
+            $resp = $provider->api()->connect();
             if (! $resp->successful()) {
                 $this->qrError = 'Falha ao obter o QR (HTTP ' . $resp->status() . ').';
 

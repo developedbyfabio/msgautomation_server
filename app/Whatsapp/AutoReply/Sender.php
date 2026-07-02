@@ -2,7 +2,7 @@
 
 namespace App\Whatsapp\AutoReply;
 
-use App\Contracts\WhatsappGateway;
+use App\Channels\ProviderRegistry;
 use App\Models\AutoReplyLog;
 use App\Models\Channel;
 use App\Whatsapp\Exceptions\WhatsappSendException;
@@ -23,7 +23,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 class Sender
 {
     public function __construct(
-        private WhatsappGateway $gateway,
+        private ProviderRegistry $providers,
         private AntiBanGuard $guard,
         private Throttle $throttle,
         private SecretVault $vault,
@@ -98,6 +98,19 @@ class Sender
             }
         }
 
+        // 3d. CH-1 — capacidade do canal (consultada, nunca assumida): provedor sem
+        //     mensagem livre fora da janela de 24h (Cloud API, CH-2) BLOQUEIA os
+        //     modos que podem cair fora dela (manual/aprovacao tardios). Reativo
+        //     (auto/flow) responde segundos apos o inbound — janela aberta por
+        //     construcao. CH-2 troca o "assume fechada" pelo last_inbound_at real.
+        //     Evolution declara TRUE — este freio NUNCA dispara hoje (no-op).
+        if (in_array($mode, ['manual', 'aprovacao'], true)
+            && ! $this->providers->for($channel)->capabilities()->mensagemLivreForaDaJanela) {
+            $log->update(['status' => 'blocked', 'motivo' => 'janela_24h']);
+
+            return $log;
+        }
+
         // 3.5 — resolve {senha:nome} EM MEMORIA, so agora (no envio). O log ja guarda a
         // versao REDIGIDA (ver base()); o plaintext nunca e persistido nem logado.
         // Senha ausente -> falha controlada (nao envia meia-resposta).
@@ -109,9 +122,10 @@ class Sender
             return $log;
         }
 
-        // 4. envio (usa o texto resolvido; descartado apos o POST)
+        // 4. envio (usa o texto resolvido; descartado apos o POST) — CH-1: pelo
+        //    provider DO CANAL (credenciais do canal com fallback no env).
         try {
-            $sent = $this->gateway->sendText($channel->instance, $jid, $textoEnvio);
+            $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio);
         } catch (WhatsappSendException) {
             $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
 

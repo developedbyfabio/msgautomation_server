@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\IncomingMessage;
-use App\Whatsapp\EvolutionApi;
+use App\Channels\Evolution\EvolutionProvider;
 use Illuminate\Console\Command;
 
 /**
@@ -16,8 +16,9 @@ class EvolutionStatus extends Command
 
     protected $description = 'Estado da conexao da instancia + ultimas mensagens recebidas';
 
-    public function handle(EvolutionApi $api): int
+    public function handle(EvolutionProvider $provider): int
     {
+        $api = $provider->api(); // CH-1: comando opera VIA provider
         $resp = $api->connectionState();
         if ($resp->successful()) {
             $state = data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido';

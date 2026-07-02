@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Whatsapp\EvolutionApi;
+use App\Channels\Evolution\EvolutionProvider;
 use Illuminate\Console\Command;
 
 /**
@@ -15,8 +15,9 @@ class EvolutionSetup extends Command
 
     protected $description = 'Cria a instancia (se faltar) e configura o webhook de mensagens recebidas';
 
-    public function handle(EvolutionApi $api): int
+    public function handle(EvolutionProvider $provider): int
     {
+        $api = $provider->api(); // CH-1: comando opera VIA provider
         $this->info("Instancia: {$api->instance()}");
 
         if ($api->instanceExists()) {

@@ -12,7 +12,7 @@ use App\Whatsapp\AutoReply\AntiBanGuard;
 use App\Whatsapp\AutoReply\GuardDecision;
 use App\Whatsapp\AutoReply\Sender;
 use App\Whatsapp\AutoReply\Throttle;
-use App\Whatsapp\Drivers\EvolutionDriver;
+use App\Channels\Evolution\EvolutionProvider;
 use App\Whatsapp\Exceptions\WhatsappSendException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -100,7 +100,9 @@ class AutoReplySendTest extends TestCase
     public function test_driver_send_text_sucesso(): void
     {
         $this->fakeOk();
-        $sent = app(EvolutionDriver::class)->sendText('fabio-pessoal', '5541999990000@s.whatsapp.net', 'ola');
+        // CH-1 (setup): transporte vive no provider; credenciais vazias -> env.
+        $canal = new Channel(['instance' => 'fabio-pessoal']);
+        $sent = app(EvolutionProvider::class)->sendText($canal, '5541999990000@s.whatsapp.net', 'ola');
         $this->assertSame('PROVIDERMSG123', $sent->providerMessageId);
         Http::assertSent(fn ($r) => str_contains($r->url(), '/message/sendText/fabio-pessoal')
             && $r['number'] === '5541999990000' && $r['text'] === 'ola');
@@ -110,7 +112,7 @@ class AutoReplySendTest extends TestCase
     {
         Http::fake(['*' => Http::response(['error' => 'x'], 500)]);
         $this->expectException(WhatsappSendException::class);
-        app(EvolutionDriver::class)->sendText('fabio-pessoal', '5541999990000@s.whatsapp.net', 'ola');
+        app(EvolutionProvider::class)->sendText(new Channel(['instance' => 'fabio-pessoal']), '5541999990000@s.whatsapp.net', 'ola');
     }
 
     // ---- R1: manual ignora kill switch, respeita tetos ----------------------
@@ -324,7 +326,7 @@ class AutoReplySendTest extends TestCase
             }
         };
 
-        $sender = new Sender(app(\App\Contracts\WhatsappGateway::class), $stubGuard, app(Throttle::class), app(\App\Whatsapp\Secrets\SecretVault::class));
+        $sender = new Sender(app(\App\Channels\ProviderRegistry::class), $stubGuard, app(Throttle::class), app(\App\Whatsapp\Secrets\SecretVault::class));
         $log = $sender->send('auto', $channel, $im->remote_jid, 'resp', $im->id);
 
         $this->assertSame('blocked', $log->status);

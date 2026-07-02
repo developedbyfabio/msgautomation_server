@@ -117,8 +117,8 @@ class SendProactiveMessage implements ShouldQueue
             return;
         }
 
-        $canal = \App\Models\Channel::withoutAccountScope()
-            ->where('account_id', $this->accountId)->oldest('id')->first();
+        // CH-1: escolha EXPLICITA do canal da conta (mesma semantica historica).
+        $canal = \App\Models\Channel::defaultFor($this->accountId);
         if (! $canal) {
             $guard->release($this->accountId, (int) $contact->id);
             $this->finalizar($target, $campaign, ['status' => 'failed', 'skip_reason' => 'sem_canal']);

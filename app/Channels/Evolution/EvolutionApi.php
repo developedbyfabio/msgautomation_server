@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Whatsapp;
+namespace App\Channels\Evolution;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * Cliente de GERENCIA da Evolution (criar instancia, configurar webhook, QR, estado).
- * Separado do EvolutionDriver (que so normaliza payloads de entrada).
- *
- * Camada 1: nada aqui envia mensagem. Sao chamadas de administracao da instancia.
+ * CH-1: detalhe INTERNO do EvolutionProvider — construa via provider->api(canal),
+ * que resolve as credenciais (canal cifrado -> fallback env). Nada aqui envia
+ * mensagem de conversa; sao chamadas de administracao da instancia.
  */
 class EvolutionApi
 {

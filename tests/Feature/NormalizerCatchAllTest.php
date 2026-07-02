@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\ProcessIncomingWhatsappMessage;
 use App\Models\IncomingMessage;
-use App\Whatsapp\Drivers\EvolutionDriver;
+use App\Channels\Evolution\EvolutionProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,9 +17,10 @@ class NormalizerCatchAllTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function driver(): EvolutionDriver
+    private function driver(): EvolutionProvider
     {
-        return app(EvolutionDriver::class);
+        // CH-1 (setup): o adaptador vive no EvolutionProvider — mesmo contrato.
+        return app(EvolutionProvider::class);
     }
 
     private function payload(string $messageType, array $message, array $over = []): array
