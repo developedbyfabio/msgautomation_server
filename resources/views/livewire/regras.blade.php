@@ -377,6 +377,11 @@
                                         @elseif ($ai['modo'] === 'conhecimento')
                                             <p class="flex items-center gap-1.5 mt-1.5 text-zinc-500"><flux:icon icon="book-open" variant="micro" /> Modo conhecimento, mas nenhuma entrada da base e candidata pra este contato (ativa, permitida, low/medium).</p>
                                         @endif
+                                        @php $temaLabels = \App\Livewire\Configuracoes::AI_TOPIC_LABELS; @endphp
+                                        <p class="mt-1.5 text-[11px] text-zinc-400">
+                                            Config vigente: limiar <strong>{{ number_format($ai['limiar'] ?? 0.75, 2) }}</strong> (abaixo escala) ·
+                                            temas com aprovacao: {{ ! empty($ai['temas']) ? collect($ai['temas'])->map(fn ($t) => $temaLabels[$t] ?? $t)->implode(', ') : 'nenhum' }}.
+                                        </p>
                                     @elseif ($ai['contato_ligada'] && ! $ai['global_ligada'])
                                         <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada no contato, mas o kill switch da IA esta OFF (Configuracoes). Nao atuaria.</p>
                                     @elseif ($ai['contato_ligada'] && $ai['candidatas'] === 0)

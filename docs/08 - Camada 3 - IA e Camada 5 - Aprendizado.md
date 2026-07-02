@@ -1,11 +1,12 @@
 # Camada 3 (IA classificadora) + Camada 5 (aprendizado via UI)
 
-Status: **Fatias 1, 2 e 3 ENTREGUES** (driver Gemini + classificador + toggles + escalar; base de
-conhecimento + modo `conhecimento` + valores locais; fila de aprovacao + painel /revisao). Fatia 4
-pendente (ver fim). A IA e **FALLBACK** que encaixa no pipeline atual — NAO reescreve o que
-funciona. Kill switch do robo (`auto_reply_settings.enabled`) intocado. **Tudo nasce OFF:** com as
-Fatias 1-3 no ar e nada ligado, o robo se comporta EXATAMENTE como antes (pendencias so nascem de
-contatos com IA ligada; NADA e enviado sem clique humano no /revisao).
+Status: **ARCO COMPLETO — Fatias 1, 2, 3 e 4 ENTREGUES** (driver Gemini + classificador + toggles +
+escalar; base de conhecimento + modo `conhecimento` + valores locais; fila de aprovacao + painel
+/revisao; "virar regra"/"virar entrada" + limiar/temas editaveis). A IA e **FALLBACK** que encaixa
+no pipeline atual — NAO reescreve o que funciona. Kill switch do robo (`auto_reply_settings.enabled`)
+intocado. **Tudo nasce OFF:** com as Fatias 1-4 no ar e nada ligado, o robo se comporta EXATAMENTE
+como antes. NADA e enviado nem aprendido sem clique humano (a IA nunca grava regra sozinha).
+Proximo passo do roadmap: **MT-0** (doc 09).
 
 > Detalhe do que foi construido: ver secoes "Fatia N — entregue" no fim.
 
@@ -114,6 +115,7 @@ recebimento — latencia/429 nao seguram o webhook nem a persistencia. Pre-checa
   respeitando freios. Default `intencao` conservador.
 - **Fatia 2** — base de conhecimento + sensibilidade + resolucao local de valores. **ENTREGUE.**
 - **Fatia 3** — `pending_approvals` + painel `/revisao` (Enviar/Editar/Ignorar). **ENTREGUE.**
+- **Fatia 4 (Camada 5)** — "virar regra"/"virar entrada" + limiar/temas na UI. **ENTREGUE.**
 - **Fatia 4 (Camada 5)** — "virar regra" + limiar/temas finos na UI + polimento.
 
 ## Decisoes da direcao (aprovadas)
@@ -292,6 +294,50 @@ editado sai; senha nova bloqueada; senha herdada ok com valor so no POST), ignor
 segredo mascarado na tela, expiracao (lazy + comando), **isolamento entre contas** (pendencia
 da conta B invisivel e inacionavel na conta A). Suite completa: **298 verdes**, sequencial.
 
-## Pendente (Fatia 4)
-- **Fatia 4 (Camada 5):** "virar regra" (e "virar entrada da base") a partir de pendencia/decisao +
-  limiar/temas de aprovacao editaveis na UI + polimento.
+---
+
+## Fatia 4 — entregue (fecha a Camada 5)
+
+**O que e:** o loop de aprendizado com o Fabio curando. Pendencia (qualquer status) ou decisao em
+que a IA respondeu sozinha pode ser **promovida** com um clique a regra deterministica ou entrada
+da base — da proxima vez e gratis, instantaneo e sem API. A IA nunca grava nada sozinha.
+
+**Schema (migration aditiva `2026_07_02_000024`):** `pending_approvals` e `ai_decisions` +=
+`promoted_rule_id` / `promoted_knowledge_id` (sem FK dura — historico sobrevive a exclusao).
+Promocao e UNICA por item (promovida trava; chip "virou regra/entrada #N" na UI).
+
+**Caminho OFICIAL (sem caminho paralelo):** a persistencia + guardas de negocio do CRUD foram
+extraidas pra `RuleWriter` (app/Whatsapp/AutoReply) e `KnowledgeWriter` (app/Ai), usados pelo
+/regras, /conhecimento E pela promocao do /revisao. Guardas valendo em TODOS os caminhos:
+regex compila; senha ({senha:}) exige escopo "Contatos Especificos" + gatilho estrito (regras);
+**NOVO:** conteudo com {senha:} exige contatos restritos tambem na base de conhecimento
+(endurecimento coerente com S5; vale no CRUD e na promocao).
+
+**Fluxo "virar regra" (`Revisao::startPromote/confirmPromoteRule`):** modal PRE-PREENCHIDO —
+gatilho = mensagem original (tipo default "contem", trocavel), resposta = sugestao/texto enviado
+(template cru, {senha:} intacto), escopo default "So este contato" (global BLOQUEADO se a resposta
+tem {senha:}), checkbox "IA casa parecidas" ja marcado com a mensagem original como primeira
+frase-exemplo (o aprendizado alimenta o casamento por IA). Ao salvar: `RuleConflictDetector`
+avisa sobreposicao com regra/fluxo (toast, nao bloqueia — como hoje). Fonte marcada promovida.
+
+**Fluxo "virar entrada" (`confirmPromoteKnowledge`):** titulo sugerido (intent/mensagem),
+conteudo = resposta, sensibilidade default medium, restricao default ao contato da pendencia
+({senha:} nao permite desmarcar a restricao).
+
+**Configuracoes finas (/configuracoes, card IA):** limiar de confianca editavel (0.50-0.95,
+step 0.05) e temas de aprovacao (4 checkboxes) com tooltips honestos. ENDURECER salva direto;
+AFROUXAR (reduzir limiar pra baixo de 0.70 / desmarcar tema) abre modal de confirmacao listando
+o que esta sendo liberado (mesmo padrao do kill switch). Mudancas valem so pra decisoes futuras.
+Testador de regras mostra a config vigente (limiar/temas) na linha da IA do dry-run.
+
+**Testes:** `PromocaoTest` (13) + `ConfigIaTest` (9): promocao completa (trigger/response/escopo/
+exemplos), prova do loop (regra promovida casa a mesma mensagem SEM IA — zero chamadas), senha
+nunca global/irrestrita (regra e base, promocao e CRUD), conflito avisa sem bloquear, promocao
+unica, promocao por decisao usa o texto ENVIADO, limiar/temas com confirmacao ao afrouxar +
+efeito real no pipeline + payload minimizado, isolamento entre contas. Suite completa:
+**320 verdes**, sequencial.
+
+## Pendente
+- Nada neste arco. Proxima fatia do roadmap: **MT-0** (scoping estrutural multi-tenant — doc 09).
+- Horizonte da Camada 5 (registrado, sem prazo): promover direto do /conversas; sugerir frases-
+  exemplo em lote a partir do historico de decisoes.

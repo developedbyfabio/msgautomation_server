@@ -142,9 +142,10 @@ class RuleTester
         }
 
         $modo = (string) ($contact->ai_mode ?: 'intencao');
+        $settings = $this->guard->settingsFor($accountId);
 
         return [
-            'global_ligada' => (bool) $this->guard->settingsFor($accountId)->ai_enabled,
+            'global_ligada' => (bool) $settings->ai_enabled,
             'contato_ligada' => (bool) $contact->ai_enabled && $modo !== 'rules_only',
             'modo' => $modo,
             'candidatas' => $this->matcher->aiCandidates($accountId, $channelId, $jid)->count(),
@@ -152,6 +153,9 @@ class RuleTester
                 ? \App\Models\Knowledge::query()->candidatesFor($accountId, (int) $contact->id)
                     ->whereIn('sensitivity', ['low', 'medium'])->count()
                 : 0,
+            // Fatia 4: configuracao vigente, pro dry-run mostrar com o que a IA decide.
+            'limiar' => (float) $settings->ai_confidence_threshold,
+            'temas' => $settings->aiApprovalTopics(),
         ];
     }
 

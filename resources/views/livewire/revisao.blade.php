@@ -51,6 +51,26 @@
                             @if ($d->resposta_resumo)
                                 <div class="mt-0.5 truncate text-xs text-zinc-400">{{ $d->resposta_resumo }}</div>
                             @endif
+                            {{-- Fatia 4: promocao a partir do que a IA respondeu sozinha --}}
+                            @if ($d->acao === 'respondeu')
+                                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                    @if ($d->isPromoted())
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                            <flux:icon icon="academic-cap" variant="micro" class="size-3" />
+                                            {{ $d->promoted_rule_id ? 'virou regra #' . $d->promoted_rule_id : 'virou entrada #' . $d->promoted_knowledge_id }}
+                                        </span>
+                                    @else
+                                        <button type="button" wire:click="startPromote('regra', 'decisao', {{ $d->id }})"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                                            <flux:icon icon="bolt" variant="micro" class="size-3" /> Virar regra
+                                        </button>
+                                        <button type="button" wire:click="startPromote('base', 'decisao', {{ $d->id }})"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                                            <flux:icon icon="book-open" variant="micro" class="size-3" /> Virar entrada
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                     </div>
                 @empty
@@ -115,9 +135,9 @@
                             @endif
                         </div>
 
-                        {{-- Acoes (so pendente e dentro da validade) --}}
-                        @if ($p->isActionable())
-                            <div class="flex flex-wrap items-center gap-2 pt-1">
+                        {{-- Acoes de envio (so pendente e dentro da validade) + promocao (Fatia 4) --}}
+                        <div class="flex flex-wrap items-center gap-2 pt-1">
+                            @if ($p->isActionable())
                                 @if (trim((string) $p->suggested_response) !== '')
                                     <button type="button" wire:click="askSend({{ $p->id }})"
                                         class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
@@ -132,8 +152,24 @@
                                     class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                                     <flux:icon icon="x-mark" variant="micro" /> Ignorar
                                 </button>
-                            </div>
-                        @endif
+                            @endif
+
+                            @if ($p->isPromoted())
+                                <span class="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                    <flux:icon icon="academic-cap" variant="micro" class="size-3" />
+                                    {{ $p->promoted_rule_id ? 'virou regra #' . $p->promoted_rule_id : 'virou entrada #' . $p->promoted_knowledge_id }}
+                                </span>
+                            @else
+                                <button type="button" wire:click="startPromote('regra', 'pendencia', {{ $p->id }})"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                                    <flux:icon icon="bolt" variant="micro" /> Virar regra
+                                </button>
+                                <button type="button" wire:click="startPromote('base', 'pendencia', {{ $p->id }})"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
+                                    <flux:icon icon="book-open" variant="micro" /> Virar entrada da base
+                                </button>
+                            @endif
+                        </div>
                     </div>
                 @empty
                     <div class="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
@@ -170,6 +206,115 @@
                         <flux:icon icon="paper-airplane" variant="micro" wire:loading.remove wire:target="confirmSend" />
                         <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="confirmSend" />
                         Enviar agora
+                    </button>
+                </div>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: virar regra (Fatia 4) --}}
+    @if ($promoteKind === 'regra')
+        <x-modal wireClose="cancelPromote" title="Virar regra deterministica" maxWidth="lg">
+            <div class="space-y-3">
+                <p class="text-xs text-zinc-500">
+                    Cria uma regra em /regras a partir desta conversa: da proxima vez a resposta e
+                    <strong>instantanea e sem IA</strong>. Mesmas validacoes e guardas do cadastro normal.
+                </p>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Gatilho</label>
+                    <div class="flex gap-2">
+                        <select wire:model="pTriggerType" class="w-36 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <option value="contains">Contem</option>
+                            <option value="exact">Mensagem exata</option>
+                            <option value="starts_with">Comeca com</option>
+                        </select>
+                        <input type="text" wire:model="pTrigger" data-autofocus
+                            class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    @error('pTrigger') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-400">Pre-preenchido com a mensagem original — ajuste pra palavra-chave se quiser casar variacoes.</p>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Resposta</label>
+                    <textarea wire:model="pResponse" rows="3"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    @error('pResponse') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Escopo</label>
+                    <div class="flex items-center gap-4 text-sm">
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="pScope" value="contatos"> So este contato</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="pScope" value="global"> Todos os Aprovados</label>
+                    </div>
+                    @error('pScope') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-400">Default conservador: so o contato desta conversa. Resposta com {{ '{senha:...}' }} NUNCA pode ser global.</p>
+                </div>
+                <label class="inline-flex items-start gap-2 text-sm">
+                    <input type="checkbox" wire:model="pAiMatch" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-700">
+                    <span>Permitir a IA casar mensagens parecidas
+                        <span class="block text-[11px] text-zinc-400">A mensagem original entra como frase-exemplo da intencao — o aprendizado alimenta o casamento por IA.</span>
+                    </span>
+                </label>
+            </div>
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="cancelPromote" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                    <button type="button" wire:click="confirmPromoteRule" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                        <flux:icon icon="bolt" variant="micro" wire:loading.remove wire:target="confirmPromoteRule" />
+                        <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="confirmPromoteRule" />
+                        Criar regra
+                    </button>
+                </div>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: virar entrada da base (Fatia 4) --}}
+    @if ($promoteKind === 'base')
+        <x-modal wireClose="cancelPromote" title="Virar entrada da base de conhecimento" maxWidth="lg">
+            <div class="space-y-3">
+                <p class="text-xs text-zinc-500">
+                    Cria uma entrada em /conhecimento: a IA passa a responder isso <strong>fundamentada</strong>
+                    (contatos em modo conhecimento). Mesmas guardas do cadastro normal.
+                </p>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Titulo</label>
+                    <input type="text" wire:model="pTitle" data-autofocus
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('pTitle') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Conteudo</label>
+                    <textarea wire:model="pContent" rows="4"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    @error('pContent') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">
+                        Sensibilidade
+                        <x-info-tip text="low/medium: vai ao modelo e pode ser respondido automaticamente. high: NUNCA vai ao modelo nem e respondido direto — escala pra sua revisao." />
+                    </label>
+                    <select wire:model="pSensitivity" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <option value="low">low — publico</option>
+                        <option value="medium">medium — interno comum</option>
+                        <option value="high">high — sensivel (nunca vai ao modelo)</option>
+                    </select>
+                </div>
+                <label class="inline-flex items-start gap-2 text-sm">
+                    <input type="checkbox" wire:model="pRestrict" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-700">
+                    <span>Restringir ao contato desta conversa
+                        <span class="block text-[11px] text-zinc-400">Desmarcado = vale pra todos os contatos com IA em modo conhecimento. Conteudo com {{ '{senha:...}' }} exige restricao. Ajuste fino de contatos em /conhecimento.</span>
+                    </span>
+                </label>
+                @error('pRestrict') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
+            </div>
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="cancelPromote" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                    <button type="button" wire:click="confirmPromoteKnowledge" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                        <flux:icon icon="book-open" variant="micro" wire:loading.remove wire:target="confirmPromoteKnowledge" />
+                        <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="confirmPromoteKnowledge" />
+                        Criar entrada
                     </button>
                 </div>
             </x-slot:footer>

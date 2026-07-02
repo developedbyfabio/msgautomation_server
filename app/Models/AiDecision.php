@@ -26,6 +26,8 @@ class AiDecision extends Model
         'origem',          // regra | base
         'knowledge_ids',   // ids das entradas da base usadas (JSON)
         'resposta_resumo', // resumo redigido da resposta ([senha: nome], nunca o valor)
+        'promoted_rule_id',      // Fatia 4: virou regra deterministica
+        'promoted_knowledge_id', // Fatia 4: virou entrada da base
         'motivo',
         'model',
     ];
@@ -36,6 +38,12 @@ class AiDecision extends Model
             'confidence' => 'float',
             'knowledge_ids' => 'array',
         ];
+    }
+
+    /** Ja virou regra/entrada da base? (promocao e unica — trava nova promocao) */
+    public function isPromoted(): bool
+    {
+        return $this->promoted_rule_id !== null || $this->promoted_knowledge_id !== null;
     }
 
     public function account(): BelongsTo

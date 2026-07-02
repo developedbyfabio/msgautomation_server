@@ -85,29 +85,28 @@ class Conhecimento extends Component
         $this->resetValidation();
     }
 
-    public function save(): void
+    public function save(\App\Ai\KnowledgeWriter $writer): void
     {
         $this->validate();
 
-        // Contatos permitidos, validados como do mesmo account (vazio = todos com IA).
-        $contactIds = Contact::query()->where('account_id', $this->accountId())
-            ->whereIn('id', $this->contactIds)->pluck('id')->all();
-
-        $dados = [
-            'title' => trim($this->title),
-            'content' => trim($this->content),
+        // Fatia 4: guardas + persistencia no KnowledgeWriter (caminho OFICIAL,
+        // compartilhado com a promocao "virar entrada" do /revisao). Inclui a
+        // guarda: conteudo com {senha:...} exige contatos restritos.
+        $res = $writer->save($this->accountId(), [
+            'title' => $this->title,
+            'content' => $this->content,
             'sensitivity' => $this->sensitivity,
             'active' => $this->active,
-        ];
+            'contact_ids' => $this->contactIds,
+        ], $this->editingId);
 
-        if ($this->editingId) {
-            $k = $this->query()->findOrFail($this->editingId);
-            $k->update($dados);
-        } else {
-            $k = Knowledge::create(array_merge($dados, ['account_id' => $this->accountId()]));
+        if ($res['errors'] !== []) {
+            foreach ($res['errors'] as $campo => $msg) {
+                $this->addError($campo, $msg);
+            }
+
+            return;
         }
-
-        $k->contacts()->sync($contactIds);
 
         $this->closeForm();
         $this->dispatch('toast', message: 'Entrada salva.');

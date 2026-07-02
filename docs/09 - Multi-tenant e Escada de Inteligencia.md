@@ -107,7 +107,7 @@ permanece identico; os degraus novos OBSERVAM e INICIAM, nunca reescrevem o pipe
 | N3 | Fluxos/menus com sessao | ENTREGUE (motor + construtor + testador) | — | — |
 | N4 | IA casa regra (intencao) | ENTREGUE (Fatia 1) | — | — |
 | N5 | IA base de conhecimento | ENTREGUE (Fatia 2) | — | — |
-| N6 | Escalar/aprovacao + virar regra | **Fatia 3 ENTREGUE** (fila + /revisao); falta Fatia 4 (virar regra) | ai_decisions, Sender | pending_approvals, /revisao, promotor de regra |
+| N6 | Escalar/aprovacao + virar regra | **ENTREGUE** (Fatias 3 e 4 — arco da IA completo) | ai_decisions, Sender | pending_approvals, /revisao, promotor de regra |
 | N7 | Kanban dirigido por conversa | DESENHO (abaixo) | eventos dos logs atuais | boards/cards/transicoes |
 | N8 | Proativas com gate | DESENHO (abaixo) | Sender/freios/filas | campanhas, scheduler, freios proprios |
 | N9 | Segmentacao/tags | DESENHO (abaixo) | escopo de contatos | tags manuais+automaticas |
@@ -250,7 +250,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | # | Fatia | Escopo curto | Depende | Risco | Gate do Fabio |
 |---|---|---|---|---|---|
 | 1 | **IA-3** Fila de aprovacao | **ENTREGUE** — `pending_approvals` + /revisao (Enviar/Editar/Ignorar); escalou vira item acionavel | — | Baixo | Testar aprovar/editar/ignorar num contato real |
-| 2 | **IA-4** Virar regra | Promover decisao boa a regra/entrada da base; limiar/temas editaveis em /configuracoes | IA-3 | Baixo | Validar 1 promocao e o efeito (proxima msg gratis) |
+| 2 | **IA-4** Virar regra | **ENTREGUE** — promocao a regra/entrada da base; limiar/temas editaveis em /configuracoes | IA-3 | Baixo | Validar 1 promocao e o efeito (proxima msg gratis) |
 | 3 | **MT-0** Scoping estrutural | AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
 | 4 | **K-1** Kanban modelo+eventos | boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
 | 5 | **K-2** Kanban UI | /kanban board + mover manual + historico + editor de board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |

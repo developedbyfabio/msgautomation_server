@@ -30,7 +30,7 @@ class Configuracoes extends Component
     public bool $per_day_enabled = true;
     public bool $contact_rate_enabled = true;
 
-    // Camada 3 (IA) — kill switch proprio + config (leitura por ora; fino na Fatia 4).
+    // Camada 3 (IA) — kill switch proprio + ajuste fino (Fatia 4: limiar e temas editaveis).
     public bool $ai_enabled = false;
     public float $ai_confidence_threshold = 0.75;
     /** @var array<int,string> */
@@ -39,6 +39,19 @@ class Configuracoes extends Component
     public bool $salvo = false;
     public bool $confirmingEnable = false;
     public bool $confirmingAiEnable = false;
+
+    // Fatia 4 — confirmacao ao AFROUXAR a IA (reduzir limiar < 0.70 / desmarcar tema).
+    public bool $confirmingAiRelax = false;
+    /** @var array<int,string> */
+    public array $aiRelaxWarnings = [];
+
+    /** Rotulos pt-BR dos temas de aprovacao (mesmos 4 do desenho aprovado). */
+    public const AI_TOPIC_LABELS = [
+        'pagamento' => 'Pagamento/PIX/valores',
+        'dados_bancarios' => 'Dados bancarios/senhas',
+        'compromissos' => 'Compromissos/agendamentos',
+        'conteudo_high' => 'Conteudo sensivel (high) da base',
+    ];
 
     public function mount(): void
     {
@@ -132,6 +145,78 @@ class Configuracoes extends Component
     public function cancelAiEnable(): void
     {
         $this->confirmingAiEnable = false;
+    }
+
+    /**
+     * Fatia 4 — salva limiar + temas de aprovacao. ENDURECER (subir limiar, marcar
+     * tema) salva direto; AFROUXAR (reduzir limiar pra baixo de 0.70, desmarcar
+     * tema) pede confirmacao em modal (mesmo padrao do kill switch) porque libera
+     * a IA a responder sozinha em mais casos. Mudancas valem so pra decisoes FUTURAS.
+     */
+    public function saveAi(): void
+    {
+        $this->validate([
+            'ai_confidence_threshold' => 'required|numeric|min:0.50|max:0.95',
+        ], [], ['ai_confidence_threshold' => 'limiar de confianca']);
+
+        // So os 4 temas conhecidos (descarta qualquer valor estranho do payload).
+        $this->ai_approval_topics = array_values(array_intersect(
+            $this->ai_approval_topics,
+            array_keys(self::AI_TOPIC_LABELS),
+        ));
+
+        $s = $this->settings();
+        $avisos = [];
+
+        if ($this->ai_confidence_threshold < (float) $s->ai_confidence_threshold
+            && $this->ai_confidence_threshold < 0.70) {
+            $avisos[] = sprintf(
+                'Limiar de confianca reduzido de %.2f para %.2f (abaixo de 0.70): a IA vai responder sozinha com MENOS certeza.',
+                (float) $s->ai_confidence_threshold,
+                $this->ai_confidence_threshold,
+            );
+        }
+
+        foreach (array_diff($s->aiApprovalTopics(), $this->ai_approval_topics) as $tema) {
+            $avisos[] = 'Tema "' . (self::AI_TOPIC_LABELS[$tema] ?? $tema) . '" deixa de exigir aprovacao: a IA PODE responder sozinha nesse assunto.';
+        }
+
+        if ($avisos !== []) {
+            $this->aiRelaxWarnings = $avisos;
+            $this->confirmingAiRelax = true;
+
+            return;
+        }
+
+        $this->persistAi();
+    }
+
+    public function aiRelaxConfirmed(): void
+    {
+        $this->confirmingAiRelax = false;
+        $this->aiRelaxWarnings = [];
+        $this->persistAi();
+    }
+
+    /** Cancelar volta os campos pro que esta salvo (nada aplicado). */
+    public function cancelAiRelax(): void
+    {
+        $this->confirmingAiRelax = false;
+        $this->aiRelaxWarnings = [];
+        $s = $this->settings();
+        $this->ai_confidence_threshold = (float) $s->ai_confidence_threshold;
+        $this->ai_approval_topics = $s->aiApprovalTopics();
+    }
+
+    private function persistAi(): void
+    {
+        $this->settings()->update([
+            'ai_confidence_threshold' => $this->ai_confidence_threshold,
+            // Array EXPLICITO (pode ser vazio = nenhum tema). NULL = default (todos).
+            'ai_approval_topics' => array_values($this->ai_approval_topics),
+        ]);
+
+        $this->dispatch('toast', message: 'Configuracoes da IA salvas (valem pra decisoes futuras).');
     }
 
     protected function rules(): array

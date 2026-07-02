@@ -2,12 +2,17 @@
 
 namespace App\Livewire;
 
+use App\Ai\KnowledgeWriter;
 use App\Models\Account;
 use App\Models\AiDecision;
+use App\Models\AutoReplyLog;
 use App\Models\PendingApproval;
+use App\Whatsapp\AutoReply\RuleConflictDetector;
 use App\Whatsapp\AutoReply\RuleResponder;
+use App\Whatsapp\AutoReply\RuleWriter;
 use App\Whatsapp\AutoReply\Sender;
 use App\Whatsapp\Secrets\SecretVault;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -36,6 +41,20 @@ class Revisao extends Component
     public ?int $confirmingSendId = null;
     public ?int $editingId = null;
     public string $editText = '';
+
+    // Fatia 4 — promocao ("virar regra" / "virar entrada da base").
+    public string $promoteType = '';     // pendencia | decisao
+    public ?int $promoteId = null;
+    public string $promoteKind = '';     // '' fechado | regra | base
+    public string $pTrigger = '';
+    public string $pTriggerType = 'contains'; // contains | exact | starts_with
+    public string $pResponse = '';
+    public string $pScope = 'contatos';  // contatos (default: o contato da pendencia) | global
+    public bool $pAiMatch = true;
+    public string $pTitle = '';
+    public string $pContent = '';
+    public string $pSensitivity = 'medium';
+    public bool $pRestrict = true;       // restringir a entrada ao contato da pendencia
 
     /** Rotulos pt-BR dos motivos de escala. */
     public const MOTIVOS = [
@@ -219,6 +238,235 @@ class Revisao extends Component
         ]);
 
         $this->dispatch('toast', message: $statusFinal === 'edited' ? 'Resposta editada enviada.' : 'Resposta enviada.');
+    }
+
+    // ---- Fatia 4: promocao ("virar regra" / "virar entrada da base") ------------
+
+    /**
+     * Abre o modal PRE-PREENCHIDO. Fonte: pendencia (qualquer status) ou decisao da
+     * IA em que ela respondeu sozinha (aba de auditoria). Promocao e UNICA por item
+     * (promovida trava). A IA nunca grava nada sozinha — tudo aqui e clique humano.
+     */
+    public function startPromote(string $kind, string $type, int $id): void
+    {
+        if (! in_array($kind, ['regra', 'base'], true)) {
+            return;
+        }
+
+        $fonte = $this->promoteSource($type, $id);
+        if ($fonte === null || $fonte->isPromoted()) {
+            return;
+        }
+
+        $mensagem = (string) ($fonte->incomingMessage?->text ?? '');
+        $resposta = $this->promoteResponseFor($fonte);
+
+        $this->promoteType = $type;
+        $this->promoteId = $id;
+        $this->promoteKind = $kind;
+        $this->resetValidation();
+
+        if ($kind === 'regra') {
+            $this->pTrigger = $mensagem;
+            $this->pTriggerType = 'contains';
+            $this->pResponse = $resposta;
+            // Default CONSERVADOR: escopo "Contatos Especificos" com o contato da
+            // pendencia. Trocar pra global so sem {senha:} (guarda dura no salvar).
+            $this->pScope = 'contatos';
+            $this->pAiMatch = true;
+        } else {
+            $this->pTitle = Str::limit(trim((string) ($fonte->intent ?: $mensagem)), 100, '');
+            $this->pContent = $resposta;
+            $this->pSensitivity = 'medium';
+            $this->pRestrict = true;
+        }
+    }
+
+    public function cancelPromote(): void
+    {
+        $this->promoteKind = '';
+        $this->promoteType = '';
+        $this->promoteId = null;
+        $this->reset(['pTrigger', 'pResponse', 'pTitle', 'pContent']);
+        $this->pTriggerType = 'contains';
+        $this->pScope = 'contatos';
+        $this->pAiMatch = true;
+        $this->pSensitivity = 'medium';
+        $this->pRestrict = true;
+        $this->resetValidation();
+    }
+
+    /** Salva a regra pelo caminho OFICIAL (RuleWriter — mesmas guardas do /regras). */
+    public function confirmPromoteRule(RuleWriter $writer, SecretVault $vault, RuleConflictDetector $detector): void
+    {
+        $fonte = $this->promoteSource($this->promoteType, $this->promoteId);
+        if ($fonte === null || $fonte->isPromoted()) {
+            $this->cancelPromote();
+
+            return;
+        }
+
+        $trigger = trim($this->pTrigger);
+        $resposta = trim($this->pResponse);
+        if ($trigger === '') {
+            $this->addError('pTrigger', 'Informe o gatilho.');
+
+            return;
+        }
+        if ($resposta === '') {
+            $this->addError('pResponse', 'Informe a resposta.');
+
+            return;
+        }
+
+        // Guarda dura (espelha S5, com mensagem no campo certo do modal): resposta
+        // com {senha:} NUNCA pode virar regra global.
+        if ($this->pScope === 'global' && $vault->hasRef($resposta)) {
+            $this->addError('pScope', 'Resposta com {senha:...} nao pode ser global. Mantenha "So este contato" — a senha iria em texto pra QUALQUER contato que disparasse.');
+
+            return;
+        }
+
+        $contactIds = [];
+        if ($this->pScope !== 'global') {
+            if (! $fonte->contact_id) {
+                $this->addError('pScope', 'Contato da pendencia nao existe mais. Crie a regra em /regras escolhendo os contatos.');
+
+                return;
+            }
+            $contactIds = [(int) $fonte->contact_id];
+        }
+
+        $mensagem = trim((string) ($fonte->incomingMessage?->text ?? ''));
+
+        $res = $writer->save($this->accountId(), [
+            'triggers' => [['type' => in_array($this->pTriggerType, ['contains', 'exact', 'starts_with'], true) ? $this->pTriggerType : 'contains', 'value' => $trigger, 'precision' => 'exato']],
+            'responses' => [$resposta],
+            'enabled' => true,
+            'cooldown_mode' => 'global',
+            'cooldown_minutes' => null,
+            'scope' => $this->pScope === 'global' ? 'global' : 'contatos',
+            'contact_ids' => $contactIds,
+            'ai_match_enabled' => $this->pAiMatch,
+            // O aprendizado alimenta o casamento por IA: a mensagem original vira
+            // a primeira frase-exemplo da intencao.
+            'ai_examples' => ($this->pAiMatch && $mensagem !== '') ? [$mensagem] : [],
+        ]);
+
+        if ($res['errors'] !== []) {
+            $mapa = ['scope' => 'pScope', 'scopeContactIds' => 'pScope', 'responses' => 'pResponse', 'triggers' => 'pTrigger', 'triggers.0.value' => 'pTrigger'];
+            foreach ($res['errors'] as $campo => $msg) {
+                $this->addError($mapa[$campo] ?? 'pTrigger', $msg);
+            }
+
+            return;
+        }
+
+        $rule = $res['rule'];
+        $fonte->update(['promoted_rule_id' => $rule->id]);
+        $this->cancelPromote();
+
+        // Detector de conflito (aviso, nao bloqueio — como hoje no /regras).
+        $conflitos = $detector->conflicts($this->accountId())[$rule->id] ?? [];
+        if ($conflitos !== []) {
+            $rotulos = collect($conflitos)->pluck('label')->unique()->take(3)->implode(', ');
+            $this->dispatch('toast', message: "Regra #{$rule->id} criada. Atencao: sobreposicao com \"{$rotulos}\" — a mais especifica vence; confira em /regras.", type: 'error');
+
+            return;
+        }
+
+        $this->dispatch('toast', message: "Regra #{$rule->id} criada. Da proxima vez a resposta e deterministica (sem IA).");
+    }
+
+    /** Salva a entrada pelo caminho OFICIAL (KnowledgeWriter — mesmas guardas). */
+    public function confirmPromoteKnowledge(KnowledgeWriter $writer, SecretVault $vault): void
+    {
+        $fonte = $this->promoteSource($this->promoteType, $this->promoteId);
+        if ($fonte === null || $fonte->isPromoted()) {
+            $this->cancelPromote();
+
+            return;
+        }
+
+        $titulo = trim($this->pTitle);
+        $conteudo = trim($this->pContent);
+        if ($titulo === '') {
+            $this->addError('pTitle', 'Informe o titulo.');
+
+            return;
+        }
+        if ($conteudo === '') {
+            $this->addError('pContent', 'Informe o conteudo.');
+
+            return;
+        }
+
+        // Guarda de segredo (coerente com a Fatia 2): {senha:} exige restringir
+        // ao contato — sem contato valido, nao ha como promover com senha.
+        $contactIds = ($this->pRestrict && $fonte->contact_id) ? [(int) $fonte->contact_id] : [];
+        if ($vault->hasRef($conteudo) && $contactIds === []) {
+            $this->addError('pRestrict', 'Conteudo com {senha:...} exige restringir ao contato. Sem restricao, a referencia valeria pra qualquer contato com IA.');
+
+            return;
+        }
+
+        $res = $writer->save($this->accountId(), [
+            'title' => $titulo,
+            'content' => $conteudo,
+            'sensitivity' => in_array($this->pSensitivity, \App\Models\Knowledge::SENSITIVITIES, true) ? $this->pSensitivity : 'medium',
+            'active' => true,
+            'contact_ids' => $contactIds,
+        ]);
+
+        if ($res['errors'] !== []) {
+            $mapa = ['contactIds' => 'pRestrict', 'title' => 'pTitle', 'content' => 'pContent'];
+            foreach ($res['errors'] as $campo => $msg) {
+                $this->addError($mapa[$campo] ?? 'pContent', $msg);
+            }
+
+            return;
+        }
+
+        $fonte->update(['promoted_knowledge_id' => $res['knowledge']->id]);
+        $this->cancelPromote();
+        $this->dispatch('toast', message: 'Entrada criada na base de conhecimento.');
+    }
+
+    /**
+     * Fonte da promocao, SEMPRE escopada pela conta. Pendencia: qualquer status.
+     * Decisao: so onde a IA respondeu sozinha (escaladas ja tem pendencia propria).
+     */
+    private function promoteSource(string $type, ?int $id): PendingApproval|AiDecision|null
+    {
+        if ($id === null) {
+            return null;
+        }
+        if ($type === 'pendencia') {
+            return $this->find($id);
+        }
+        if ($type === 'decisao') {
+            return AiDecision::query()->where('account_id', $this->accountId())
+                ->where('acao', 'respondeu')->with('incomingMessage')->find($id);
+        }
+
+        return null;
+    }
+
+    /** Melhor texto de resposta disponivel pra pre-preencher a promocao. */
+    private function promoteResponseFor(PendingApproval|AiDecision $fonte): string
+    {
+        if ($fonte instanceof PendingApproval) {
+            return (string) $fonte->suggested_response;
+        }
+
+        // Decisao 'respondeu': o texto que FOI enviado (log do envio; respostas
+        // automaticas nunca contem senha — guarda dura das Fatias 1-2).
+        $enviado = $fonte->incoming_message_id
+            ? AutoReplyLog::query()->where('incoming_message_id', $fonte->incoming_message_id)
+                ->where('status', 'sent')->value('response_text')
+            : null;
+
+        return (string) ($enviado ?? $fonte->resposta_resumo ?? '');
     }
 
     // ---- consulta ---------------------------------------------------------------

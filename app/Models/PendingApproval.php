@@ -32,6 +32,8 @@ class PendingApproval extends Model
         'status',
         'decided_at',
         'sent_auto_reply_log_id',
+        'promoted_rule_id',      // Fatia 4: virou regra deterministica (auditoria do loop)
+        'promoted_knowledge_id', // Fatia 4: virou entrada da base
     ];
 
     protected function casts(): array
@@ -71,6 +73,12 @@ class PendingApproval extends Model
     public function isActionable(): bool
     {
         return $this->status === 'pending' && ! $this->isStale();
+    }
+
+    /** Ja virou regra/entrada da base? (promocao e unica — trava nova promocao) */
+    public function isPromoted(): bool
+    {
+        return $this->promoted_rule_id !== null || $this->promoted_knowledge_id !== null;
     }
 
     /** Mais velha que a validade configurada (mesmo que ainda nao marcada expired). */

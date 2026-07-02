@@ -72,18 +72,37 @@
                     ])></span>
                 </button>
             </div>
-            <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-                <span class="font-medium">Estado: {{ $ai_enabled ? 'ON' : 'OFF (desligada)' }}</span>
-                <span class="text-zinc-500">Limiar de confianca: <strong>{{ number_format($ai_confidence_threshold, 2) }}</strong> <span class="text-xs">(ajuste fino em breve)</span></span>
-            </div>
-            <div class="mt-2 text-xs text-zinc-500">
-                Sempre exige aprovacao (nunca responde direto):
-                @php $topicLabels = ['pagamento' => 'pagamento/PIX', 'dados_bancarios' => 'dados bancarios/senhas', 'compromissos' => 'compromissos', 'conteudo_high' => 'conteudo sensivel']; @endphp
-                @forelse ($ai_approval_topics as $t)
-                    <span class="ml-1 inline-flex rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">{{ $topicLabels[$t] ?? $t }}</span>
-                @empty
-                    <span class="ml-1">nenhum configurado</span>
-                @endforelse
+            <div class="mt-3 text-sm font-medium">Estado: {{ $ai_enabled ? 'ON' : 'OFF (desligada)' }}</div>
+
+            {{-- Fatia 4 — ajuste fino: limiar + temas de aprovacao (editaveis). --}}
+            <div class="mt-3 space-y-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">
+                        Limiar de confianca (0.50 a 0.95)
+                        <x-info-tip text="Abaixo do limiar a IA nao responde sozinha: escala pra sua revisao. BAIXAR = a IA responde mais sozinha (mais risco de resposta errada). SUBIR = escala mais pra voce. Vale so pra decisoes futuras." />
+                    </label>
+                    <input type="number" wire:model="ai_confidence_threshold" min="0.50" max="0.95" step="0.05"
+                        class="w-28 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('ai_confidence_threshold') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">
+                        Temas que SEMPRE exigem aprovacao
+                        <x-info-tip text="Nesses temas a IA nunca responde direto: escala pro /revisao. Desmarcar um tema LIBERA a IA a responder sozinha nesse assunto (pede confirmacao). Vale so pra decisoes futuras." />
+                    </label>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+                        @foreach (\App\Livewire\Configuracoes::AI_TOPIC_LABELS as $valor => $rotulo)
+                            <label class="inline-flex items-center gap-1.5">
+                                <input type="checkbox" value="{{ $valor }}" wire:model="ai_approval_topics" class="rounded border-zinc-300 dark:border-zinc-700">
+                                {{ $rotulo }}
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+                <button type="button" wire:click="saveAi"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <flux:icon icon="check" variant="micro" /> Salvar IA
+                </button>
             </div>
         </div>
 
@@ -250,6 +269,30 @@
                 <button type="button" wire:click="cancelAiEnable" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
                 <button type="button" wire:click="aiEnableConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                     <flux:icon icon="sparkles" variant="micro" /> Ligar IA
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: confirmar AFROUXAMENTO da IA (Fatia 4 — reduzir limiar / desmarcar tema) --}}
+    @if ($confirmingAiRelax)
+        <x-modal wireClose="cancelAiRelax" title="Deixar a IA mais autonoma?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-amber-500"><flux:icon icon="exclamation-triangle" class="size-6" /></div>
+                <div class="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                    <p>Essas mudancas <strong>liberam a IA a responder sozinha em mais casos</strong>:</p>
+                    <ul class="list-disc space-y-1 pl-5">
+                        @foreach ($aiRelaxWarnings as $aviso)
+                            <li>{{ $aviso }}</li>
+                        @endforeach
+                    </ul>
+                    <p class="text-xs text-zinc-400">Vale so pra decisoes futuras. Da pra voltar atras aqui a qualquer momento.</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelAiRelax" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="aiRelaxConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
+                    <flux:icon icon="check" variant="micro" /> Confirmar mudanca
                 </button>
             </div>
         </x-modal>

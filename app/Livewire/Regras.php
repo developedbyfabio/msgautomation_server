@@ -6,8 +6,8 @@ use App\Models\Account;
 use App\Models\AutoReplyRule;
 use App\Models\Channel;
 use App\Models\Contact;
-use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\AutoReply\RuleTester;
+use App\Whatsapp\AutoReply\RuleWriter;
 use App\Whatsapp\Secrets\SecretVault;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -179,114 +179,30 @@ class Regras extends Component
         $this->resetValidation();
     }
 
-    public function save(SecretVault $vault): void
+    public function save(RuleWriter $writer): void
     {
         $this->validate();
 
-        // Protecao: valida cada gatilho regex (padrao compila).
-        foreach ($this->triggers as $i => $t) {
-            if ($t['type'] === 'regex' && ! RuleMatcher::isValidRegex((string) $t['value'])) {
-                $this->addError("triggers.{$i}.value", 'Regex invalido. Confira o padrao.');
-
-                return;
-            }
-        }
-
-        $triggers = array_values(array_map(function ($t) {
-            $precision = ($t['precision'] ?? 'exato') === 'tolerante' ? 'tolerante' : 'exato';
-            // Regex nao usa fuzzy (e ja um padrao); so exato/tolerante valem p/ texto.
-            if ($t['type'] === 'regex') {
-                $precision = 'exato';
-            }
-
-            return [
-                'match_type' => $t['type'],
-                'match_value' => trim((string) $t['value']),
-                'precision' => $precision,
-                'fuzzy_level' => $precision === 'tolerante' ? ($t['fuzzy_level'] ?? 'media') : null,
-            ];
-        }, $this->triggers));
-
-        $responses = array_values(array_filter(array_map(
-            fn ($r) => trim((string) $r),
-            $this->responses,
-        ), fn ($r) => $r !== ''));
-
-        if ($responses === []) {
-            $this->addError('responses', 'Cadastre ao menos uma resposta.');
-
-            return;
-        }
-
-        $scope = $this->scope === 'contatos' ? 'contatos' : 'global';
-        // Contatos do escopo, validados como do mesmo account.
-        $contactIds = [];
-        if ($scope === 'contatos') {
-            $contactIds = Contact::query()->where('account_id', $this->accountId())
-                ->whereIn('id', $this->scopeContactIds)->pluck('id')->all();
-            if ($contactIds === []) {
-                $this->addError('scopeContactIds', 'Escopo "contatos": selecione ao menos um contato.');
-
-                return;
-            }
-        }
-
-        // S5 — guarda de escopo para regras que devolvem SENHA ({senha:...}).
-        $temSenha = collect($responses)->contains(fn ($r) => $vault->hasRef((string) $r));
-        if ($temSenha) {
-            if ($scope !== 'contatos') {
-                $this->addError('scope', 'Esta regra envia uma senha ({senha:...}). A senha iria em texto pra QUALQUER contato que disparasse. Use escopo "Contatos Especificos" e selecione quem pode receber.');
-
-                return;
-            }
-            $temFuzzy = collect($triggers)->contains(fn ($t) => ($t['precision'] ?? 'exato') === 'tolerante');
-            if ($temFuzzy) {
-                $this->addError('triggers', 'Regra que envia senha deve usar match ESTRITO (exato). Tire a tolerancia a erros dos gatilhos pra nao disparar por engano e vazar a senha.');
-
-                return;
-            }
-        }
-
-        // Frases-exemplo da IA (opcionais; so as nao-vazias). Exemplos de MENSAGEM.
-        $aiExamples = array_values(array_filter(array_map(
-            fn ($p) => trim((string) $p),
-            $this->aiExamples,
-        ), fn ($p) => $p !== ''));
-
-        // Colunas legadas = cache do 1o gatilho / 1a resposta (back-compat).
-        $dados = [
-            'match_type' => $triggers[0]['match_type'],
-            'match_value' => $triggers[0]['match_value'],
-            'response_text' => $responses[0],
+        // Fatia 4: guardas de negocio + persistencia vivem no RuleWriter (caminho
+        // OFICIAL, compartilhado com a promocao "virar regra" do /revisao).
+        $res = $writer->save($this->accountId(), [
+            'triggers' => $this->triggers,
+            'responses' => $this->responses,
             'enabled' => $this->enabled,
             'cooldown_mode' => $this->cooldownMode,
-            'cooldown_minutes' => $this->cooldownMode === 'cada_n' ? $this->cooldownMinutes : null,
-            'scope' => $scope,
+            'cooldown_minutes' => $this->cooldownMinutes,
+            'scope' => $this->scope,
+            'contact_ids' => $this->scopeContactIds,
             'ai_match_enabled' => $this->aiMatchEnabled,
-        ];
+            'ai_examples' => $this->aiExamples,
+        ], $this->editingId);
 
-        if ($this->editingId) {
-            $rule = $this->query()->findOrFail($this->editingId);
-            $rule->update($dados);
-        } else {
-            $next = (int) ($this->query()->max('priority') ?? -1) + 1;
-            $rule = AutoReplyRule::create(array_merge($dados, [
-                'account_id' => $this->accountId(),
-                'priority' => $next,
-            ]));
-        }
+        if ($res['errors'] !== []) {
+            foreach ($res['errors'] as $campo => $msg) {
+                $this->addError($campo, $msg);
+            }
 
-        // Re-sincroniza as filhas (substitui, sem tocar em outras regras).
-        $rule->triggers()->delete();
-        $rule->triggers()->createMany($triggers);
-        $rule->responses()->delete();
-        $rule->responses()->createMany(array_map(fn ($r) => ['response_text' => $r], $responses));
-        $rule->contacts()->sync($contactIds);
-
-        // Frases-exemplo da IA: re-sincroniza (substitui).
-        $rule->aiExamples()->delete();
-        if ($aiExamples !== []) {
-            $rule->aiExamples()->createMany(array_map(fn ($p) => ['phrase' => $p], $aiExamples));
+            return;
         }
 
         $this->closeForm();
