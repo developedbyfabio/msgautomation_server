@@ -13,10 +13,17 @@ use Illuminate\Support\Carbon;
  *
  * Placeholders disponiveis (case-insensitive):
  *   {nome}     -> push_name do contato (fallback "" se vazio)
- *   {saudacao} -> "Bom dia" (05-11) / "Boa tarde" (12-17) / "Boa noite" (18-04)
+ *   {saudacao} -> variavel de SISTEMA editavel (V-1); fallback no default
+ *                 historico identico ("Bom dia" 05-11 / "Boa tarde" 12-17 / "Boa noite")
  *   {data}     -> dd/mm/aaaa (fuso de exibicao)
  *   {hora}     -> HH:MM (fuso de exibicao)
+ *   {custom}   -> variaveis da CONTA (V-1: static | horario | dia_semana), cache
+ *                 por conta invalidado em qualquer escrita; desconhecida/inativa
+ *                 sai INTACTA (comportamento historico); resolucao em fuso SP,
+ *                 SEMPRE so no envio (nunca antes do modelo de IA)
  *
+ * Este e o renderizador UNICO (c620418): regras, nos de fluxo, IA-base, edicao
+ * de pendencia, campanhas, testadores e previews — nada paralelo.
  * A escolha aleatoria e injetavel (chooser) para teste determinístico.
  */
 class RuleResponder
@@ -56,7 +63,7 @@ class RuleResponder
         return ($this->chooser)($respostas);
     }
 
-    /** Substitui placeholders no texto. */
+    /** Substitui placeholders no texto ({senha:...} NAO casa \w+ — fica pro Sender). */
     public function render(string $template, array $context = []): string
     {
         $now = $context['now'] ?? Carbon::now();
@@ -64,20 +71,35 @@ class RuleResponder
             $now = $now->copy()->setTimezone(config('app.display_timezone'));
         }
 
+        $custom = $this->variaveisDaConta();
+
         $valores = [
             'nome' => trim((string) ($context['nome'] ?? '')),
-            'saudacao' => $this->saudacao((int) $now->format('H')),
+            // V-1: saudacao resolve pela variavel de sistema quando existir
+            // (default seeded = IDENTICO ao match historico); fallback no codigo.
+            'saudacao' => isset($custom['saudacao'])
+                ? $this->resolveVariavel($custom['saudacao'], $now)
+                : $this->saudacao((int) $now->format('H')),
             'data' => $now->format('d/m/Y'),
             'hora' => $now->format('H:i'),
         ];
 
-        return preg_replace_callback('/\{(\w+)\}/u', function ($m) use ($valores) {
+        return preg_replace_callback('/\{(\w+)\}/u', function ($m) use ($valores, $custom, $now) {
             $chave = mb_strtolower($m[1], 'UTF-8');
 
-            return array_key_exists($chave, $valores) ? $valores[$chave] : $m[0];
+            if (array_key_exists($chave, $valores)) {
+                return $valores[$chave];
+            }
+            // V-1: variaveis custom ATIVAS da conta; desconhecida/inativa INTACTA.
+            if (isset($custom[$chave])) {
+                return $this->resolveVariavel($custom[$chave], $now);
+            }
+
+            return $m[0];
         }, $template);
     }
 
+    /** Fallback historico da saudacao (conta sem a variavel de sistema seeded). */
     private function saudacao(int $hora): string
     {
         return match (true) {
@@ -85,5 +107,77 @@ class RuleResponder
             $hora >= 12 && $hora <= 17 => 'Boa tarde',
             default => 'Boa noite',
         };
+    }
+
+    // ---- V-1: resolucao das variaveis configuraveis ---------------------------
+
+    /**
+     * Variaveis ATIVAS da conta do contexto, cacheadas por conta (o observer do
+     * model invalida em QUALQUER escrita). Sem contexto/conta: so nativas.
+     *
+     * @return array<string,array{type:string,config:array}>
+     */
+    private function variaveisDaConta(): array
+    {
+        try {
+            $accountId = app(\App\Tenancy\AccountContext::class)->id();
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            return [];
+        }
+
+        return \Illuminate\Support\Facades\Cache::remember(
+            'variaveis:' . $accountId,
+            3600,
+            fn () => \App\Models\Variable::withoutAccountScope()
+                ->where('account_id', $accountId)
+                ->where('active', true)
+                ->get(['name', 'type', 'config'])
+                ->mapWithKeys(fn ($v) => [(string) $v->name => ['type' => (string) $v->type, 'config' => (array) $v->config]])
+                ->all(),
+        );
+    }
+
+    /** Resolve UMA variavel pro instante $now (ja no fuso de exibicao). */
+    private function resolveVariavel(array $var, Carbon $now): string
+    {
+        $config = $var['config'];
+
+        return match ($var['type']) {
+            'static' => (string) ($config['valor'] ?? ''),
+            'horario' => $this->resolveHorario($config, $now),
+            'dia_semana' => $this->resolveDiaSemana($config, $now),
+            default => '',
+        };
+    }
+
+    /** Primeira faixa que cobre a hora atual vence; faixa pode cruzar meia-noite. */
+    private function resolveHorario(array $config, Carbon $now): string
+    {
+        $hora = $now->format('H:i');
+        foreach ((array) ($config['faixas'] ?? []) as $faixa) {
+            $inicio = (string) ($faixa['inicio'] ?? '');
+            $fim = (string) ($faixa['fim'] ?? '');
+            if ($inicio === '' || $fim === '') {
+                continue;
+            }
+            $dentro = $inicio <= $fim
+                ? ($hora >= $inicio && $hora <= $fim)
+                : ($hora >= $inicio || $hora <= $fim); // cruza meia-noite
+            if ($dentro) {
+                return (string) ($faixa['valor'] ?? '');
+            }
+        }
+
+        return (string) ($config['valor_padrao'] ?? '');
+    }
+
+    private function resolveDiaSemana(array $config, Carbon $now): string
+    {
+        $dias = [1 => 'seg', 2 => 'ter', 3 => 'qua', 4 => 'qui', 5 => 'sex', 6 => 'sab', 7 => 'dom'];
+        $dia = $dias[$now->dayOfWeekIso] ?? '';
+
+        $valor = $config[$dia] ?? null;
+
+        return $valor !== null && $valor !== '' ? (string) $valor : (string) ($config['valor_padrao'] ?? '');
     }
 }

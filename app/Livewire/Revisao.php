@@ -170,6 +170,12 @@ class Revisao extends Component
             return;
         }
 
+        // V-1 — AVISO (nao bloqueio): referencia desconhecida sai crua.
+        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), $texto);
+        if ($desconhecidas !== []) {
+            $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s): {' . implode('}, {', $desconhecidas) . '} — enviado assim mesmo, cru.', type: 'error');
+        }
+
         $this->cancelEdit();
         $this->despachar($p, $texto, 'edited', $sender, $responder);
     }

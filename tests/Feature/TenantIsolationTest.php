@@ -518,6 +518,49 @@ class TenantIsolationTest extends TestCase
         $this->assertNull($b['resumo']['mediana_primeira_resposta']);
     }
 
+    // ---- Variaveis (V-1): homonimas nao se cruzam; saudacao por conta ----------------------
+
+    public function test_variaveis_homonimas_em_contas_espelhadas_nao_se_cruzam(): void
+    {
+        // Cada conta ganhou a SUA {saudacao} de sistema no provisionamento.
+        $this->assertSame(2, \App\Models\Variable::withoutAccountScope()->where('name', 'saudacao')->where('is_system', true)->count());
+
+        // Variavel HOMONIMA ("empresa") nas duas contas, valores distintos.
+        $writer = app(\App\Variables\VariableWriter::class);
+        $writer->save($this->a->id, ['name' => 'empresa', 'type' => 'static', 'config' => ['valor' => 'EMPRESA-A'], 'active' => true]);
+        $writer->save($this->b->id, ['name' => 'empresa', 'type' => 'static', 'config' => ['valor' => 'EMPRESA-B'], 'active' => true]);
+
+        // Regras espelhadas (MESMO gatilho) usando a variavel: cada webhook
+        // renderiza com o valor DA PROPRIA conta.
+        foreach ([$this->a, $this->b] as $acc) {
+            $r = AutoReplyRule::create(['account_id' => $acc->id, 'match_type' => 'contains', 'match_value' => 'quem e voce', 'response_text' => 'Sou a {empresa}', 'enabled' => true]);
+            $r->triggers()->create(['match_type' => 'contains', 'match_value' => 'quem e voce']);
+            $r->responses()->create(['response_text' => 'Sou a {empresa}']);
+        }
+        $this->webhook('inst-a', 'quem e voce?', 'VA1');
+        Http::assertSent(fn ($r) => $r['text'] === 'Sou a EMPRESA-A');
+        $this->webhook('inst-b', 'quem e voce?', 'VB1');
+        Http::assertSent(fn ($r) => $r['text'] === 'Sou a EMPRESA-B');
+
+        // Editar a {saudacao} da B NAO muda a da A (cache e config por conta).
+        $sB = \App\Models\Variable::withoutAccountScope()->where('account_id', $this->b->id)->where('name', 'saudacao')->first();
+        $writer->save($this->b->id, ['name' => 'saudacao', 'type' => 'horario', 'config' => [
+            'faixas' => [['inicio' => '05:00', 'fim' => '11:59', 'valor' => 'SAUDACAO-DA-B']],
+            'valor_padrao' => 'Boa noite',
+        ]], $sB->id);
+        $ctx = app(AccountContext::class);
+        $responder = app(\App\Whatsapp\AutoReply\RuleResponder::class);
+        $this->assertSame('SAUDACAO-DA-B', $ctx->runAs($this->b->id, fn () => $responder->render('{saudacao}')));
+        $this->assertSame('Bom dia', $ctx->runAs($this->a->id, fn () => $responder->render('{saudacao}'))); // 10h, default intacto
+
+        // Tela /variaveis no contexto A: so os valores da A.
+        $ctx->clear(); // fallback = conta A
+        Livewire::test(\App\Livewire\Variaveis::class)
+            ->assertSee('EMPRESA-A')
+            ->assertDontSee('EMPRESA-B')
+            ->assertDontSee('SAUDACAO-DA-B');
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

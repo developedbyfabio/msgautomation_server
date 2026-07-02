@@ -148,6 +148,10 @@ class Campanhas extends Component
         }
 
         $this->closeForm();
+        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), trim($this->cMessage));
+        if ($desconhecidas !== []) {
+            $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) na mensagem: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa, sai cru.', type: 'error');
+        }
         $this->dispatch('toast', message: 'Campanha salva (rascunho). Nada dispara sem preview + aprovacao.');
     }
 

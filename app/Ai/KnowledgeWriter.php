@@ -64,6 +64,12 @@ class KnowledgeWriter
 
         $k->contacts()->sync($contactIds);
 
-        return ['knowledge' => $k, 'errors' => []];
+        // V-1 — AVISO de referencia desconhecida (sairia crua na resposta da IA).
+        $desconhecidas = \App\Models\Variable::unknownRefs($accountId, $content);
+        $warnings = $desconhecidas !== []
+            ? ['Referencia(s) desconhecida(s) no conteudo: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa com esse nome, sai cru.']
+            : [];
+
+        return ['knowledge' => $k, 'errors' => [], 'warnings' => $warnings];
     }
 }

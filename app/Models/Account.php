@@ -18,6 +18,8 @@ class Account extends Model
     {
         static::created(function (Account $account) {
             app(\App\Kanban\BoardProvisioner::class)->ensureDefaultBoard((int) $account->id);
+            // V-1: variaveis de sistema ({saudacao} com default identico ao historico).
+            app(\App\Variables\VariableProvisioner::class)->ensureSystemVariables((int) $account->id);
         });
     }
 

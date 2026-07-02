@@ -211,6 +211,9 @@ class Regras extends Component
         }
 
         $this->closeForm();
+        foreach ($res['warnings'] ?? [] as $aviso) {
+            $this->dispatch('toast', message: 'Aviso: ' . $aviso, type: 'error');
+        }
         $this->dispatch('toast', message: 'Regra salva.');
     }
 

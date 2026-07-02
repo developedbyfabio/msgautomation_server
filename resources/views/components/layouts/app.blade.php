@@ -18,6 +18,7 @@
         ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
         ['contatos', 'Contatos', 'users', 0],
         ['senhas', 'Senhas', 'key', 0],
+        ['variaveis', 'Variaveis', 'variable', 0],
         ['regras', 'Regras', 'bolt', 0],
         ['fluxos', 'Fluxos', 'rectangle-stack', 0],
         ['conhecimento', 'Conhecimento', 'book-open', 0],

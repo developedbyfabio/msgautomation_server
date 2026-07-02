@@ -287,7 +287,14 @@ class Fluxos extends Component
             return;
         }
         $kind = ($this->nodeKind[$nodeId] ?? 'menu') === 'final' ? 'final' : 'menu';
-        $node->update(['message' => (string) ($this->nodeMsg[$nodeId] ?? ''), 'kind' => $kind]);
+        $mensagem = (string) ($this->nodeMsg[$nodeId] ?? '');
+        $node->update(['message' => $mensagem, 'kind' => $kind]);
+
+        // V-1 — AVISO: placeholder desconhecido sairia CRU pro contato.
+        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), $mensagem);
+        if ($desconhecidas !== []) {
+            $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) no no: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa, sai cru.', type: 'error');
+        }
         $this->dispatch('toast', message: 'No salvo.');
     }
 

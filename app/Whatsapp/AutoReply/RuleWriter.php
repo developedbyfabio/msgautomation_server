@@ -158,6 +158,17 @@ class RuleWriter
             $rule->aiExamples()->createMany(array_map(fn ($p) => ['phrase' => $p], $aiExamples));
         }
 
-        return ['rule' => $rule, 'errors' => []];
+        // V-1 — AVISO (nao bloqueio): referencia {algo} que nao e nativa nem
+        // variavel ativa da conta sairia CRUA pro contato (a licao do bug da
+        // saudacao). O chamador exibe o aviso.
+        $desconhecidas = [];
+        foreach ($responses as $resp) {
+            $desconhecidas = array_merge($desconhecidas, \App\Models\Variable::unknownRefs($accountId, $resp));
+        }
+        $warnings = $desconhecidas !== []
+            ? ['Referencia(s) desconhecida(s) na resposta: {' . implode('}, {', array_unique($desconhecidas)) . '} — sem variavel ativa com esse nome, sai cru pro contato.']
+            : [];
+
+        return ['rule' => $rule, 'errors' => [], 'warnings' => $warnings];
     }
 }

@@ -542,3 +542,31 @@ manha em `docs/relatorios/2026-07-02-resumo-noite.md` (+ um relatorio por fatia)
 - Fatia futura P-4: reativacao por tempo via Kanban (TempoEstourou) + opcao de
   "dia util" na agenda.
 - Proximos arcos: MT-1..MT-3 quando a conta 2 for real.
+
+---
+
+## V-1 — VARIAVEIS — ENTREGUE (2026-07-02)
+
+Extensao da escada (dimensao "configuracao", nao um degrau novo): `/variaveis`.
+- `{saudacao}` virou variavel de SISTEMA (`variables.is_system`) com default
+  IDENTICO ao match() historico (05-11h/12-17h/resto, fuso SP) — provado por teste
+  de bordas exatas e pela suite anterior intocada. Edita textos/faixas; NUNCA
+  renomeia/exclui/desativa (writer E UI recusam).
+- Custom por conta: `static` | `horario` (faixas HH:MM, podem cruzar meia-noite,
+  sobreposicao = AVISO e a primeira vence) | `dia_semana` (dias parciais) —
+  `valor_padrao` OBRIGATORIO nos condicionais. Slug `[a-z0-9_]{1,40}` unico por
+  conta; reservados (nome/saudacao/data/hora/senha, fold de acento/caixa) bloqueados.
+- Renderizador UNICO (`RuleResponder::render`, caminho do c620418): regras, nos de
+  fluxo, IA-base, pendencia editada, campanhas, testadores e previews. Cache
+  `variaveis:{account}` invalidado por observer em QUALQUER escrita. Desconhecida/
+  inativa sai INTACTA (comportamento historico). Resolucao SO no envio — payload
+  do modelo de IA leva o placeholder CRU (teste explicito).
+- GUARDA ANTI-BYPASS DO S5 (a mais importante): valor de variavel JAMAIS contem
+  `{senha:...}`/ref de segredo (writer + UI); sem variavel dentro de variavel
+  (um nivel, sem recursao).
+- Writers/telas (RuleWriter, KnowledgeWriter, fluxo, campanha, pendencia) AVISAM
+  referencia `{x}` desconhecida — nunca bloqueiam (a licao do bug da saudacao crua).
+- `VariableWriter` = caminho oficial unico; `VariableProvisioner` idempotente
+  (migration p/ contas existentes + hook `Account::created`).
+- Testes: 464 verdes (443 anteriores intocados + 20 VariaveisTest + 1 extensao do
+  gate TenantIsolationTest com variaveis homonimas espelhadas).

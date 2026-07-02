@@ -38,6 +38,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
     // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.
     Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
+    // Variaveis (V-1): placeholders configuraveis; config, editavel offline.
+    Route::get('/variaveis', \App\Livewire\Variaveis::class)->name('variaveis');
 
     Route::middleware('whatsapp.connected')->group(function () {
         // M-1: painel do dono (leitura pura dos logs; primeiro item do menu).
