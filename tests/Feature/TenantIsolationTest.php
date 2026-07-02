@@ -642,7 +642,7 @@ class TenantIsolationTest extends TestCase
 
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
-    public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void
+    public function test_token_por_canal_autentica_e_o_secret_global_morreu(): void
     {
         config(['services.webhook.secret' => 'segredo-global', 'services.webhook.header' => 'X-Webhook-Secret']);
         $payload = ['event' => 'messages.upsert', 'instance' => 'inst-a', 'data' => [
@@ -650,7 +650,7 @@ class TenantIsolationTest extends TestCase
             'messageType' => 'conversation', 'message' => ['conversation' => 'oi'], 'messageTimestamp' => 1782699162,
         ]];
 
-        // 1. Token por canal na URL (novo): aceito SEM header.
+        // 1. Token por canal na URL: aceito SEM header (o caminho unico pos-MT-2).
         $this->postJson('/webhook/evolution/token-aaaa', $payload)->assertOk();
 
         // 2. Token invalido: 401.
@@ -659,11 +659,10 @@ class TenantIsolationTest extends TestCase
         // 3. URL antiga sem header: 401 (como sempre).
         $this->postJson('/webhook/evolution', $payload)->assertUnauthorized();
 
-        // 4. Retrocompat (DEPRECADO): URL antiga + secret global no header segue OK —
-        //    a Evolution em producao continua funcionando sem reconfiguracao.
-        //    (por ultimo: withHeaders persiste os headers default do TestCase)
+        // 4. MT-2: o secret global MORREU — mesmo o valor correto no header e 401
+        //    (a instancia da conta 1 migrou pra URL por token com validacao real).
         $this->withHeaders(['X-Webhook-Secret' => 'segredo-global'])
-            ->postJson('/webhook/evolution', $payload)->assertOk();
+            ->postJson('/webhook/evolution', $payload)->assertUnauthorized();
     }
 }
 

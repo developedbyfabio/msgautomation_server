@@ -42,7 +42,7 @@ class AutoReplyWireTest extends TestCase
     private function scaffold(bool $enabled, string $policy): array
     {
         $account = Account::create(['name' => 'Teste']);
-        $channel = Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
+        $channel = Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected', 'webhook_token' => 'tok-wire-teste']);
         AutoReplySetting::create([
             'account_id' => $account->id,
             'enabled' => $enabled,
@@ -90,8 +90,7 @@ class AutoReplyWireTest extends TestCase
 
     private function postWebhook(array $overrides = []): void
     {
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $this->payload($overrides))
+        $this->postJson('/webhook/evolution/tok-wire-teste', $this->payload($overrides))
             ->assertOk();
     }
 
@@ -221,8 +220,8 @@ class AutoReplyWireTest extends TestCase
         $this->rule($account);
         $payload = $this->payload(['data' => ['key' => ['id' => 'FIXO-001']]]);
 
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])->postJson('/webhook/evolution', $payload)->assertOk();
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])->postJson('/webhook/evolution', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/tok-wire-teste', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/tok-wire-teste', $payload)->assertOk();
 
         $this->assertDatabaseCount('incoming_messages', 1);
         Http::assertSentCount(1);

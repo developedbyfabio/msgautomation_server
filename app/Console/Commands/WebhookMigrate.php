@@ -15,8 +15,9 @@ use Illuminate\Console\Command;
  *   php artisan evolution:webhook:migrate --apply    -> aplica (rodar SO com o ok)
  *
  * Depois de aplicar e VALIDAR (mensagem real chegando pela rota nova no journal),
- * a aceitacao do secret global e removida em commit separado e reversivel.
- * Reversao: rodar de novo com --rollback (volta a URL antiga com header secreto).
+ * a aceitacao do secret global foi REMOVIDA (MT-2). Reversao completa exige:
+ * git revert do commit da remocao + --rollback aqui (a URL antiga so volta a
+ * autenticar com o middleware revertido).
  */
 class WebhookMigrate extends Command
 {

@@ -8,16 +8,14 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Valida a origem do webhook. Dois caminhos (MT-0):
+ * Valida a origem do webhook: TOKEN POR CANAL na URL (MT-0/MT-2) — o token
+ * identifica o canal e o PROVIDER dele verifica (Evolution: o proprio token em
+ * tempo constante; Cloud API no CH-2: challenge + HMAC).
  *
- *  1. TOKEN POR CANAL (novo, preferido): rota /webhook/evolution/{token} — o token
- *     identifica/autentica o canal (channels.webhook_token, unico). E o caminho
- *     do multi-tenant (cada instancia com seu token; migracao da URL na MT-2).
- *  2. SECRET GLOBAL no header (RETROCOMPAT, **DEPRECADO**): a URL atual configurada
- *     na Evolution continua valendo — o webhook vivo nao para num deploy. Sera
- *     removido quando todas as instancias migrarem pra URL com token (MT-2).
- *
- * Comparacao em tempo constante (hash_equals). Falhou os dois -> 401.
+ * MT-2 (2026-07-02): o secret global no header foi REMOVIDO — a instancia da
+ * conta 1 migrou pra URL por token com validacao real (mensagem organica pela
+ * rota nova). A URL antiga (/webhook/evolution sem token) agora e SEMPRE 401.
+ * Reversao: git revert deste commit + evolution:webhook:migrate --rollback.
  */
 class VerifyWebhookSecret
 {
@@ -42,15 +40,7 @@ class VerifyWebhookSecret
             abort(401, 'Webhook nao autorizado.');
         }
 
-        // Caminho 2 — secret global no header (DEPRECADO; retrocompat da URL atual).
-        $expected = (string) config('services.webhook.secret', '');
-        $header = (string) config('services.webhook.header', 'X-Webhook-Secret');
-        $provided = (string) $request->header($header, '');
-
-        if ($expected === '' || ! hash_equals($expected, $provided)) {
-            abort(401, 'Webhook nao autorizado.');
-        }
-
-        return $next($request);
+        // Sem token na URL: 401 SEMPRE (o secret global morreu na MT-2).
+        abort(401, 'Webhook nao autorizado.');
     }
 }

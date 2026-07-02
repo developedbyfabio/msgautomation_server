@@ -22,12 +22,14 @@ class WebhookEvolutionTest extends TestCase
     use RefreshDatabase;
 
     private const SECRET = 'segredo-de-teste';
+    private const TOKEN = 'tok-webhook-teste';
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Testes autossuficientes: nao dependem do segredo real do .env.
+        // MT-2: a rota do webhook e POR TOKEN do canal (o secret global morreu).
+        // Config do secret mantida SO pra provar que ele nao autentica mais.
         config([
             'services.webhook.secret' => self::SECRET,
             'services.webhook.header' => 'X-Webhook-Secret',
@@ -36,7 +38,7 @@ class WebhookEvolutionTest extends TestCase
         // MT-0: a conta e resolvida pelo CANAL da instancia (como em producao, onde
         // o seeder cria conta+canal). Instancia sem canal = descartada por seguranca.
         $account = \App\Models\Account::create(['name' => 'T']);
-        \App\Models\Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
+        \App\Models\Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected', 'webhook_token' => self::TOKEN]);
     }
 
     private function fixture(array $overrides = []): array
@@ -53,8 +55,7 @@ class WebhookEvolutionTest extends TestCase
     {
         $payload = $this->fixture();
 
-        $response = $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $payload);
+        $response = $this->postJson('/webhook/evolution/' . self::TOKEN, $payload);
 
         $response->assertOk()->assertJson(['status' => 'queued']);
 
@@ -77,20 +78,28 @@ class WebhookEvolutionTest extends TestCase
     {
         Queue::fake();
 
-        $response = $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $this->fixture());
+        $response = $this->postJson('/webhook/evolution/' . self::TOKEN, $this->fixture());
 
         $response->assertOk();
         Queue::assertPushed(ProcessIncomingWhatsappMessage::class, 1);
     }
 
-    public function test_secret_invalido_e_bloqueado(): void
+    /** MT-2: o secret global MORREU — mesmo o valor outrora correto e 401. */
+    public function test_secret_global_removido_url_antiga_sempre_401(): void
     {
+        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
+            ->postJson('/webhook/evolution', $this->fixture())->assertUnauthorized();
+
         $response = $this->withHeaders(['X-Webhook-Secret' => 'errado'])
             ->postJson('/webhook/evolution', $this->fixture());
 
         $response->assertUnauthorized();
         $this->assertDatabaseCount('incoming_messages', 0);
+    }
+
+    public function test_token_invalido_e_bloqueado(): void
+    {
+        $this->postJson('/webhook/evolution/token-errado', $this->fixture())->assertUnauthorized();
     }
 
     public function test_secret_ausente_e_bloqueado(): void
@@ -105,12 +114,10 @@ class WebhookEvolutionTest extends TestCase
     {
         $payload = $this->fixture();
 
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/' . self::TOKEN, $payload)->assertOk();
 
         // Re-entrega do mesmo evento (mesmo instance + id).
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/' . self::TOKEN, $payload)->assertOk();
 
         $this->assertDatabaseCount('incoming_messages', 1);
     }
@@ -119,8 +126,7 @@ class WebhookEvolutionTest extends TestCase
     {
         $payload = $this->fixture(['event' => 'presence.update']);
 
-        $this->withHeaders(['X-Webhook-Secret' => self::SECRET])
-            ->postJson('/webhook/evolution', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/' . self::TOKEN, $payload)->assertOk();
 
         $this->assertDatabaseCount('incoming_messages', 0);
     }

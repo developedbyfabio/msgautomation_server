@@ -32,7 +32,7 @@ class SyncResilienciaTest extends TestCase
     private function canal(string $status = 'connected'): Account
     {
         $account = Account::create(['name' => 'Teste']);
-        Channel::create(['account_id' => $account->id, 'instance' => $this->instancia(), 'status' => $status]);
+        Channel::create(['account_id' => $account->id, 'instance' => $this->instancia(), 'status' => $status, 'webhook_token' => 'tok-sync-teste']);
 
         return $account;
     }
@@ -84,7 +84,7 @@ class SyncResilienciaTest extends TestCase
     public function test_webhook_enfileira_na_fila_default(): void
     {
         Queue::fake();
-        config(['services.webhook.secret' => 'segredo-de-teste', 'services.webhook.header' => 'X-Webhook-Secret']);
+        $this->canal(); // MT-2: a rota por token exige o canal (o secret global morreu)
 
         $payload = [
             'event' => 'messages.upsert',
@@ -96,8 +96,7 @@ class SyncResilienciaTest extends TestCase
             ],
         ];
 
-        $this->withHeaders(['X-Webhook-Secret' => 'segredo-de-teste'])
-            ->postJson('/webhook/evolution', $payload)->assertOk();
+        $this->postJson('/webhook/evolution/tok-sync-teste', $payload)->assertOk();
 
         // O worker systemd consome a fila 'default'. O webhook nao deve rotear pra outra
         // fila: o job vai sem queue customizada (null) -> cai na default da conexao.
