@@ -150,4 +150,27 @@ class FlowPipelineTest extends TestCase
         Http::assertSent(fn ($r) => $r['text'] === 'SO A REGRA');
         $this->assertDatabaseMissing('flow_sessions', ['remote_jid' => self::JID, 'status' => 'active']);
     }
+
+    /**
+     * BUGFIX (producao): no de fluxo com placeholder saia CRU ("{saudacao}") — o
+     * caminho de texto direto nao passava pelo renderizador. Agora usa o MESMO
+     * RuleResponder das regras, NO ENVIO. (10h SP -> "Bom dia"; pushName do payload.)
+     */
+    public function test_no_de_fluxo_renderiza_placeholders_no_envio(): void
+    {
+        $flow = Flow::create(['account_id' => $this->account->id, 'name' => 'F', 'enabled' => true, 'timeout_seconds' => 600]);
+        $flow->triggers()->create(['match_type' => 'contains', 'match_value' => 'menu']);
+        $root = FlowNode::create(['flow_id' => $flow->id, 'kind' => 'menu', 'message' => "{saudacao}, {nome}! Escolha:\n1 - Suporte"]);
+        $fim = FlowNode::create(['flow_id' => $flow->id, 'kind' => 'final', 'message' => 'Ate mais, {nome}!']);
+        $root->options()->create(['input' => '1', 'label' => '1 - Suporte', 'next_node_id' => $fim->id]);
+        $flow->update(['root_node_id' => $root->id]);
+
+        // No raiz (entrada no fluxo): placeholders renderizados.
+        $this->receber('menu', 'PH1');
+        Http::assertSent(fn ($r) => $r['text'] === "Bom dia, Cliente! Escolha:\n1 - Suporte");
+
+        // No final (advance): idem.
+        $this->receber('1', 'PH2');
+        Http::assertSent(fn ($r) => $r['text'] === 'Ate mais, Cliente!');
+    }
 }

@@ -68,6 +68,16 @@ class SendAutoReply implements ShouldQueue
                     'now' => now(),
                 ]);
             }
+        } elseif ($text !== null) {
+            // BUGFIX: texto DIRETO (no de fluxo, resposta da base da IA) passa pelo
+            // MESMO renderizador das regras NO ENVIO — antes um no com "{saudacao}"
+            // saia cru pro contato. Render toca so {nome}/{saudacao}/{data}/{hora};
+            // {senha:} fica intacto e continua sendo resolvido SO no POST (Sender),
+            // com a guarda de fluxo-com-senha existente valendo como sempre.
+            $text = $responder->render($text, [
+                'nome' => $incoming->push_name,
+                'now' => now(),
+            ]);
         }
 
         // Sem resposta resolvida -> nada a enviar (nao gera log de envio).
