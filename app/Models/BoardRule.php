@@ -23,6 +23,7 @@ class BoardRule extends Model
         'conditions',
         'to_column_id',
         'active',
+        'is_default', // regra do provisioner (editar/desativar pede confirmacao na UI)
         'position',
     ];
 
@@ -31,6 +32,7 @@ class BoardRule extends Model
         return [
             'conditions' => 'array',
             'active' => 'boolean',
+            'is_default' => 'boolean',
             'position' => 'integer',
         ];
     }

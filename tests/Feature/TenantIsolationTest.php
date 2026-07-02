@@ -328,6 +328,32 @@ class TenantIsolationTest extends TestCase
         $this->assertSame(2, \App\Models\Board::withoutAccountScope()->count());
     }
 
+    public function test_kanban_tela_da_a_nao_mostra_nem_move_cards_da_b(): void
+    {
+        $this->webhook('inst-a', 'oi', 'K4');
+        $this->webhook('inst-b', 'oi', 'K5');
+        // O webhook atualiza push_name ('Cliente'); restaura os nomes espelhados
+        // pra distinguir as contas nos asserts da tela.
+        Contact::withoutAccountScope()->where('account_id', $this->a->id)->update(['push_name' => 'Cliente-da-A']);
+        Contact::withoutAccountScope()->where('account_id', $this->b->id)->update(['push_name' => 'Cliente-da-B']);
+        $cardB = \App\Models\Card::withoutAccountScope()->where('account_id', $this->b->id)->firstOrFail();
+        $colunaB = (int) $cardB->column_id;
+        $boardB = \App\Models\Board::withoutAccountScope()->where('account_id', $this->b->id)->first();
+        $resolvidoB = (int) $boardB->columns()->where('slug', 'resolvido')->value('id');
+
+        app(AccountContext::class)->clear(); // contexto default = A
+
+        Livewire::test(\App\Livewire\Kanban::class)
+            ->assertSee('Cliente-da-A')
+            ->assertDontSee('Cliente-da-B')
+            // Acao sobre card da B: no-op (card fora do board da conta A).
+            ->call('moveCard', $cardB->id, $resolvidoB)
+            ->call('showHistory', $cardB->id)
+            ->assertSet('historyCardId', null);
+
+        $this->assertSame($colunaB, (int) $cardB->fresh()->column_id); // B intocado
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

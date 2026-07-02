@@ -8,8 +8,13 @@
         ->where('status', 'pending')
         ->when($expDias > 0, fn ($q) => $q->where('created_at', '>=', now()->subDays($expDias)))
         ->count();
+    // K-2: contador de cards em "Novo" (conversas aguardando primeira acao).
+    $kanbanNovo = \App\Models\Card::query()
+        ->whereHas('column', fn ($q) => $q->where('slug', 'novo'))
+        ->count();
     $nav = [
         ['conversas', 'Conversas', 'chat-bubble-left-right', 0],
+        ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
         ['contatos', 'Contatos', 'users', 0],
         ['senhas', 'Senhas', 'key', 0],
         ['regras', 'Regras', 'bolt', 0],

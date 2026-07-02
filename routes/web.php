@@ -41,6 +41,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('whatsapp.connected')->group(function () {
         Route::get('/conversas', Conversas::class)->name('conversas');
+        // Kanban K-2: board de conversas (observador puro; mover card e acao humana).
+        Route::get('/kanban', \App\Livewire\Kanban::class)->name('kanban');
         Route::get('/contatos', Contatos::class)->name('contatos');
         Route::get('/regras', Regras::class)->name('regras');
         // Fila de aprovacao da IA (Fatia 3): envia mensagens -> atras do gate de conexao.

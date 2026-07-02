@@ -64,6 +64,7 @@ class BoardProvisioner
                 'conditions' => $cond,
                 'to_column_id' => $cols[$destino]->id,
                 'active' => true,
+                'is_default' => true,
                 'position' => $i,
             ]);
         }

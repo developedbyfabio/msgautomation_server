@@ -253,7 +253,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 2 | **IA-4** Virar regra | **ENTREGUE** — promocao a regra/entrada da base; limiar/temas editaveis em /configuracoes | IA-3 | Baixo | Validar 1 promocao e o efeito (proxima msg gratis) |
 | 3 | **MT-0** Scoping estrutural | **ENTREGUE** — AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
 | 4 | **K-1** Kanban modelo+eventos | **ENTREGUE** — boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
-| 5 | **K-2** Kanban UI | /kanban board + mover manual + historico + editor de board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
+| 5 | **K-2** Kanban UI | **ENTREGUE** — /kanban board + mover manual + historico + editor de colunas e board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
 | 6 | **T-1** Tags | tags + pivot + chips na UI + acao "aplicar tag" nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
 | 7 | **P-1** Proativas: freios+opt-in | Bloco proativo nas settings (tudo OFF), `proactive_opt_in` no contato + registro de consentimento + opt-out por regra de sistema | MT-0 | Medio | Aprovar defaults dos tetos |
 | 8 | **P-2** Campanhas com gate | campaigns/targets draft→preview→aprovar; scheduler (unit novo) + fila `proactive` + `SendProactive` (modo proactive no Sender) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
@@ -410,3 +410,32 @@ cards SEPARADOS, evento da A move so card da A, boards/cards/regras da B invisiv
 
 **K-2 (proxima):** UI do board (/kanban), movimento manual com historico, edicao de colunas e
 board_rules na tela (estrutura ja pronta), badges/contadores.
+
+---
+
+## K-2 — ENTREGUE (2026-07-02)
+
+UI do Kanban em `/kanban` (item no menu com badge = cards em "Novo"), no padrao das telas
+(Livewire + Flux free, modais, tooltips, polling 15s). Observador puro INTACTO: mover card e
+acao humana (cause=manual); a tela nunca envia nem decide (provado por teste — mover nao gera
+POST). Suite final: **361 verdes** (347 anteriores sem mudanca de expectativa).
+
+- **Board:** colunas lado a lado (scroll horizontal; header fixo + scroll interno por coluna),
+  contador por coluna, busca por contato, card com nome/tempo relativo/direcao (in/out).
+  Clique no card abre a conversa: `/conversas?jid=...` (mount do Conversas aceita o query param).
+- **Movimento manual:** menu "Mover para..." no card (SEM drag-and-drop — sem lib nova; a mesma
+  decisao do editor de fluxos outline; drag-drop registrado como melhoria futura). Mesma coluna =
+  no-op. Historico do card em modal (transicoes com causa regra|manual + evento + data).
+- **Colunas:** renomear (slug ESTAVEL — regras nunca quebram, testado com evento pos-renomeacao),
+  reordenar (setas), adicionar custom (slug proprio gerado). Excluir: SO custom + vazia + sem
+  regra apontando; as 5 system da D4 nao sao excluiveis (tooltip explica).
+- **Regras de movimento:** lista em ordem com first-match explicado; ativar/desativar, reordenar,
+  editar/criar (evento entre os 5 emitidos com descricao pt-BR — incl. fluxo_no e ia_decisao sem
+  default; condicoes basicas; destino obrigatorio e do board da conta). Mexer em regra DEFAULT
+  (`board_rules.is_default`, migration 000027) pede confirmacao leve. Tudo vale so pra eventos
+  futuros (tooltip; nada reprocessa historico).
+- **Gate estendido:** tela da A nao mostra nem move cards da B (mover/historico de card alheio =
+  no-op).
+
+**Melhoria futura registrada:** drag-and-drop no board (exige lib JS; menu atende).
+**Proxima fatia da ordem (D1): T-1 (tags).**

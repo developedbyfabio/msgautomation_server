@@ -27,6 +27,15 @@ class Conversas extends Component
     public string $panelName = '';
     public string $panelNotes = '';
 
+    /** K-2: o Kanban linka /conversas?jid=... pra abrir a conversa direto. */
+    public function mount(): void
+    {
+        $jid = (string) request()->query('jid', '');
+        if ($jid !== '') {
+            $this->selectedJid = $jid;
+        }
+    }
+
     public function select(string $jid): void
     {
         $this->selectedJid = $jid;
