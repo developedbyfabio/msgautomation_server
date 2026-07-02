@@ -603,3 +603,17 @@ nao sabe denuncia — e denuncia derruba numero).
 
 **Horizonte (P-5, quando o Fabio pedir):** pulo de fim de semana na agenda e
 reativacao por tempo via Kanban (TempoEstourou).
+
+
+---
+
+## MT-1 — ENTREGUE (2026-07-02) — aguardando gate pro MT-2
+
+Multi-usuario real: `account_user` (role owner|operador, D3), contexto web vem do
+VINCULO do usuario re-validado POR REQUEST (sessao forjada resetada), fallback
+fase-1 DESLIGADO em producao (config default false; suite legada mantem a
+semantica via phpunit.xml), 403 claro pra logado sem vinculo (logout acessivel),
+seletor de conta ativa (so com 2+), `msg:user:create` com senha via prompt oculto.
+Backfill: Fabio = owner da conta 1 (verificado). 494 verdes (8 novos + gate
+estendido com usuarios espelhados via HTTP). Smoke: webhook vivo intocado.
+Detalhes: docs/relatorios/2026-07-02-mt1.md. **MT-2 so apos o gate do Fabio.**

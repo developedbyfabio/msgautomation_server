@@ -19,6 +19,15 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', Login::class)->name('login');
 });
 
+// MT-1: troca da conta ATIVA (sessao). So contas do VINCULO do usuario (403 fora).
+Route::post('/conta-ativa', function (\Illuminate\Http\Request $request) {
+    $id = (int) $request->input('account_id');
+    abort_unless($request->user()->accounts()->whereKey($id)->exists(), 403, 'Conta fora do seu vinculo.');
+    $request->session()->put('tenancy.account_id', $id);
+
+    return redirect()->route('conversas');
+})->middleware('auth')->name('conta.ativa');
+
 Route::post('/logout', function () {
     Auth::logout();
     session()->invalidate();

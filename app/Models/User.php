@@ -29,4 +29,11 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    /** MT-1 — contas do usuario (pivot account_user; role owner|operador, D3). */
+    public function accounts(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\Account::class, 'account_user')
+            ->withPivot('role')->withTimestamps();
+    }
 }

@@ -58,6 +58,22 @@
                 @endforeach
             </nav>
             <div class="ml-auto flex items-center gap-3 text-xs">
+                {{-- MT-1: seletor de conta ativa (sessao) — invisivel com 1 conta --}}
+                @auth
+                    @php $contasDoUsuario = auth()->user()->accounts()->orderBy('account_user.id')->get(['accounts.id', 'accounts.name']); @endphp
+                    @if ($contasDoUsuario->count() > 1)
+                        <form method="POST" action="{{ route('conta.ativa') }}">
+                            @csrf
+                            <select name="account_id" onchange="this.form.submit()" aria-label="Conta ativa"
+                                class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                                @foreach ($contasDoUsuario as $contaOpt)
+                                    <option value="{{ $contaOpt->id }}" @selected((int) session('tenancy.account_id') === (int) $contaOpt->id)>{{ $contaOpt->name }}</option>
+                                @endforeach
+                            </select>
+                        </form>
+                        <span class="text-zinc-400">|</span>
+                    @endif
+                @endauth
                 <livewire:status-conexao />
                 <span class="text-zinc-400">|</span>
                 <span class="text-zinc-500">Robo:</span>

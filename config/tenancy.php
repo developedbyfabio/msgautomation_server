@@ -7,11 +7,11 @@
 */
 
 return [
-    // FASE 1 (conta unica): sem contexto definido, o AccountContext resolve a conta
-    // unica (oldest) — e o UNICO lugar do sistema com esse fallback (era o
-    // Account::oldest() espalhado; lacuna L2 do doc 09). Na fase MT-1 (multi-user)
-    // este flag vira false: contexto passa a vir SEMPRE do usuario logado/job/comando,
-    // e query sem contexto FALHA ALTO (MissingAccountContextException) — nunca
-    // vaza/mistura contas em silencio.
-    'single_account_fallback' => env('TENANCY_SINGLE_ACCOUNT_FALLBACK', true),
+    // MT-1: fallback de conta unica DESLIGADO por default — o contexto vem SEMPRE
+    // do usuario logado (vinculo account_user), do job (id serializado) ou do
+    // comando (--account/iteracao). Query sem contexto FALHA ALTO
+    // (MissingAccountContextException) — nunca vaza/mistura contas em silencio.
+    // A suite LEGADA (pre-MT-1) roda com o flag ligado via phpunit.xml pra manter
+    // a semantica fase-1 dos testes antigos; os testes MT-1 desligam explicito.
+    'single_account_fallback' => env('TENANCY_SINGLE_ACCOUNT_FALLBACK', false),
 ];

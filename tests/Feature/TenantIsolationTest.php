@@ -597,6 +597,29 @@ class TenantIsolationTest extends TestCase
         Http::assertSent(fn ($r) => $r['text'] === "oi\n\nResponda SAIR-B pra sair.");
     }
 
+    // ---- MT-1: HTTP por usuario (vinculo), sem fallback ---------------------------------
+
+    public function test_http_por_usuario_carrega_so_a_conta_do_vinculo_sem_fallback(): void
+    {
+        config(['tenancy.single_account_fallback' => false]); // producao MT-1
+
+        $userA = \App\Models\User::create(['name' => 'A', 'email' => 'a@x.local', 'password' => \Illuminate\Support\Facades\Hash::make('senha-forte-123')]);
+        $userB = \App\Models\User::create(['name' => 'B', 'email' => 'b@x.local', 'password' => \Illuminate\Support\Facades\Hash::make('senha-forte-123')]);
+        $userA->accounts()->attach($this->a->id, ['role' => 'owner']);
+        $userB->accounts()->attach($this->b->id, ['role' => 'owner']);
+
+        // Mesmo request, mesma rota: cada usuario ve SO a sua conta espelhada.
+        $this->actingAs($userA)->get('/regras')
+            ->assertOk()->assertSee('RESPOSTA-DA-CONTA-A')->assertDontSee('RESPOSTA-DA-CONTA-B');
+        $this->actingAs($userB)->get('/regras')
+            ->assertOk()->assertSee('RESPOSTA-DA-CONTA-B')->assertDontSee('RESPOSTA-DA-CONTA-A');
+
+        // Forjar a conta da OUTRA na sessao nao vaza: vinculo re-validado por request.
+        $this->actingAs($userA)->withSession(['tenancy.account_id' => $this->b->id])
+            ->get('/regras')
+            ->assertOk()->assertSee('RESPOSTA-DA-CONTA-A')->assertDontSee('RESPOSTA-DA-CONTA-B');
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

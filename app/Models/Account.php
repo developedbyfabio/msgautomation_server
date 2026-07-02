@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Account extends Model
 {
+    /** MT-1 — usuarios vinculados (pivot account_user; role owner|operador). */
+    public function users(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'account_user')
+            ->withPivot('role')->withTimestamps();
+    }
+
     protected $fillable = ['name'];
 
     /**
