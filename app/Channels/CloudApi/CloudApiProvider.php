@@ -5,6 +5,7 @@ namespace App\Channels\CloudApi;
 use App\Channels\ChannelCapabilities;
 use App\Channels\ChannelProvider;
 use App\Models\Channel;
+use App\Models\Contact;
 use App\Whatsapp\Exceptions\WhatsappSendException;
 use App\Whatsapp\IncomingMessageData;
 use App\Whatsapp\SentMessageData;
@@ -141,7 +142,7 @@ class CloudApiProvider implements ChannelProvider
         return new IncomingMessageData(
             instance: $phoneNumberId, // channels.instance do canal cloud = phone_number_id
             providerMessageId: $messageId, // wamid.* na coluna legada de idempotencia
-            remoteJid: $from . '@s.whatsapp.net', // wa_id -> JID canonico NA BORDA
+            remoteJid: $this->canonicalJid($from, $phoneNumberId), // wa_id -> JID canonico NA BORDA (9o digito BR tratado)
             fromMe: false, // echo proprio nao e entregue em `messages`
             pushName: $this->str(data_get($value, 'contacts.0.profile.name')),
             type: $type !== '' ? $type : 'unknown',
@@ -153,7 +154,7 @@ class CloudApiProvider implements ChannelProvider
 
     // ---- envio (transporte puro) -------------------------------------------------------
 
-    public function sendText(Channel $channel, string $to, string $text): SentMessageData
+    public function sendText(Channel $channel, string $to, string $text, ?string $replyTo = null): SentMessageData
     {
         $cred = $this->credentialsFor($channel);
         if ($cred['access_token'] === '' || $cred['phone_number_id'] === '') {
@@ -162,17 +163,24 @@ class CloudApiProvider implements ChannelProvider
 
         $numero = str_contains($to, '@') ? Str::before($to, '@') : $to;
 
+        $body = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $numero,
+            'type' => 'text',
+            'text' => ['body' => $text],
+        ];
+        // CH-2 Parte B: resposta reativa vira reply CONTEXTUAL (bolha citando a
+        // mensagem do cliente) quando temos o wamid do inbound.
+        if ($replyTo !== null && $replyTo !== '') {
+            $body['context'] = ['message_id' => $replyTo];
+        }
+
         $resp = Http::baseUrl($this->graphBase())
             ->withToken($cred['access_token'])
             ->acceptJson()
             ->timeout(20)
-            ->post('/' . $this->graphVersion() . '/' . $cred['phone_number_id'] . '/messages', [
-                'messaging_product' => 'whatsapp',
-                'recipient_type' => 'individual',
-                'to' => $numero,
-                'type' => 'text',
-                'text' => ['body' => $text],
-            ]);
+            ->post('/' . $this->graphVersion() . '/' . $cred['phone_number_id'] . '/messages', $body);
 
         if ($resp->failed()) {
             // Mapeia sem vazar token: credencial (401/403), limite (429), janela
@@ -224,6 +232,41 @@ class CloudApiProvider implements ChannelProvider
     }
 
     // ---- helpers ----------------------------------------------------------------------------
+
+    /**
+     * CH-2 Parte B — normalizacao de TELEFONE BR (complementar ao MATCH-1, que e
+     * de texto). Comportamento documentado da Meta: em numeros BR o prefixo/9o
+     * digito do wa_id pode vir MODIFICADO (celular com 9 chega sem, ou vice-versa).
+     * Regra conservadora: so troca pra VARIANTE se o contato JA EXISTE com ela na
+     * conta do canal e NAO existe com a forma recebida — nunca duplica contato,
+     * nunca inventa numero. Sem match de variante: mantem o que a Meta mandou.
+     */
+    private function canonicalJid(string $waId, string $phoneNumberId): string
+    {
+        $jid = $waId . '@s.whatsapp.net';
+
+        $variante = null;
+        if (preg_match('/^55(\d{2})(\d{8})$/', $waId, $m)) {
+            $variante = '55' . $m[1] . '9' . $m[2] . '@s.whatsapp.net'; // sem 9 -> com 9
+        } elseif (preg_match('/^55(\d{2})9(\d{8})$/', $waId, $m)) {
+            $variante = '55' . $m[1] . $m[2] . '@s.whatsapp.net'; // com 9 -> sem 9
+        }
+        if ($variante === null) {
+            return $jid;
+        }
+
+        $channel = Channel::withoutAccountScope()->where('instance', $phoneNumberId)->first();
+        if ($channel === null) {
+            return $jid; // instancia desconhecida: o job descarta adiante
+        }
+
+        $existentes = Contact::withoutAccountScope()
+            ->where('account_id', $channel->account_id)
+            ->whereIn('remote_jid', [$jid, $variante])
+            ->pluck('remote_jid');
+
+        return (! $existentes->contains($jid) && $existentes->contains($variante)) ? $variante : $jid;
+    }
 
     private function graphBase(): string
     {

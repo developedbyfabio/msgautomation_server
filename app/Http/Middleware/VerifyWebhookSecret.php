@@ -37,7 +37,9 @@ class VerifyWebhookSecret
                 return $next($request);
             }
 
-            abort(401, 'Webhook nao autorizado.');
+            // CH-2 Parte B: a Meta espera 403 em challenge/assinatura recusados;
+            // Evolution mantem o 401 historico. Token desconhecido segue 401.
+            abort($channel?->provider === 'cloud_api' ? 403 : 401, 'Webhook nao autorizado.');
         }
 
         // Sem token na URL: 401 SEMPRE (o secret global morreu na MT-2).

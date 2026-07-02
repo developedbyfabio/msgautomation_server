@@ -83,8 +83,10 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
 
     // ---- envio (transporte puro; freios ficam no Sender) --------------------------
 
-    public function sendText(Channel $channel, string $to, string $text): SentMessageData
+    public function sendText(Channel $channel, string $to, string $text, ?string $replyTo = null): SentMessageData
     {
+        // $replyTo (CH-2 Parte B) e IGNORADO aqui: o reply contextual e capacidade
+        // do cloud_api; o comportamento da Evolution nao muda (quoted e horizonte).
         $c = $this->credentialsFor($channel);
 
         // A Evolution v2.3.7 aceita numero ou jid no campo "number"; normalizamos pra digitos.

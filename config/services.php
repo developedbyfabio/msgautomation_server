@@ -47,7 +47,7 @@ return [
     // da Meta nao era alcancavel do ambiente; validacao real na Parte B).
     'cloud_api' => [
         'graph_base' => env('CLOUD_API_GRAPH_BASE', 'https://graph.facebook.com'),
-        'graph_version' => env('CLOUD_API_GRAPH_VERSION', 'v21.0'),
+        'graph_version' => env('CLOUD_API_GRAPH_VERSION', 'v23.0'),
     ],
 
     'evolution' => [

@@ -29,8 +29,12 @@ interface ChannelProvider
     /**
      * Envia texto livre pelo canal. NAO aplica freios (quem chama e o Sender).
      * Lanca WhatsappSendException em falha de transporte.
+     *
+     * CH-2 Parte B: $replyTo opcional = providerMessageId da mensagem RECEBIDA a
+     * que este envio responde. Provider com reply contextual usa (cloud_api:
+     * objeto `context.message_id` com o wamid); quem nao suporta IGNORA.
      */
-    public function sendText(Channel $channel, string $to, string $text): SentMessageData;
+    public function sendText(Channel $channel, string $to, string $text, ?string $replyTo = null): SentMessageData;
 
     /** Valida a origem do webhook pro canal resolvido (token / HMAC no CH-2). */
     public function verifyWebhook(Request $request, Channel $channel): bool;

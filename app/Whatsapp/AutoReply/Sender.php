@@ -99,11 +99,12 @@ class Sender
         }
 
         // 3d. CH-2 — janela de 24h REAL por contato+CANAL: provedor sem mensagem
-        //     livre fora da janela (cloud_api) BLOQUEIA manual/aprovacao quando o
-        //     ultimo inbound NESTE canal passou de 24h. Reativo (auto/flow)
-        //     responde segundos apos o inbound — janela aberta por construcao.
-        //     Evolution declara TRUE — nem consulta (comportamento de sempre).
-        if (in_array($mode, ['manual', 'aprovacao'], true)
+        //     livre fora da janela (cloud_api) BLOQUEIA quando o ultimo inbound
+        //     NESTE canal passou de 24h. Reativo (auto) responde segundos apos o
+        //     inbound — janela aberta por construcao; a checagem cobre o caso
+        //     patologico de fila represada por 24h+ (Parte B: fora da janela nao
+        //     tenta free-form). Evolution declara TRUE — nem consulta.
+        if (in_array($mode, ['auto', 'manual', 'aprovacao'], true)
             && ! $this->providers->for($channel)->capabilities()->mensagemLivreForaDaJanela
             && ! \App\Models\ContactChannelWindow::isOpen($accountId, $jid, (int) $channel->id)) {
             $log->update(['status' => 'blocked', 'motivo' => 'janela_24h']);
@@ -124,8 +125,13 @@ class Sender
 
         // 4. envio (usa o texto resolvido; descartado apos o POST) — CH-1: pelo
         //    provider DO CANAL (credenciais do canal com fallback no env).
+        //    CH-2 Parte B: com incoming conhecido, passa o providerMessageId dele
+        //    (wamid no cloud) pro provider fazer reply CONTEXTUAL; a Evolution ignora.
+        $replyTo = $incomingMessageId !== null
+            ? \App\Models\IncomingMessage::withoutAccountScope()->whereKey($incomingMessageId)->value('evolution_message_id')
+            : null;
         try {
-            $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio);
+            $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
         } catch (WhatsappSendException) {
             $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
 

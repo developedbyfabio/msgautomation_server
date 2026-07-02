@@ -74,6 +74,23 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
+        // CH-2 Parte B — dedup RAPIDO por wamid (a Meta entrega at-least-once e
+        // re-tenta por 36h). Cache::add e atomico (SET NX no Redis); a chave so
+        // encurta o caminho — quem GARANTE exactly-once no persist continua sendo
+        // o indice unico (instance, evolution_message_id). Por isso o retorno
+        // antecipado exige as DUAS provas (chave ja vista E mensagem no banco):
+        // um retry do proprio job apos falha parcial nunca perde mensagem.
+        if ($channel->provider === 'cloud_api') {
+            $inedito = Cache::add('cloud:dedup:' . sha1($data->providerMessageId), 1, now()->addHours(48));
+            if (! $inedito && IncomingMessage::withoutAccountScope()
+                ->where('instance', $data->instance)
+                ->where('evolution_message_id', $data->providerMessageId)->exists()) {
+                Log::debug('Cloud API: re-entrega deduplicada por wamid.', ['channel' => $channel->id]);
+
+                return;
+            }
+        }
+
         // Contexto de conta EXPLICITO pro resto do job (queries escopadas).
         app(AccountContext::class)->set((int) $channel->account_id);
         $account = $channel->account;

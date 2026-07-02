@@ -131,16 +131,18 @@ class CloudApiProviderTest extends TestCase
         $this->get('/webhook/cloud/tok-cloud?hub.mode=subscribe&hub.verify_token=' . self::VERIFY . '&hub.challenge=424242')
             ->assertOk()->assertSee('424242', false);
 
+        // Parte B: verify_token errado em canal CLOUD = 403 (contrato da Meta).
         $this->get('/webhook/cloud/tok-cloud?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=1')
-            ->assertUnauthorized();
+            ->assertForbidden();
 
+        // Token de rota DESCONHECIDO: 401 (nao ha canal pra saber o provider).
         $this->get('/webhook/cloud/token-inexistente?hub.mode=subscribe&hub.verify_token=' . self::VERIFY . '&hub.challenge=1')
             ->assertUnauthorized();
     }
 
     // ---- HMAC (POST) ---------------------------------------------------------------------
 
-    public function test_post_com_hmac_valida_processa_e_invalida_ou_ausente_e_401(): void
+    public function test_post_com_hmac_valida_processa_e_invalida_ou_ausente_e_403(): void
     {
         // Valida: 200, mensagem persistida NO CANAL cloud com wamid na idempotencia.
         $this->postAssinado($this->payloadMeta('oi', 'wamid.IN1'))->assertOk();
@@ -150,10 +152,10 @@ class CloudApiProviderTest extends TestCase
             'remote_jid' => self::JID, // wa_id -> JID canonico NA BORDA
         ]);
 
-        // Assinatura ERRADA: 401, nada persistido.
-        $this->postAssinado($this->payloadMeta('x', 'wamid.IN2'), 'segredo-errado')->assertUnauthorized();
-        // Sem assinatura: 401.
-        $this->postAssinado($this->payloadMeta('x', 'wamid.IN3'), null)->assertUnauthorized();
+        // Assinatura ERRADA: 403, nada persistido (Parte B: contrato da Meta).
+        $this->postAssinado($this->payloadMeta('x', 'wamid.IN2'), 'segredo-errado')->assertForbidden();
+        // Sem assinatura: 403.
+        $this->postAssinado($this->payloadMeta('x', 'wamid.IN3'), null)->assertForbidden();
         $this->assertDatabaseMissing('incoming_messages', ['evolution_message_id' => 'wamid.IN2']);
         $this->assertDatabaseMissing('incoming_messages', ['evolution_message_id' => 'wamid.IN3']);
     }

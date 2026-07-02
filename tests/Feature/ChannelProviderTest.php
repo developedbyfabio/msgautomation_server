@@ -94,7 +94,7 @@ class ChannelProviderTest extends TestCase
                 );
             }
 
-            public function sendText(Channel $channel, string $to, string $text): SentMessageData
+            public function sendText(Channel $channel, string $to, string $text, ?string $replyTo = null): SentMessageData
             {
                 return new SentMessageData(providerMessageId: 'FAKE1', status: 201, raw: []);
             }

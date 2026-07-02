@@ -377,3 +377,66 @@ O que entrou (tudo mockado, 518 -> 530 verdes, anteriores intactos):
   SO na B (mesmo wa_id espelhado nas duas contas).
 
 **Parte B (setup vivo, INTERATIVA) — aguardando o Fabio.**
+
+
+---
+
+## CH-2 PARTE B — ENTREGUE (2026-07-02, VPS) — aguardando GATE de ativacao na Meta
+
+**Os 5 "A CONFIRMAR" da Parte A, resolvidos contra a doc OFICIAL (alcancavel do
+VPS; graph.facebook.com ~240ms, v21 e v23 vivos):**
+1. **Assinatura**: confirmado `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256
+   do corpo CRU com o App Secret, comparacao timing-safe — exatamente como
+   implementado. Falha de verificacao (challenge ou HMAC) agora responde **403**
+   no canal cloud (Evolution mantem o 401 historico; token de rota desconhecido
+   segue 401).
+2. **Shape do payload**: confirmado verbatim (object whatsapp_business_account,
+   entry[].id=WABA, changes[].field=messages, value.metadata.phone_number_id,
+   contacts[].wa_id/profile.name, messages[].from/id/timestamp/type/text.body;
+   statuses[] com conversation/pricing). Exemplo oficial virou FIXTURE de teste.
+   Confirmacao com POST real acontece na ativacao (gate).
+3. **Numero de teste**: doc atual nao publica o limite exato de recipients
+   verificados (contrato conhecido: ~5). Validar no painel na ativacao. Token
+   temporario expira "rapido" (~23h) — permanente via System User depois.
+4. **Tiers/quality**: 250 conversas iniciadas/24h (padrao novo portfolio) ->
+   2K/10K/100K/ilimitado via scaling automatico; quality rating avaliada pela
+   Meta. Irrelevante pro reativo (iniciadas pelo cliente) — vale pra CH-3.
+5. **Sanity endpoint**: GET /{phone_number_id}?fields=id com Bearer — leve,
+   read-only (o connectionState ja usa). Reachability provada viva do VPS.
+   Graph default do config atualizado v21.0 -> **v23.0** (doc atual; segue
+   configuravel por env).
+
+**O que entrou (alem da Parte A ja entregue):**
+- **Dedup por wamid com TTL** (48h, Cache::add atomico no Redis do app) no
+  ProcessIncomingWhatsappMessage, SO canal cloud — a Meta entrega at-least-once
+  e re-tenta por 36h. Retorno antecipado exige chave vista E mensagem no banco
+  (retry do proprio job apos falha parcial NUNCA perde mensagem); o indice unico
+  (instance, evolution_message_id) segue sendo a garantia dura.
+- **Normalizacao de numero BR** (complementar ao MATCH-1, que e texto): a Meta
+  documenta que o prefixo/9o digito BR/MX pode vir modificado no wa_id. O
+  adaptador cloud canonicaliza NA BORDA: se o contato JA existe com a variante
+  (com/sem 9) e NAO existe com a forma recebida, casa a existente — nunca
+  duplica contato, nunca inventa numero; sem match, mantem o que veio.
+- **Reply contextual**: contrato `sendText` ganhou `?string $replyTo = null`
+  (aditivo). Sender passa o providerMessageId do incoming; CloudApiProvider
+  envia `context.message_id` (bolha citando a mensagem do cliente); Evolution
+  IGNORA (comportamento identico ao de sempre — provado pela suite intacta).
+- **Janela de 24h ate no modo auto**: alem de manual/aprovacao, o auto tambem
+  bloqueia com `janela_24h` se a fila represar 24h+ (fora da janela nao se
+  tenta free-form; template e CH-3).
+- 200 imediato + processamento assincrono ja eram da Parte A (controller so
+  enfileira).
+
+**Conflitos da spec da Parte B com este doc (decididos com o Fabio):**
+- Credenciais: spec pedia "so no .env"; MANTIDO o desenho deste doc (cifradas
+  por canal, nunca em claro — decisao explicita do Fabio).
+- statuses[]: spec pedia rastrear entrega; MANTIDA a D5 (ignorados com log
+  leve; rastreio vira fatia pos-CH-3 — decisao explicita do Fabio).
+
+**Testes**: 530 -> **539 verdes** (9 novos em CloudApiParteBTest: fixture
+verbatim da doc, dedup + prova de nao-perda em retry, 3 casos do 9o digito BR,
+reply contextual + manual sem context, janela no auto; 2 expectativas da Parte
+A atualizadas 401->403 no cloud). TenantIsolationTest intacto (gate).
+
+**GATE de ativacao (o Fabio faz; nada foi ativado pelo agente):** roteiro no
+relatorio docs/relatorios/2026-07-02-deploy1-f4-ch2b.md.
