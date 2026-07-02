@@ -42,6 +42,7 @@ class AutoReplySetting extends Model
         'proactive_jitter_min',
         'proactive_jitter_max',
         'proactive_optout_word',
+        'proactive_optout_footer', // P-4: rodape padrao de saida (com {palavra_sair})
     ];
 
     /** Temas que SEMPRE exigem aprovacao (a IA nunca responde direto). */

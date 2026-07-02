@@ -22,8 +22,8 @@ class Variable extends Model
 
     public const TYPES = ['static', 'horario', 'dia_semana'];
 
-    /** Reservados (nativos + cofre); comparacao com fold de acento/caixa. */
-    public const RESERVED = ['nome', 'saudacao', 'data', 'hora', 'senha'];
+    /** Reservados (nativos + cofre + sistema); comparacao com fold de acento/caixa. */
+    public const RESERVED = ['nome', 'saudacao', 'data', 'hora', 'senha', 'palavra_sair'];
 
     protected $fillable = [
         'account_id',
@@ -80,7 +80,7 @@ class Variable extends Model
             return [];
         }
 
-        $nativas = ['nome', 'saudacao', 'data', 'hora'];
+        $nativas = ['nome', 'saudacao', 'data', 'hora', 'palavra_sair'];
         $ativas = self::withoutAccountScope()
             ->where('account_id', $accountId)
             ->where('active', true)

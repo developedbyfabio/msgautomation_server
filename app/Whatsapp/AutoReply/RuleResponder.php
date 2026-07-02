@@ -17,6 +17,9 @@ use Illuminate\Support\Carbon;
  *                 historico identico ("Bom dia" 05-11 / "Boa tarde" 12-17 / "Boa noite")
  *   {data}     -> dd/mm/aaaa (fuso de exibicao)
  *   {hora}     -> HH:MM (fuso de exibicao)
+ *   {palavra_sair} -> P-4: palavra de opt-out ATUAL das proativas (lookup nas
+ *                 settings NO ENVIO — trocar a palavra muda ate campanha ja
+ *                 aprovada); sem conta/valor resolve INTACTA
  *   {custom}   -> variaveis da CONTA (V-1: static | horario | dia_semana), cache
  *                 por conta invalidado em qualquer escrita; desconhecida/inativa
  *                 sai INTACTA (comportamento historico); resolucao em fuso SP,
@@ -90,6 +93,11 @@ class RuleResponder
             if (array_key_exists($chave, $valores)) {
                 return $valores[$chave];
             }
+            // P-4: {palavra_sair} = sistema (nome reservado), lookup LAZY nas
+            // settings — so consulta quando o template usa; sem valor, INTACTA.
+            if ($chave === 'palavra_sair') {
+                return $this->palavraSair() ?? $m[0];
+            }
             // V-1: variaveis custom ATIVAS da conta; desconhecida/inativa INTACTA.
             if (isset($custom[$chave])) {
                 return $this->resolveVariavel($custom[$chave], $now);
@@ -107,6 +115,25 @@ class RuleResponder
             $hora >= 12 && $hora <= 17 => 'Boa tarde',
             default => 'Boa noite',
         };
+    }
+
+    /**
+     * P-4 — palavra de opt-out ATUAL da conta do contexto, lida das settings a
+     * CADA render (sem cache de proposito: trocar a palavra em /configuracoes
+     * muda o rodape ate de campanha JA aprovada, no proximo envio).
+     */
+    private function palavraSair(): ?string
+    {
+        try {
+            $accountId = app(\App\Tenancy\AccountContext::class)->id();
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            return null;
+        }
+
+        $palavra = trim((string) \App\Models\AutoReplySetting::withoutAccountScope()
+            ->where('account_id', $accountId)->value('proactive_optout_word'));
+
+        return $palavra !== '' ? $palavra : null;
     }
 
     // ---- V-1: resolucao das variaveis configuraveis ---------------------------

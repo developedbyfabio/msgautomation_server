@@ -159,7 +159,8 @@ class ProactiveDispatchTest extends TestCase
         $this->runJob($target);
 
         // Placeholders renderizados localmente (10h -> Bom dia; nome do contato).
-        Http::assertSent(fn ($r) => $r['text'] === 'Bom dia, Cliente! Ainda tem interesse?');
+        // P-4: TODA proativa sai com o rodape de saida ({palavra_sair} -> palavra atual).
+        Http::assertSent(fn ($r) => $r['text'] === "Bom dia, Cliente! Ainda tem interesse?\n\nPara nao receber mais mensagens assim, responda PARAR.");
         $target->refresh();
         $this->assertSame('sent', $target->status);
         $this->assertNotNull($target->sent_at);

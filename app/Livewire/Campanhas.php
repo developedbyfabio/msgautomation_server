@@ -35,6 +35,7 @@ class Campanhas extends Component
     public ?int $editingId = null;
     public string $cName = '';
     public string $cMessage = '';
+    public string $cFooter = ''; // P-4: instrucao de saida (rodape OBRIGATORIO)
     public string $cAudienceType = 'tags'; // tags | coluna_kanban | contatos
     /** @var array<int,int> */
     public array $cTagIds = [];
@@ -58,6 +59,8 @@ class Campanhas extends Component
     {
         $this->reset(['editingId', 'cName', 'cMessage', 'cTagIds', 'cColumnId', 'cContactIds', 'cContactSearch', 'cStartAt']);
         $this->cAudienceType = 'tags';
+        // P-4: rodape PRE-PREENCHIDO com o padrao da conta (editavel por campanha).
+        $this->cFooter = (string) \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_optout_footer;
         $this->resetValidation();
         $this->showForm = true;
     }
@@ -74,6 +77,7 @@ class Campanhas extends Component
         $this->editingId = $c->id;
         $this->cName = (string) $c->name;
         $this->cMessage = (string) $c->message;
+        $this->cFooter = (string) ($c->optout_footer ?? '');
         $this->cAudienceType = (string) $c->audience_type;
         $cfg = (array) $c->audience_config;
         $this->cTagIds = array_map('intval', $cfg['tag_ids'] ?? []);
@@ -91,18 +95,28 @@ class Campanhas extends Component
         $this->resetValidation();
     }
 
-    public function save(SecretVault $vault): void
+    public function save(SecretVault $vault, \App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
     {
         $this->validate([
             'cName' => 'required|string|max:120',
             'cMessage' => 'required|string|max:4000',
+            'cFooter' => 'required|string|max:500',
             'cAudienceType' => 'required|in:tags,coluna_kanban,contatos',
             'cStartAt' => 'nullable|date',
-        ], [], ['cName' => 'nome', 'cMessage' => 'mensagem']);
+        ], [], ['cName' => 'nome', 'cMessage' => 'mensagem', 'cFooter' => 'instrucao de saida']);
 
         // {senha:}/segredo PROIBIDO em proativa — sem excecao (coerente com o guard).
+        // P-4: o conteudo avaliado e o CONJUNTO mensagem + rodape.
         if ($vault->hasRef($this->cMessage)) {
             $this->addError('cMessage', 'Mensagem proativa NAO pode conter {senha:...}. Segredo so sai em resposta reativa com escopo de contatos especificos.');
+
+            return;
+        }
+
+        // P-4: rodape valido (obrigatorio + {palavra_sair} + sem segredo).
+        $rodape = $footerGuard->check($this->accountId(), $this->cFooter);
+        if ($rodape['error'] !== null) {
+            $this->addError('cFooter', $rodape['error']);
 
             return;
         }
@@ -131,6 +145,7 @@ class Campanhas extends Component
         $dados = [
             'name' => trim($this->cName),
             'message' => trim($this->cMessage),
+            'optout_footer' => trim($this->cFooter),
             'audience_type' => $this->cAudienceType,
             'audience_config' => $config,
             'start_at' => $startAt,
@@ -148,7 +163,11 @@ class Campanhas extends Component
         }
 
         $this->closeForm();
-        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), trim($this->cMessage));
+        if ($rodape['warning'] !== null) {
+            $this->dispatch('toast', message: 'Aviso: ' . $rodape['warning'], type: 'error');
+        }
+        // Referencias desconhecidas avaliadas no CONJUNTO (mensagem + rodape).
+        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), trim($this->cMessage) . ' ' . trim($this->cFooter));
         if ($desconhecidas !== []) {
             $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) na mensagem: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa, sai cru.', type: 'error');
         }
@@ -199,6 +218,16 @@ class Campanhas extends Component
         $c = $this->find($this->confirmingApproveId);
         $this->confirmingApproveId = null;
         if (! $c || $c->status !== 'previewed') {
+            return;
+        }
+
+        // P-4 — GATE do rodape na aprovacao (defesa em profundidade: cobre draft
+        // antigo, escrita direta e palavra trocada depois do save).
+        $rodape = app(\App\Whatsapp\Proactive\OptoutFooterGuard::class)
+            ->check($this->accountId(), (string) $c->optout_footer);
+        if ($rodape['error'] !== null) {
+            $this->dispatch('toast', message: 'Nao aprovada: ' . $rodape['error'] . ' Edite a campanha e ajuste a instrucao de saida.', type: 'error');
+
             return;
         }
 
@@ -386,12 +415,15 @@ class Campanhas extends Component
         if ($this->previewId && ($c = $this->find($this->previewId))) {
             $res = $resolver->resolve($this->accountId(), (string) $c->audience_type, (array) $c->audience_config);
             $exemplo = $res['eligiveis']->first();
+            // P-4: o exemplo mostra o texto COMPLETO (mensagem + rodape) — o que
+            // se aprova e EXATAMENTE o que sai.
+            $templateCompleto = trim((string) $c->message) . "\n\n" . trim((string) $c->optout_footer);
             $preview = [
                 'campanha' => $c,
                 'eligiveis' => $res['eligiveis'],
                 'excluidos' => $res['excluidos'],
                 'exemplo' => $exemplo
-                    ? $responder->render((string) $c->message, ['nome' => $exemplo->push_name, 'now' => now()])
+                    ? $responder->render($templateCompleto, ['nome' => $exemplo->push_name, 'now' => now()])
                     : null,
             ];
         }

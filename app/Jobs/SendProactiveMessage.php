@@ -91,8 +91,19 @@ class SendProactiveMessage implements ShouldQueue
             return;
         }
 
+        // P-4 — rodape de saida OBRIGATORIO: texto final = mensagem + linha em
+        // branco + rodape (template do snapshot; fallback no padrao da conta —
+        // a obrigacao vale ate pra campanha antiga sem a coluna preenchida).
+        // A jaula e o render avaliam o texto FINAL concatenado.
+        $settings = AutoReplySetting::withoutAccountScope()
+            ->where('account_id', $this->accountId)->first();
+        $rodape = trim((string) ($campaign->optout_footer
+            ?: $settings?->proactive_optout_footer
+            ?: \App\Whatsapp\Proactive\OptoutFooterGuard::DEFAULT));
+        $template = trim((string) $campaign->message) . "\n\n" . $rodape;
+
         // JAULA COMPLETA (9 freios) antes de gastar qualquer coisa.
-        $decision = $guard->allows($this->accountId, (int) $contact->id, (string) $campaign->message);
+        $decision = $guard->allows($this->accountId, (int) $contact->id, $template);
         if (! $decision->allowed) {
             $this->tratarBloqueio($target, $campaign, (string) $decision->reason, $agenda);
 
@@ -115,7 +126,9 @@ class SendProactiveMessage implements ShouldQueue
             return;
         }
 
-        $texto = $responder->render((string) $campaign->message, [
+        // Renderizador UNICO sobre o conjunto: {palavra_sair} resolve pro valor
+        // ATUAL das settings (trocar a palavra muda ate campanha ja aprovada).
+        $texto = $responder->render($template, [
             'nome' => $contact->push_name,
             'now' => now(),
         ]);

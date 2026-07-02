@@ -184,6 +184,15 @@
                         class="w-40 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                     @error('proactive_optout_word') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
+                <div class="w-full">
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">Rodape de saida (padrao da conta)
+                        <x-info-tip text="P-4: toda mensagem proativa SEMPRE sai com esta instrucao no fim — quem sabe sair manda a palavra; quem nao sabe, denuncia. Tem que conter {palavra_sair} (vira a palavra de opt-out atual no envio, ate em campanha ja aprovada). Campanha nova comeca com este texto; da pra personalizar por campanha." />
+                    </label>
+                    <textarea wire:model.live.debounce.400ms="proactive_optout_footer" rows="2" maxlength="500"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    @error('proactive_optout_footer') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-500">Como sai hoje: <span class="rounded bg-zinc-100 px-1.5 py-0.5 italic dark:bg-zinc-800">{{ $footerPreview }}</span></p>
+                </div>
                 <button type="button" wire:click="saveProactive"
                     class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
                     <flux:icon icon="check" variant="micro" /> Salvar proativas

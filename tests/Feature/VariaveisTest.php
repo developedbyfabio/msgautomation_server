@@ -533,7 +533,8 @@ class VariaveisTest extends TestCase
         );
 
         // 10h de quinta: saudacao da variavel de sistema + custom, tudo SO no envio.
-        Http::assertSent(fn ($r) => $r['text'] === 'Bom dia, Cliente! Temos frete gratis ate sexta.');
+        // (P-4: rodape de saida obrigatorio anexado ao final.)
+        Http::assertSent(fn ($r) => $r['text'] === "Bom dia, Cliente! Temos frete gratis ate sexta.\n\nPara nao receber mais mensagens assim, responda PARAR.");
         $this->assertSame('sent', $target->fresh()->status);
     }
 

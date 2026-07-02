@@ -28,6 +28,10 @@
                     <span class="text-[10px] text-zinc-400">nativa</span>
                 </div>
                 <div class="flex items-center justify-between gap-2">
+                    <span><code class="rounded bg-zinc-100 px-1.5 dark:bg-zinc-800">{palavra_sair}</code> <span class="text-zinc-500">— palavra de opt-out das proativas, sempre a ATUAL no envio (hoje: "{{ $nativasPreview['palavra_sair'] }}")</span></span>
+                    <a href="{{ route('configuracoes') }}" wire:navigate class="text-[11px] font-medium underline">mudar em configuracoes</a>
+                </div>
+                <div class="flex items-center justify-between gap-2">
                     <span><code class="rounded bg-zinc-100 px-1.5 dark:bg-zinc-800">{senha:nome}</code> <span class="text-zinc-500">— senha do cofre, resolvida so no POST e com escopo por contato</span></span>
                     <a href="{{ route('senhas') }}" wire:navigate class="text-[11px] font-medium underline">gerenciar no cofre</a>
                 </div>

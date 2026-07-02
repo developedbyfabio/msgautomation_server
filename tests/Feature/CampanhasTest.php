@@ -68,6 +68,8 @@ class CampanhasTest extends TestCase
             'account_id' => $this->account->id,
             'name' => 'Follow-up',
             'message' => '{saudacao}, {nome}! Ainda tem interesse?',
+            // P-4: espelho do backfill — campanha pre-existente tem o rodape default.
+            'optout_footer' => 'Para nao receber mais mensagens assim, responda {palavra_sair}.',
             'audience_type' => 'contatos',
             'audience_config' => ['contact_ids' => []],
             'status' => 'draft',

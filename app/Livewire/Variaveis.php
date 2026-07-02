@@ -209,6 +209,8 @@ class Variaveis extends Component
                 'nome' => 'nome do contato (ex.: "Claudia")',
                 'data' => $responder->render('{data}'),
                 'hora' => $responder->render('{hora}'),
+                // P-4: palavra de opt-out ATUAL (mesma resolucao do envio).
+                'palavra_sair' => $responder->render('{palavra_sair}'),
             ],
             'deleting' => $this->confirmingDeleteId ? $this->find($this->confirmingDeleteId) : null,
         ]);

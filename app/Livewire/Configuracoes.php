@@ -48,6 +48,8 @@ class Configuracoes extends Component
     public string $proactive_window_start = '09:00';
     public string $proactive_window_end = '18:00';
     public string $proactive_optout_word = 'PARAR';
+    // P-4: rodape PADRAO de saida da conta (pre-preenche campanha nova).
+    public string $proactive_optout_footer = '';
     public bool $confirmingProactiveEnable = false;
     public bool $confirmingProactiveRelax = false;
     /** @var array<int,string> */
@@ -95,6 +97,7 @@ class Configuracoes extends Component
         $this->proactive_window_start = substr((string) $s->proactive_window_start, 0, 5);
         $this->proactive_window_end = substr((string) $s->proactive_window_end, 0, 5);
         $this->proactive_optout_word = (string) $s->proactive_optout_word;
+        $this->proactive_optout_footer = (string) $s->proactive_optout_footer;
     }
 
     private function settings(): AutoReplySetting
@@ -201,7 +204,7 @@ class Configuracoes extends Component
      * diario acima de 20, semanal acima de 1, janela mais larga que a atual)
      * pede confirmacao — mesmo padrao do limiar da IA.
      */
-    public function saveProactive(): void
+    public function saveProactive(\App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
     {
         $this->validate([
             'proactive_daily_cap' => 'required|integer|min:1|max:200',
@@ -209,13 +212,27 @@ class Configuracoes extends Component
             'proactive_window_start' => 'required|date_format:H:i',
             'proactive_window_end' => 'required|date_format:H:i|after:proactive_window_start',
             'proactive_optout_word' => 'required|string|min:2|max:40',
+            'proactive_optout_footer' => 'required|string|max:500',
         ], [], [
             'proactive_daily_cap' => 'teto diario',
             'proactive_per_contact_weekly_cap' => 'limite por contato/semana',
             'proactive_window_start' => 'inicio da janela',
             'proactive_window_end' => 'fim da janela',
             'proactive_optout_word' => 'palavra de opt-out',
+            'proactive_optout_footer' => 'rodape de saida',
         ]);
+
+        // P-4: rodape padrao valido (obrigatorio + {palavra_sair} + sem segredo).
+        // Valida contra a PALAVRA NOVA do form (que sera salva junto).
+        $rodape = $footerGuard->check(app(\App\Tenancy\AccountContext::class)->id(), $this->proactive_optout_footer, trim($this->proactive_optout_word));
+        if ($rodape['error'] !== null) {
+            $this->addError('proactive_optout_footer', $rodape['error']);
+
+            return;
+        }
+        if ($rodape['warning'] !== null) {
+            $this->dispatch('toast', message: 'Aviso: ' . $rodape['warning'], type: 'error');
+        }
 
         $s = $this->settings();
         $avisos = [];
@@ -260,6 +277,7 @@ class Configuracoes extends Component
         $this->proactive_window_start = substr((string) $s->proactive_window_start, 0, 5);
         $this->proactive_window_end = substr((string) $s->proactive_window_end, 0, 5);
         $this->proactive_optout_word = (string) $s->proactive_optout_word;
+        $this->proactive_optout_footer = (string) $s->proactive_optout_footer;
     }
 
     private function persistProactive(): void
@@ -270,6 +288,7 @@ class Configuracoes extends Component
             'proactive_window_start' => $this->proactive_window_start . ':00',
             'proactive_window_end' => $this->proactive_window_end . ':00',
             'proactive_optout_word' => trim($this->proactive_optout_word),
+            'proactive_optout_footer' => trim($this->proactive_optout_footer),
         ]);
 
         $this->dispatch('toast', message: 'Configuracoes das proativas salvas.');
@@ -389,8 +408,12 @@ class Configuracoes extends Component
         $this->dispatch('toast', message: 'Configuracoes salvas.');
     }
 
-    public function render()
+    public function render(\App\Whatsapp\AutoReply\RuleResponder $responder)
     {
-        return view('livewire.configuracoes');
+        // P-4: preview HONESTO do rodape — o MESMO renderizador do envio, com a
+        // palavra que esta SALVA (o form pode ter valor ainda nao persistido).
+        return view('livewire.configuracoes', [
+            'footerPreview' => $responder->render($this->proactive_optout_footer),
+        ]);
     }
 }

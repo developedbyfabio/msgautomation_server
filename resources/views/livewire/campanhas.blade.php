@@ -109,7 +109,16 @@
                     <textarea wire:model="cMessage" rows="3" placeholder="ex.: {saudacao}, {nome}! Passando pra saber se ainda tem interesse no orcamento."
                         class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
                     @error('cMessage') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    <p class="mt-1 text-[11px] text-zinc-400">Placeholders: <code>{nome}</code> <code>{saudacao}</code> <code>{data}</code> <code>{hora}</code>. <strong>{{ '{senha:...}' }} e proibido</strong> em proativa.</p>
+                    <p class="mt-1 text-[11px] text-zinc-400">Placeholders: <code>{nome}</code> <code>{saudacao}</code> <code>{data}</code> <code>{hora}</code> <code>{palavra_sair}</code> e as de <a href="{{ route('variaveis') }}" wire:navigate class="underline">/variaveis</a>. <strong>{{ '{senha:...}' }} e proibido</strong> em proativa.</p>
+                </div>
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">Instrucao de saida (rodape obrigatorio)
+                        <x-info-tip text="Toda proativa SEMPRE sai com esta linha no fim: quem sabe sair manda a palavra; quem nao sabe, denuncia — e denuncia derruba o numero. Tem que conter {palavra_sair} (vira a palavra de opt-out atual no envio). Pre-preenchido com o padrao da conta; editavel por campanha." />
+                    </label>
+                    <textarea wire:model="cFooter" rows="2" maxlength="500"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    @error('cFooter') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-400">Vai como ultima linha da mensagem (linha em branco entre elas). Use <code>{{ '{palavra_sair}' }}</code> — literal quebra se a palavra mudar.</p>
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-medium">Publico</label>

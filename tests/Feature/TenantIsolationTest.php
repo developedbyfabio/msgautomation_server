@@ -561,6 +561,42 @@ class TenantIsolationTest extends TestCase
             ->assertDontSee('SAUDACAO-DA-B');
     }
 
+    // ---- Rodape de saida (P-4): palavra e rodape por conta ---------------------------------
+
+    public function test_palavra_sair_e_rodape_proativo_por_conta(): void
+    {
+        // Palavras DIFERENTES por conta: {palavra_sair} resolve a da conta do contexto.
+        AutoReplySetting::withoutAccountScope()->where('account_id', $this->a->id)->update(['proactive_optout_word' => 'PARAR-A']);
+        AutoReplySetting::withoutAccountScope()->where('account_id', $this->b->id)->update(['proactive_optout_word' => 'SAIR-B']);
+
+        $ctx = app(AccountContext::class);
+        $responder = app(\App\Whatsapp\AutoReply\RuleResponder::class);
+        $this->assertSame('PARAR-A', $ctx->runAs($this->a->id, fn () => $responder->render('{palavra_sair}')));
+        $this->assertSame('SAIR-B', $ctx->runAs($this->b->id, fn () => $responder->render('{palavra_sair}')));
+
+        // Disparo na conta B usa a palavra DA B no rodape (mesmo jid espelhado).
+        AutoReplySetting::withoutAccountScope()->where('account_id', $this->b->id)->update(['proactive_enabled' => true]);
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+        $contatoB->update(['proactive_opt_in' => true]);
+        $camp = \App\Models\ProactiveCampaign::create([
+            'account_id' => $this->b->id, 'name' => 'B', 'message' => 'oi',
+            'optout_footer' => 'Responda {palavra_sair} pra sair.',
+            'audience_type' => 'contatos', 'audience_config' => ['contact_ids' => [$contatoB->id]],
+            'status' => 'approved',
+        ]);
+        $alvo = \App\Models\CampaignTarget::create([
+            'campaign_id' => $camp->id, 'contact_id' => $contatoB->id,
+            'status' => 'pending', 'scheduled_at' => now()->subMinute(),
+        ]);
+        (new \App\Jobs\SendProactiveMessage((int) $alvo->id, (int) $this->b->id))->handle(
+            app(\App\Whatsapp\Proactive\ProactiveGuard::class),
+            app(\App\Whatsapp\AutoReply\Sender::class),
+            $responder,
+            app(\App\Whatsapp\Proactive\AgendaBuilder::class),
+        );
+        Http::assertSent(fn ($r) => $r['text'] === "oi\n\nResponda SAIR-B pra sair.");
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

@@ -570,3 +570,36 @@ Extensao da escada (dimensao "configuracao", nao um degrau novo): `/variaveis`.
   (migration p/ contas existentes + hook `Account::created`).
 - Testes: 464 verdes (443 anteriores intocados + 20 VariaveisTest + 1 extensao do
   gate TenantIsolationTest com variaveis homonimas espelhadas).
+
+---
+
+## P-4 — RODAPE DE SAIDA OBRIGATORIO — ENTREGUE (2026-07-02)
+
+Toda proativa SEMPRE sai com a instrucao de saida no fim (conformidade LGPD:
+caminho de revogacao explicito; anti-ban: quem sabe sair manda a palavra, quem
+nao sabe denuncia — e denuncia derruba numero).
+- `{palavra_sair}` = nativa de SISTEMA (nome reservado contra custom): resolve
+  pro valor ATUAL de `proactive_optout_word` NO ENVIO (lookup lazy, sem cache
+  de proposito — trocar a palavra muda o rodape ate de campanha JA aprovada).
+  Listada em /variaveis no bloco de nativas com o valor atual.
+- `settings.proactive_optout_footer` (rodape PADRAO da conta, seed com a
+  variavel; editavel no card Proativas de /configuracoes com preview renderizado)
+  + `proactive_campaigns.optout_footer` (por campanha, PRE-PREENCHIDO com o
+  padrao; congela como TEMPLATE no snapshot). Backfill: campanhas existentes
+  ganharam o default (historico coerente).
+- `OptoutFooterGuard` = validacao UNICA (save da campanha, card de config e
+  RE-EXECUTADA na aprovacao): vazio = erro; sem {palavra_sair} e sem a palavra
+  literal = erro; literal presente = AVISO recomendando a variavel; {senha:} =
+  erro. Fallback no envio: campanha com coluna vazia usa o padrao da conta —
+  NENHUMA proativa sai sem rodape.
+- Envio (P-3): texto final = mensagem + linha em branco + rodape, renderizados
+  JUNTOS pelo renderizador unico; a jaula (contem_senha) e o R2 avaliam o
+  CONJUNTO. Preview da campanha mostra o texto COMPLETO — aprova-se exatamente
+  o que sai. Robo reativo intocado (teste explicito).
+- Testes: 476 verdes (11 novos ProactiveFooterTest + 1 extensao do gate
+  TenantIsolationTest com palavra/rodape por conta). Ajuste disclosed: 2 asserts
+  de texto exato do disparo proativo ganharam o rodape e o helper do
+  CampanhasTest espelha o backfill — e a mudanca de comportamento DA fatia.
+
+**Horizonte (P-5, quando o Fabio pedir):** pulo de fim de semana na agenda e
+reativacao por tempo via Kanban (TempoEstourou).

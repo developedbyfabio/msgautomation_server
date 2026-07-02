@@ -23,6 +23,7 @@ class ProactiveCampaign extends Model
         'account_id',
         'name',
         'message',
+        'optout_footer',   // P-4: rodape de saida (template; {palavra_sair} resolve no envio)
         'audience_type',   // tags | coluna_kanban | contatos
         'audience_config', // JSON por tipo
         'status',          // draft | previewed | approved | cancelled (P-3: running|done|paused)
