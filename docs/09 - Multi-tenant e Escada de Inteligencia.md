@@ -669,3 +669,27 @@ REMOCAO de pontuacao/simbolos/emoji (bordas E meio: "wi-fi"="wifi",
 - 502 -> 518 verdes, ZERO mudanca de expectativa em teste antigo (nenhum
   dependia de pontuacao no casamento). Gate de isolamento estendido
   (sem-match por conta). Proximo da ordem: CH-2.
+
+
+---
+
+## PRODUCAO -> VPS (EM MIGRACAO) — DEPLOY-0 feito no DTI (2026-07-02)
+
+Preparacao da mudanca pro VPS Hostinger, SEM tocar o robo vivo daqui:
+- **Auditoria de segredos (pre-push): LIMPA.** `.env` real nunca commitado;
+  `.env.example` com chaves vazias em TODO o historico; varredura de padroes no
+  historico inteiro e working tree: zero; systemd/compose so referenciam env
+  (docker/evolution/.env ignorado). Unica ocorrencia: SECRETS_KEY FAKE de teste
+  no phpunit.xml (dummy proposital, nao e segredo real).
+- **GitHub privado**: remote `github.com/developedbyfabio/msgautomation` (SSH ja
+  autenticado no servidor). Push SO apos confirmacao de repo PRIVADO no chat.
+- **Pacote de migracao** em `/root/msgautomation-migracao/` (FORA do git):
+  dump completo gz (15M, 48 tabelas, single-transaction), env-inventario.txt
+  (63 chaves SEM valores, [SEGREDO] anotado), migracao-checklist.md (cutover em
+  9 passos com o AVISO do robo-em-dobro: nunca duas Evolution conectadas),
+  versoes.txt (PHP 8.5.7, MySQL 8.0.46, Redis 7.4.9, Node 22.22.3,
+  evolution-api v2.3.7).
+- Segredos que viajam por canal seguro (scp/terminal do VPS, nunca git):
+  APP_KEY e SECRETS_KEY (IDENTICOS, decifram banco/cofre), GEMINI_API_KEY,
+  EVOLUTION_API_KEY, WEBHOOK_SECRET (legado), DB_PASSWORD, docker/evolution/.env.
+- O provisionamento do VPS e OUTRO prompt, rodado la, seguindo o checklist.
