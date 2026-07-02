@@ -15,6 +15,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Producao atras do Cloudflare Tunnel: o cloudflared entrega em HTTP no
+        // loopback e o app so descobre o HTTPS real pelo X-Forwarded-Proto. Sem
+        // confiar no proxy, as URLs absolutas (Livewire/assets) saem http:// e o
+        // browser bloqueia o submit como mixed content. 127.0.0.1 e o unico
+        // proxy possivel (a porta 8080 nao e exposta; so o tunel entra).
+        $middleware->trustProxies(at: ['127.0.0.1']);
+
         // Aliases de middleware.
         $middleware->alias([
             'webhook.secret' => VerifyWebhookSecret::class,
