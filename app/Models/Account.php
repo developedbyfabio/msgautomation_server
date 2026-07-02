@@ -10,6 +10,17 @@ class Account extends Model
 {
     protected $fillable = ['name'];
 
+    /**
+     * Kanban K-1: toda conta NOVA nasce com o board default (colunas D4 + regras
+     * minimas). Contas existentes foram provisionadas pela migration 000026.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Account $account) {
+            app(\App\Kanban\BoardProvisioner::class)->ensureDefaultBoard((int) $account->id);
+        });
+    }
+
     public function channels(): HasMany
     {
         return $this->hasMany(Channel::class);

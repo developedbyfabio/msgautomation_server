@@ -24,6 +24,9 @@ class AccountContext
 {
     private ?int $accountId = null;
 
+    /** @var array<int,?int> pilha pra jobs ANINHADOS (fila sync) — ver push/pop */
+    private array $stack = [];
+
     public function set(int $accountId): void
     {
         $this->accountId = $accountId;
@@ -37,6 +40,24 @@ class AccountContext
     public function clear(): void
     {
         $this->accountId = null;
+    }
+
+    /**
+     * Higiene da FILA (Queue::before): guarda o contexto atual e comeca limpo —
+     * cada job define o proprio contexto. Com fila SYNC (testes/dispatchSync), um
+     * listener/job aninhado NAO pode apagar o contexto do job PAI: o pop() (
+     * Queue::after / exceptionOccurred) restaura exatamente o que havia antes.
+     * No worker longevo a pilha e rasa (1 job por vez) e o pop devolve o vazio.
+     */
+    public function push(): void
+    {
+        $this->stack[] = $this->accountId;
+        $this->accountId = null;
+    }
+
+    public function pop(): void
+    {
+        $this->accountId = $this->stack === [] ? null : array_pop($this->stack);
     }
 
     /** A conta atual. Sem contexto: fallback fase-1 (conta unica) ou EXCECAO. */

@@ -188,6 +188,12 @@ class FlowEngine
             'expires_at' => now()->addSeconds(max(60, (int) $flow->timeout_seconds)),
         ]);
 
+        // Kanban K-1 — evento de dominio (sem regra default; disponivel pra K-2/tags).
+        event(new \App\Events\FlowNodeReached(
+            (int) $session->account_id, (int) $session->id, (string) $session->remote_jid,
+            (int) $node->id, $encerra ? 'completed' : 'active',
+        ));
+
         return ['text' => $node->message, 'status' => $encerra ? 'completed' : 'active', 'session' => $session];
     }
 

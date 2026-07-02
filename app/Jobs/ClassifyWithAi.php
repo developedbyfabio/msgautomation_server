@@ -160,7 +160,7 @@ class ClassifyWithAi implements ShouldQueue
         SecretVault $vault,
     ): bool {
         $log = function (string $acao, ?string $motivo, ?AutoReplyRule $rule) use ($incoming, $contact, $result): AiDecision {
-            return AiDecision::create([
+            $d = AiDecision::create([
                 'account_id' => $incoming->account_id,
                 'contact_id' => $contact?->id,
                 'incoming_message_id' => $incoming->id,
@@ -173,6 +173,10 @@ class ClassifyWithAi implements ShouldQueue
                 'motivo' => $motivo,
                 'model' => $result->model,
             ]);
+            // Kanban K-1 — evento de dominio (sem regra default; K-2/tags usam).
+            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao));
+
+            return $d;
         };
 
         // Fatia 3: toda escala vira pendencia revisavel no /revisao (nada e enviado
@@ -299,7 +303,7 @@ class ClassifyWithAi implements ShouldQueue
             ?float $confidence = null,
             ?string $model = null,
         ) use ($incoming, $contact, $vault): AiDecision {
-            return AiDecision::create([
+            $d = AiDecision::create([
                 'account_id' => $incoming->account_id,
                 'contact_id' => $contact->id,
                 'incoming_message_id' => $incoming->id,
@@ -315,6 +319,10 @@ class ClassifyWithAi implements ShouldQueue
                 'motivo' => $motivo,
                 'model' => $model,
             ]);
+            // Kanban K-1 — evento de dominio (sem regra default; K-2/tags usam).
+            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao));
+
+            return $d;
         };
 
         // Fatia 3: escala da base tambem vira pendencia (sugestao = resposta

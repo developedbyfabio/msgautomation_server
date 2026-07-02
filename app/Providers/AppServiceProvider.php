@@ -8,6 +8,7 @@ use App\Contracts\WhatsappGateway;
 use App\Tenancy\AccountContext;
 use App\Whatsapp\Drivers\EvolutionDriver;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 
@@ -35,7 +36,21 @@ class AppServiceProvider extends ServiceProvider
     {
         // MT-0 — higiene do worker: NENHUM job herda contexto de conta do anterior
         // (worker e processo longevo; cada job define o proprio contexto no handle).
-        Queue::before(fn () => app(AccountContext::class)->clear());
+        // push/pop (pilha) em vez de clear: com fila SYNC, um listener/job aninhado
+        // nunca apaga o contexto do job pai (restaurado ao fim, sucesso ou erro).
+        Queue::before(fn () => app(AccountContext::class)->push());
+        Queue::after(fn () => app(AccountContext::class)->pop());
+        Queue::exceptionOccurred(fn () => app(AccountContext::class)->pop());
+
+        // Kanban K-1 — eventos de dominio -> listener EM FILA (observador puro;
+        // falha isolada no listener, nunca no pipeline).
+        Event::listen([
+            \App\Events\IncomingMessageStored::class,
+            \App\Events\AutoReplySent::class,
+            \App\Events\ManualMessageSent::class,
+            \App\Events\FlowNodeReached::class,
+            \App\Events\AiDecisionRecorded::class,
+        ], \App\Listeners\UpdateKanbanFromEvent::class);
 
         // S1 (fuso): armazenamento em UTC, EXIBICAO em America/Sao_Paulo. Esta macro
         // converte qualquer Carbon (received_at/sent_at/created_at vem em UTC do banco)

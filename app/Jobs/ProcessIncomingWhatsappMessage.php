@@ -76,7 +76,16 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        $this->popularContato($account, $data, $guard);
+        $contato = $this->popularContato($account, $data, $guard);
+
+        // Kanban K-1 — evento de dominio (listener em fila; observador puro).
+        // So mensagens INDIVIDUAIS recebidas (popularContato ja exclui fromMe/grupo).
+        if ($contato !== null) {
+            event(new \App\Events\IncomingMessageStored(
+                (int) $account->id, (int) $message->id, (int) $contato->id, (string) $data->remoteJid,
+            ));
+        }
+
         $this->avaliarAutoResposta($account, $channel, $message, $data, $matcher, $guard);
     }
 
@@ -102,11 +111,14 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         }
     }
 
-    /** Agenda automatica: cada mensagem individual RECEBIDA cria/atualiza o contato. */
-    private function popularContato(Account $account, IncomingMessageData $data, AntiBanGuard $guard): void
+    /**
+     * Agenda automatica: cada mensagem individual RECEBIDA cria/atualiza o contato.
+     * Retorna o contato (null pra fromMe/grupo — que tambem ficam fora do Kanban).
+     */
+    private function popularContato(Account $account, IncomingMessageData $data, AntiBanGuard $guard): ?Contact
     {
         if ($data->fromMe || $guard->isGroup($data->remoteJid)) {
-            return;
+            return null;
         }
 
         $contact = Contact::firstOrNew([
@@ -124,6 +136,8 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         }
 
         $contact->save();
+
+        return $contact;
     }
 
     private function avaliarAutoResposta(

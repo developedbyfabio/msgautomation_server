@@ -292,6 +292,42 @@ class TenantIsolationTest extends TestCase
         $this->assertSame(2, Contact::withoutAccountScope()->count());
     }
 
+    // ---- Kanban (K-1): cards/boards/regras por conta ------------------------------------
+
+    public function test_kanban_contas_espelhadas_geram_cards_separados(): void
+    {
+        // MESMO jid nas duas contas: cada webhook cria o card NA SUA conta.
+        $this->webhook('inst-a', 'qual o horario?', 'K1');
+        $this->webhook('inst-b', 'qual o horario?', 'K2');
+
+        $cardsA = \App\Models\Card::withoutAccountScope()->where('account_id', $this->a->id)->get();
+        $cardsB = \App\Models\Card::withoutAccountScope()->where('account_id', $this->b->id)->get();
+        $this->assertCount(1, $cardsA);
+        $this->assertCount(1, $cardsB);
+        // Cada card aponta pro CONTATO da propria conta (mesmo jid, ids distintos).
+        $this->assertNotSame((int) $cardsA[0]->contact_id, (int) $cardsB[0]->contact_id);
+
+        // Evento da A moveu SO o card da A (resposta -> Em atendimento); o da B idem.
+        $emAtendA = \App\Models\Board::withoutAccountScope()->where('account_id', $this->a->id)->first()
+            ->columns()->where('slug', 'em_atendimento')->value('id');
+        $this->assertSame((int) $emAtendA, (int) $cardsA[0]->fresh()->column_id);
+    }
+
+    public function test_kanban_boards_e_cards_da_b_invisiveis_no_contexto_a(): void
+    {
+        $this->webhook('inst-b', 'oi', 'K3'); // cria card na B
+
+        app(AccountContext::class)->clear(); // contexto default = A (fallback)
+
+        // No contexto da A: nada da B aparece (boards default provisionados = 1 visivel).
+        $this->assertSame(0, \App\Models\Card::query()->count());
+        $this->assertSame(1, \App\Models\Board::query()->count());
+        $this->assertSame(4, \App\Models\BoardRule::query()->count()); // so as 4 default da A
+        // Cross-account SO pelo bypass nomeado.
+        $this->assertSame(1, \App\Models\Card::withoutAccountScope()->count());
+        $this->assertSame(2, \App\Models\Board::withoutAccountScope()->count());
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

@@ -115,6 +115,12 @@ class Sender
             'sent_at' => now(),
         ]);
 
+        // Kanban K-1 — evento de dominio no ENVIO EFETIVO (listener em fila;
+        // observador puro — nada aqui altera o envio ja concluido).
+        event($mode === 'manual'
+            ? new \App\Events\ManualMessageSent((int) $accountId, (int) $log->id, $jid)
+            : new \App\Events\AutoReplySent((int) $accountId, (int) $log->id, $jid, $mode));
+
         return $log;
     }
 

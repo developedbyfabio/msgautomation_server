@@ -252,7 +252,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 1 | **IA-3** Fila de aprovacao | **ENTREGUE** — `pending_approvals` + /revisao (Enviar/Editar/Ignorar); escalou vira item acionavel | — | Baixo | Testar aprovar/editar/ignorar num contato real |
 | 2 | **IA-4** Virar regra | **ENTREGUE** — promocao a regra/entrada da base; limiar/temas editaveis em /configuracoes | IA-3 | Baixo | Validar 1 promocao e o efeito (proxima msg gratis) |
 | 3 | **MT-0** Scoping estrutural | **ENTREGUE** — AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
-| 4 | **K-1** Kanban modelo+eventos | boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
+| 4 | **K-1** Kanban modelo+eventos | **ENTREGUE** — boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
 | 5 | **K-2** Kanban UI | /kanban board + mover manual + historico + editor de board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
 | 6 | **T-1** Tags | tags + pivot + chips na UI + acao "aplicar tag" nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
 | 7 | **P-1** Proativas: freios+opt-in | Bloco proativo nas settings (tudo OFF), `proactive_opt_in` no contato + registro de consentimento + opt-out por regra de sistema | MT-0 | Medio | Aprovar defaults dos tetos |
@@ -370,3 +370,43 @@ o caminho retrocompat do `VerifyWebhookSecret`. Mexe em config viva de producao:
 Fabio no gate da MT-2.
 
 **Proxima fatia da ordem (D1):** Kanban **K-1** (modelo + eventos).
+
+---
+
+## K-1 — ENTREGUE (2026-07-02)
+
+Motor HEADLESS do Kanban (N7), observador puro: assiste eventos e move cards; nunca envia,
+nunca decide resposta, nunca altera o pipeline (falha de listener e ISOLADA — try/catch + log —
+e a suite anterior de 333 passou intacta). Suite final: **347 verdes**.
+
+**Schema (migration `000026`, aditivo, escopado):** `boards` (default por conta), `board_columns`
+(slug ESTAVEL: novo/em_atendimento/aguardando/resolvido/reativacao — D4), `cards` (UNIQUE
+contato+board; last_interaction_at/last_direction), `card_transitions` (historico com causa:
+regra|manual|tempo + board_rule_id + event_type + event_ref; UNIQUE card+evento+ref =
+idempotencia de re-entrega), `board_rules` (evento + condicoes JSON + coluna destino, first-match
+por position; prontas pra UI da K-2). `BoardProvisioner` cria o board default (colunas D4 +
+regras minimas) — migration cobriu a conta existente; `Account::created` cobre contas futuras.
+
+**Eventos de dominio (dispatch nos pontos de escrita existentes):**
+- `IncomingMessageStored` — ProcessIncomingWhatsappMessage::handle (apos popularContato;
+  fromMe/grupos FORA por construcao);
+- `AutoReplySent` / `ManualMessageSent` — Sender::send, SO no envio efetivo (status sent);
+  'aprovacao' conta como AutoReplySent;
+- `FlowNodeReached` — FlowEngine::emit (start/advance); `AiDecisionRecorded` — ClassifyWithAi
+  (ambos SEM regra default; disponiveis pra K-2/tags).
+Listener UNICO em fila (`UpdateKanbanFromEvent`, ShouldQueue) -> `BoardEngine`.
+
+**Regras default (editaveis na K-2):** 1) mensagem_recebida sem card -> cria em NOVO;
+2) mensagem_recebida com card em Resolvido -> volta pra NOVO (reabertura); 3) resposta_enviada
+fora de Em atendimento -> move pra EM ATENDIMENTO; 4) envio_manual idem. Sem regra por tempo
+(reativacao = arco das proativas); coluna Reativacao existe sem automacao.
+
+**Aprendizado estrutural (MT-0 corrigido de tabela):** a higiene de contexto da fila virou
+PILHA (push/pop em Queue::before/after/exceptionOccurred) — com fila sync (testes/dispatchSync),
+listener/job aninhado nao apaga mais o contexto do job pai.
+
+**Gate estendido:** TenantIsolationTest agora prova tambem: contas espelhadas (mesmo jid) geram
+cards SEPARADOS, evento da A move so card da A, boards/cards/regras da B invisiveis no contexto A.
+
+**K-2 (proxima):** UI do board (/kanban), movimento manual com historico, edicao de colunas e
+board_rules na tela (estrutura ja pronta), badges/contadores.
