@@ -84,9 +84,44 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             event(new \App\Events\IncomingMessageStored(
                 (int) $account->id, (int) $message->id, (int) $contato->id, (string) $data->remoteJid,
             ));
+
+            // Proativas P-1 — opt-out por PALAVRA: revoga o opt-in e registra a
+            // trilha. NAO responde nada e NAO interfere no resto do pipeline (a
+            // mensagem segue casando regra/fluxo como qualquer outra).
+            $this->detectarOptOutProativo($account, $contato, $matcher, (string) $data->text);
         }
 
         $this->avaliarAutoResposta($account, $channel, $message, $data, $matcher, $guard);
+    }
+
+    /**
+     * P-1 — palavra de opt-out (match EXATO, case/acento-insensivel via a mesma
+     * normalizacao do matcher). So age se o contato TEM opt-in (sem opt-in = no-op,
+     * sem log falso de revogacao). A trilha em proactive_consents nunca e apagada.
+     */
+    private function detectarOptOutProativo(Account $account, Contact $contato, RuleMatcher $matcher, string $texto): void
+    {
+        if (! $contato->proactive_opt_in) {
+            return;
+        }
+
+        $palavra = (string) ($this->settingsDe($account)->proactive_optout_word ?: 'PARAR');
+        if ($palavra === '' || $matcher->normalize($texto) !== $matcher->normalize($palavra)) {
+            return;
+        }
+
+        $contato->update(['proactive_opt_in' => false]);
+        \App\Models\ProactiveConsent::create([
+            'account_id' => $account->id,
+            'contact_id' => $contato->id,
+            'action' => 'revoke',
+            'origin' => 'palavra',
+        ]);
+    }
+
+    private function settingsDe(Account $account): \App\Models\AutoReplySetting
+    {
+        return \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $account->id]);
     }
 
     private function persistir(Account $account, Channel $channel, IncomingMessageData $data): ?IncomingMessage

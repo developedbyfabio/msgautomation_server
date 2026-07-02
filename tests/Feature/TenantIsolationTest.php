@@ -402,6 +402,37 @@ class TenantIsolationTest extends TestCase
         $this->assertSame(0, \Illuminate\Support\Facades\DB::table('contact_tag')->where('contact_id', $contatoB->id)->count());
     }
 
+    // ---- Proativas (P-1): jaula por conta ------------------------------------------------
+
+    public function test_proativas_freios_consentimentos_e_contadores_por_conta(): void
+    {
+        $guard = app(\App\Whatsapp\Proactive\ProactiveGuard::class);
+        $contatoA = Contact::withoutAccountScope()->where('account_id', $this->a->id)->where('remote_jid', self::JID)->first();
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+
+        // Kill switch proativo da A ligado NAO liga o da B (mesmo jid nas duas).
+        AutoReplySetting::withoutAccountScope()->where('account_id', $this->a->id)->update(['proactive_enabled' => true]);
+        $contatoA->update(['proactive_opt_in' => true]);
+        $contatoB->update(['proactive_opt_in' => true]);
+
+        $meioDia = \Illuminate\Support\Carbon::create(2026, 7, 1, 12, 0, 0, 'America/Sao_Paulo');
+        $this->assertTrue($guard->allows($this->a->id, $contatoA->id, 'oi', $meioDia)->allowed);
+        $this->assertSame('proactive_off', $guard->allows($this->b->id, $contatoB->id, 'oi', $meioDia)->reason);
+
+        // Claim da A nao consome contador da B.
+        $this->assertTrue($guard->claim($this->a->id, $contatoA->id, $meioDia));
+        $this->assertSame(1, $guard->dayCount($this->a->id, $meioDia));
+        $this->assertSame(0, $guard->dayCount($this->b->id, $meioDia));
+        $this->assertSame(0, $guard->weekCount($this->b->id, $contatoB->id, $meioDia));
+
+        // Opt-out por PALAVRA na B revoga SO o contato da B (trilha por conta).
+        $this->webhook('inst-b', 'parar', 'P1');
+        $this->assertFalse((bool) $contatoB->fresh()->proactive_opt_in);
+        $this->assertTrue((bool) $contatoA->fresh()->proactive_opt_in);
+        $this->assertSame(1, \App\Models\ProactiveConsent::withoutAccountScope()->where('account_id', $this->b->id)->count());
+        $this->assertSame(0, \App\Models\ProactiveConsent::withoutAccountScope()->where('account_id', $this->a->id)->count());
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

@@ -106,6 +106,87 @@
             </div>
         </div>
 
+
+        {{-- PROATIVAS (P-1) — kill switch PROPRIO + jaula (disparo real so na P-3) --}}
+        <div @class([
+            'rounded-xl border p-5',
+            'border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40' => $proactive_enabled,
+            'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900' => ! $proactive_enabled,
+        ])>
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-1 font-semibold">
+                        <flux:icon icon="megaphone" variant="micro" class="text-rose-500" />
+                        Mensagens proativas
+                        <x-info-tip text="Mensagem PROATIVA = o sistema INICIA a conversa (follow-up, lembrete, reativacao). E o maior risco de bloqueio do WhatsApp — os tetos existem pra te proteger. So contatos com opt-in explicito recebem, e NADA dispara sem campanha aprovada por voce (P-2/P-3)." />
+                    </div>
+                    <p class="mt-1 max-w-md text-sm text-zinc-500">
+                        Interruptor proprio (independente do robo e da IA). Nesta fase nenhum disparo existe:
+                        ligar so arma os freios. Opt-out do contato: mandar "<strong>{{ $proactive_optout_word }}</strong>".
+                    </p>
+                </div>
+                <button type="button" wire:click="requestProactiveSwitch"
+                    @class([
+                        'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition',
+                        'bg-rose-500' => $proactive_enabled,
+                        'bg-zinc-300 dark:bg-zinc-700' => ! $proactive_enabled,
+                    ])
+                    role="switch" aria-checked="{{ $proactive_enabled ? 'true' : 'false' }}">
+                    <span @class([
+                        'inline-block size-5 transform rounded-full bg-white shadow transition',
+                        'translate-x-6' => $proactive_enabled,
+                        'translate-x-1' => ! $proactive_enabled,
+                    ])></span>
+                </button>
+            </div>
+            <div class="mt-3 text-sm font-medium">Estado: {{ $proactive_enabled ? 'ON (jaula armada; disparo so na P-3)' : 'OFF (desligadas)' }}</div>
+
+            <div class="mt-3 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3 sm:grid-cols-4 dark:border-zinc-800">
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">Teto/dia (conta)
+                        <x-info-tip text="Maximo de proativas por DIA na conta inteira. Padrao seguro: 20. Subir acima disso pede confirmacao." />
+                    </label>
+                    <input type="number" min="1" max="200" wire:model="proactive_daily_cap"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('proactive_daily_cap') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">Por contato/semana
+                        <x-info-tip text="Quantas proativas UM contato pode receber por semana (todas as campanhas somadas). Padrao seguro: 1." />
+                    </label>
+                    <input type="number" min="1" max="7" wire:model="proactive_per_contact_weekly_cap"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('proactive_per_contact_weekly_cap') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Janela (inicio)</label>
+                    <input type="time" wire:model="proactive_window_start"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('proactive_window_start') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Janela (fim)</label>
+                    <input type="time" wire:model="proactive_window_end"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('proactive_window_end') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+            </div>
+            <div class="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">Palavra de opt-out
+                        <x-info-tip text="Contato que mandar EXATAMENTE esta palavra (maiusculas/acentos ignorados) tem o opt-in revogado na hora, com registro na trilha de consentimento. Nao enviamos confirmacao automatica — crie uma regra reativa se quiser responder." />
+                    </label>
+                    <input type="text" maxlength="40" wire:model="proactive_optout_word"
+                        class="w-40 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('proactive_optout_word') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <button type="button" wire:click="saveProactive"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <flux:icon icon="check" variant="micro" /> Salvar proativas
+                </button>
+            </div>
+        </div>
+
         {{-- DEMAIS FREIOS --}}
         <form wire:submit="save" class="rounded-xl border border-zinc-200 bg-white p-5 space-y-5 dark:border-zinc-800 dark:bg-zinc-900">
             @if ($salvo)
@@ -292,6 +373,51 @@
             <div class="flex justify-end gap-2 pt-4">
                 <button type="button" wire:click="cancelAiRelax" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
                 <button type="button" wire:click="aiRelaxConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
+                    <flux:icon icon="check" variant="micro" /> Confirmar mudanca
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: LIGAR proativas (P-1) --}}
+    @if ($confirmingProactiveEnable)
+        <x-modal wireClose="cancelProactiveEnable" title="Ligar mensagens proativas?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-rose-500"><flux:icon icon="megaphone" class="size-6" /></div>
+                <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                    Proativa = o sistema <strong>INICIA</strong> conversa — e o maior risco de bloqueio do
+                    WhatsApp em todo o roadmap. Este interruptor so ARMA os freios: nada dispara sem
+                    campanha criada, revisada e <strong>aprovada por voce</strong> (P-2/P-3), so pra contatos
+                    com opt-in explicito, dentro dos tetos. Confirmar?
+                </p>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelProactiveEnable" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="proactiveEnableConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">
+                    <flux:icon icon="megaphone" variant="micro" /> Ligar proativas
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: confirmar AFROUXAMENTO das proativas (P-1) --}}
+    @if ($confirmingProactiveRelax)
+        <x-modal wireClose="cancelProactiveRelax" title="Afrouxar os freios das proativas?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-amber-500"><flux:icon icon="exclamation-triangle" class="size-6" /></div>
+                <div class="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                    <p>Essas mudancas <strong>aumentam o risco de ban</strong>:</p>
+                    <ul class="list-disc space-y-1 pl-5">
+                        @foreach ($proactiveRelaxWarnings as $aviso)
+                            <li>{{ $aviso }}</li>
+                        @endforeach
+                    </ul>
+                    <p class="text-xs text-zinc-400">Da pra voltar atras aqui a qualquer momento.</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelProactiveRelax" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="proactiveRelaxConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
                     <flux:icon icon="check" variant="micro" /> Confirmar mudanca
                 </button>
             </div>

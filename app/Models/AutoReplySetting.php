@@ -33,6 +33,15 @@ class AutoReplySetting extends Model
         'ai_enabled',
         'ai_confidence_threshold',
         'ai_approval_topics',
+        // Proativas P-1 — bloco proprio (kill switch INDEPENDENTE + tetos D5).
+        'proactive_enabled',
+        'proactive_daily_cap',
+        'proactive_per_contact_weekly_cap',
+        'proactive_window_start',
+        'proactive_window_end',
+        'proactive_jitter_min',
+        'proactive_jitter_max',
+        'proactive_optout_word',
     ];
 
     /** Temas que SEMPRE exigem aprovacao (a IA nunca responde direto). */
@@ -58,6 +67,11 @@ class AutoReplySetting extends Model
             'ai_enabled' => 'boolean',
             'ai_confidence_threshold' => 'float',
             'ai_approval_topics' => 'array',
+            'proactive_enabled' => 'boolean',
+            'proactive_daily_cap' => 'integer',
+            'proactive_per_contact_weekly_cap' => 'integer',
+            'proactive_jitter_min' => 'integer',
+            'proactive_jitter_max' => 'integer',
         ];
     }
 

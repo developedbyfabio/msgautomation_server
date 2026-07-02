@@ -255,7 +255,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 4 | **K-1** Kanban modelo+eventos | **ENTREGUE** — boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
 | 5 | **K-2** Kanban UI | **ENTREGUE** — /kanban board + mover manual + historico + editor de colunas e board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
 | 6 | **T-1** Tags | **ENTREGUE** — tags + pivot com origem + chips na UI + acoes de tag nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
-| 7 | **P-1** Proativas: freios+opt-in | Bloco proativo nas settings (tudo OFF), `proactive_opt_in` no contato + registro de consentimento + opt-out por regra de sistema | MT-0 | Medio | Aprovar defaults dos tetos |
+| 7 | **P-1** Proativas: freios+opt-in | **ENTREGUE** — bloco proativo nas settings (tudo OFF), opt-in + trilha de consentimento + opt-out por palavra + ProactiveGuard | MT-0 | Medio | Aprovar defaults dos tetos |
 | 8 | **P-2** Campanhas com gate | campaigns/targets draft→preview→aprovar; scheduler (unit novo) + fila `proactive` + `SendProactive` (modo proactive no Sender) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
 | 9 | **P-3** Reativacao via Kanban | TempoEstourou + campanha continua ("sumiu X dias na coluna Y → Z") com os mesmos gates | P-2, K-2 | Alto (ban) | Acompanhar 1 ciclo real com teto minusculo |
 | 10 | **M-1** Metricas | /painel com agregados dos logs + funil do Kanban | K-1 (funil; resto independe) | Baixo | Validar numeros contra a realidade |
@@ -484,3 +484,45 @@ casa contato da B com tag homonima); acao de tag do board da A nao toca contato 
 
 **Proxima fatia da ordem (D1): P-1 — freios das proativas (bloco proativo nas settings, tudo
 OFF; opt-in explicito por contato com registro de consentimento; opt-out por regra de sistema).**
+
+---
+
+## P-1 — ENTREGUE (2026-07-02)
+
+A JAULA das proativas — NENHUM caminho de envio proativo existe (provado por
+Http::assertNothingSent em tudo que a fatia toca). Tudo nasce OFF com os defaults D5 exatos.
+Suite final: **402 verdes** (378 anteriores sem mudanca de expectativa).
+
+**Schema (migration `000029`, aditivo):** `auto_reply_settings` += bloco proativo
+(`proactive_enabled` OFF — kill switch PROPRIO, independente do reativo —, `daily_cap` 20,
+`per_contact_weekly_cap` 1, janela 09-18h SP, jitter 3-15min pro scheduler da P-2,
+`optout_word` "PARAR"); `contacts.proactive_opt_in` (false); `proactive_consents` — trilha
+AUDITAVEL de grant/revoke com origem (manual | palavra), NUNCA apagada (LGPD: prova do
+consentimento e da revogacao).
+
+**ProactiveGuard** (`app/Whatsapp/Proactive/`) — API por parametro, 9 freios NA ORDEM (barato
+primeiro; check nao gasta contador):
+a) `proactive_off` · b) `grupo` · c) `opt_out` (off do robo JAMAIS recebe proativa) ·
+d) `sem_opt_in` · e) `fluxo_ativo` (nao atropela conversa) · f) `fora_da_janela_proativa` ·
+g) `teto_dia_proativo` (conta, dia SP) · h) `teto_semana_contato` (conta+contato, semana ISO SP) ·
+i) `contem_senha` — **{senha:} PROIBIDO em proativa, sem excecao**.
+Contadores em cache com **check (leitura) vs claim (consumo ATOMICO com rollback total se
+estourar)** — o disparo real (P-3) fara allows() -> claim() -> envia.
+
+**Opt-out por palavra:** no pipeline reativo, mensagem individual cujo texto normalizado
+(case/acento-insensivel, match EXATO — mesma normalizacao do matcher) e a palavra configurada
+revoga o opt-in + registra revoke/palavra. NAO responde nada; a mensagem SEGUE o pipeline
+(pode casar regra/fluxo — provado por teste); sem opt-in = no-op sem log falso; grupo ignorado.
+
+**UI:** card "Proativas" em /configuracoes — switch proprio com modal ao LIGAR (explica o risco
+de mensagens INICIADAS; ligar so arma a jaula), tetos/janela/palavra editaveis com validacao;
+AFROUXAR (teto>20, semanal>1, janela mais larga) pede confirmacao com os riscos listados;
+endurecer salva direto. Painel do contato: toggle de opt-in com texto de consentimento (toda
+mudanca registra grant/revoke manual) + badge "opt-in" na lista.
+
+**Gate estendido:** switch/consentimentos/contadores por conta — ligar a A nao liga a B; claim
+da A nao consome da B; palavra na B revoga so o contato da B.
+
+**P-2 (proxima):** campanhas draft -> preview (lista EXATA de destinatarios) -> aprovar (gate
+humano) + scheduler com jitter. **P-3:** disparo real pelo Sender em modo `proactive` com
+allows() + claim atomico + R2 proprio.

@@ -20,6 +20,7 @@ class Contact extends Model
         'saved',              // true = nomeado/adicionado pelo usuario (S4)
         'ai_enabled',         // IA por contato (Camada 3). Default false.
         'ai_mode',            // rules_only | intencao | conhecimento | aprovacao
+        'proactive_opt_in',   // P-1: opt-in EXPLICITO pra receber proativas (default false)
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class Contact extends Model
             'auto_reply_opt_out' => 'boolean',
             'saved' => 'boolean',
             'ai_enabled' => 'boolean',
+            'proactive_opt_in' => 'boolean',
         ];
     }
 

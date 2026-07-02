@@ -40,6 +40,19 @@ class Configuracoes extends Component
     public bool $confirmingEnable = false;
     public bool $confirmingAiEnable = false;
 
+    // Proativas P-1 — bloco proprio (kill switch INDEPENDENTE + tetos D5). Jitter
+    // (3-15min) fica no default do schema; editavel so em fatia futura se precisar.
+    public bool $proactive_enabled = false;
+    public int $proactive_daily_cap = 20;
+    public int $proactive_per_contact_weekly_cap = 1;
+    public string $proactive_window_start = '09:00';
+    public string $proactive_window_end = '18:00';
+    public string $proactive_optout_word = 'PARAR';
+    public bool $confirmingProactiveEnable = false;
+    public bool $confirmingProactiveRelax = false;
+    /** @var array<int,string> */
+    public array $proactiveRelaxWarnings = [];
+
     // Fatia 4 — confirmacao ao AFROUXAR a IA (reduzir limiar < 0.70 / desmarcar tema).
     public bool $confirmingAiRelax = false;
     /** @var array<int,string> */
@@ -76,6 +89,12 @@ class Configuracoes extends Component
         $this->ai_enabled = (bool) $s->ai_enabled;
         $this->ai_confidence_threshold = (float) $s->ai_confidence_threshold;
         $this->ai_approval_topics = $s->aiApprovalTopics();
+        $this->proactive_enabled = (bool) $s->proactive_enabled;
+        $this->proactive_daily_cap = (int) $s->proactive_daily_cap;
+        $this->proactive_per_contact_weekly_cap = (int) $s->proactive_per_contact_weekly_cap;
+        $this->proactive_window_start = substr((string) $s->proactive_window_start, 0, 5);
+        $this->proactive_window_end = substr((string) $s->proactive_window_end, 0, 5);
+        $this->proactive_optout_word = (string) $s->proactive_optout_word;
     }
 
     private function settings(): AutoReplySetting
@@ -143,6 +162,117 @@ class Configuracoes extends Component
     public function cancelAiEnable(): void
     {
         $this->confirmingAiEnable = false;
+    }
+
+    /**
+     * Proativas P-1 — kill switch PROPRIO (independente do robo e da IA). LIGAR
+     * abre confirmacao (mensagem proativa e o MAIOR risco de ban: o sistema
+     * INICIA conversa). Desligar e instantaneo (freio de emergencia). Nasce OFF.
+     * Nesta fase NAO existe caminho de disparo (P-3) — ligar so arma a jaula.
+     */
+    public function requestProactiveSwitch(): void
+    {
+        if ($this->settings()->proactive_enabled) {
+            $this->settings()->update(['proactive_enabled' => false]);
+            $this->proactive_enabled = false;
+            $this->dispatch('toast', message: 'Proativas desligadas.');
+
+            return;
+        }
+
+        $this->confirmingProactiveEnable = true;
+    }
+
+    public function proactiveEnableConfirmed(): void
+    {
+        $this->settings()->update(['proactive_enabled' => true]);
+        $this->proactive_enabled = true;
+        $this->confirmingProactiveEnable = false;
+        $this->dispatch('toast', message: 'Proativas LIGADAS (disparo real so na P-3, com campanha aprovada).', type: 'error');
+    }
+
+    public function cancelProactiveEnable(): void
+    {
+        $this->confirmingProactiveEnable = false;
+    }
+
+    /**
+     * P-1 — salva tetos/janela/palavra. ENDURECER salva direto; AFROUXAR (teto
+     * diario acima de 20, semanal acima de 1, janela mais larga que a atual)
+     * pede confirmacao — mesmo padrao do limiar da IA.
+     */
+    public function saveProactive(): void
+    {
+        $this->validate([
+            'proactive_daily_cap' => 'required|integer|min:1|max:200',
+            'proactive_per_contact_weekly_cap' => 'required|integer|min:1|max:7',
+            'proactive_window_start' => 'required|date_format:H:i',
+            'proactive_window_end' => 'required|date_format:H:i|after:proactive_window_start',
+            'proactive_optout_word' => 'required|string|min:2|max:40',
+        ], [], [
+            'proactive_daily_cap' => 'teto diario',
+            'proactive_per_contact_weekly_cap' => 'limite por contato/semana',
+            'proactive_window_start' => 'inicio da janela',
+            'proactive_window_end' => 'fim da janela',
+            'proactive_optout_word' => 'palavra de opt-out',
+        ]);
+
+        $s = $this->settings();
+        $avisos = [];
+
+        if ($this->proactive_daily_cap > (int) $s->proactive_daily_cap && $this->proactive_daily_cap > 20) {
+            $avisos[] = sprintf('Teto diario sobe de %d para %d (acima do padrao seguro de 20/dia): mais mensagens INICIADAS por dia = mais risco de ban.', (int) $s->proactive_daily_cap, $this->proactive_daily_cap);
+        }
+        if ($this->proactive_per_contact_weekly_cap > (int) $s->proactive_per_contact_weekly_cap && $this->proactive_per_contact_weekly_cap > 1) {
+            $avisos[] = sprintf('Limite por contato sobe de %d para %d por semana: contato abordado com mais frequencia = mais denuncia/bloqueio.', (int) $s->proactive_per_contact_weekly_cap, $this->proactive_per_contact_weekly_cap);
+        }
+        $startAtual = substr((string) $s->proactive_window_start, 0, 5);
+        $endAtual = substr((string) $s->proactive_window_end, 0, 5);
+        if ($this->proactive_window_start < $startAtual || $this->proactive_window_end > $endAtual) {
+            $avisos[] = sprintf('Janela alargada (%s-%s -> %s-%s): mensagens iniciadas fora do horario comercial incomodam mais.', $startAtual, $endAtual, $this->proactive_window_start, $this->proactive_window_end);
+        }
+
+        if ($avisos !== []) {
+            $this->proactiveRelaxWarnings = $avisos;
+            $this->confirmingProactiveRelax = true;
+
+            return;
+        }
+
+        $this->persistProactive();
+    }
+
+    public function proactiveRelaxConfirmed(): void
+    {
+        $this->confirmingProactiveRelax = false;
+        $this->proactiveRelaxWarnings = [];
+        $this->persistProactive();
+    }
+
+    /** Cancelar volta os campos pro que esta salvo (nada aplicado). */
+    public function cancelProactiveRelax(): void
+    {
+        $this->confirmingProactiveRelax = false;
+        $this->proactiveRelaxWarnings = [];
+        $s = $this->settings();
+        $this->proactive_daily_cap = (int) $s->proactive_daily_cap;
+        $this->proactive_per_contact_weekly_cap = (int) $s->proactive_per_contact_weekly_cap;
+        $this->proactive_window_start = substr((string) $s->proactive_window_start, 0, 5);
+        $this->proactive_window_end = substr((string) $s->proactive_window_end, 0, 5);
+        $this->proactive_optout_word = (string) $s->proactive_optout_word;
+    }
+
+    private function persistProactive(): void
+    {
+        $this->settings()->update([
+            'proactive_daily_cap' => $this->proactive_daily_cap,
+            'proactive_per_contact_weekly_cap' => $this->proactive_per_contact_weekly_cap,
+            'proactive_window_start' => $this->proactive_window_start . ':00',
+            'proactive_window_end' => $this->proactive_window_end . ':00',
+            'proactive_optout_word' => trim($this->proactive_optout_word),
+        ]);
+
+        $this->dispatch('toast', message: 'Configuracoes das proativas salvas.');
     }
 
     /**

@@ -56,6 +56,12 @@
                         {{ $c->auto_reply_mode }}
                     </span>
 
+                    @if ($c->proactive_opt_in)
+                        <span class="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-950 dark:text-rose-300" title="Opt-in de proativas ativo (consentimento registrado)">
+                            <flux:icon icon="megaphone" variant="micro" class="size-3" /> opt-in
+                        </span>
+                    @endif
+
                     @if ($c->ai_enabled && $c->ai_mode !== 'rules_only')
                         <span class="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" title="IA ligada ({{ $c->ai_mode }})">
                             <flux:icon icon="sparkles" variant="micro" class="size-3" /> IA
@@ -100,6 +106,20 @@
                 {{-- T-1: tags do contato (componente reutilizavel) --}}
                 <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                     <livewire:contact-tags :contact-id="$editing->id" :key="'ctags-'.$editing->id" />
+                </div>
+
+                {{-- P-1: opt-in de proativas (consentimento explicito, trilha auditada) --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <label class="inline-flex items-start gap-2 text-sm font-medium">
+                        <input type="checkbox" wire:model="editProactiveOptIn" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-700">
+                        <span>Aceita mensagens proativas (opt-in)
+                            <span class="block text-[11px] font-normal text-zinc-400">
+                                Consentimento pra RECEBER mensagens que o sistema inicia (lembrete/follow-up).
+                                Cada mudanca fica registrada com data e origem. O contato revoga sozinho
+                                mandando a palavra de opt-out. Nada dispara sem campanha aprovada.
+                            </span>
+                        </span>
+                    </label>
                 </div>
 
                 {{-- IA por contato (Camada 3) --}}
