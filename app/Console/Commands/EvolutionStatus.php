@@ -12,13 +12,14 @@ use Illuminate\Console\Command;
  */
 class EvolutionStatus extends Command
 {
-    protected $signature = 'evolution:status {--n=5 : Quantas mensagens recentes mostrar}';
+    protected $signature = 'evolution:status {--n=5 : Quantas mensagens recentes mostrar} {--account= : ID da conta (default: a mais antiga)}';
 
     protected $description = 'Estado da conexao da instancia + ultimas mensagens recebidas';
 
     public function handle(EvolutionProvider $provider): int
     {
-        $api = $provider->api(); // CH-1: comando opera VIA provider
+        $canal = $this->canalDaConta();
+        $api = $provider->api($canal); // MT-2: canal DA CONTA
         $resp = $api->connectionState();
         if ($resp->successful()) {
             $state = data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido';
@@ -28,9 +29,10 @@ class EvolutionStatus extends Command
         }
 
         $n = max(1, (int) $this->option('n'));
-        $msgs = IncomingMessage::query()->latest('received_at')->limit($n)->get();
+        $aid = (int) ($canal?->account_id ?? 0);
+        $msgs = IncomingMessage::withoutAccountScope()->where('account_id', $aid)->latest('received_at')->limit($n)->get();
 
-        $this->line("Total de mensagens registradas: " . IncomingMessage::count());
+        $this->line("Total de mensagens registradas (conta {$aid}): " . IncomingMessage::withoutAccountScope()->where('account_id', $aid)->count());
 
         if ($msgs->isEmpty()) {
             $this->line('Nenhuma mensagem registrada ainda.');
@@ -50,5 +52,15 @@ class EvolutionStatus extends Command
         );
 
         return self::SUCCESS;
+    }
+
+    /** MT-2: resolve o canal da conta (--account ou a mais antiga). */
+    private function canalDaConta(): ?\App\Models\Channel
+    {
+        $account = $this->option('account')
+            ? \App\Models\Account::find((int) $this->option('account'))
+            : \App\Models\Account::query()->oldest('id')->first();
+
+        return $account ? \App\Models\Channel::defaultFor($account->id) : null;
     }
 }

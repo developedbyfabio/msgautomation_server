@@ -2,8 +2,8 @@
 
 namespace App\Livewire;
 
-use App\Models\Channel;
 use App\Channels\Evolution\EvolutionProvider;
+use App\Models\Channel;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -27,10 +27,16 @@ class Conexao extends Component
     }
 
     /** Poll do estado; se ja conectou, segue pras conversas. */
+    /** MT-2: o canal DA CONTA do contexto (a tela opera sempre nele). */
+    private function canal(): ?Channel
+    {
+        return Channel::query()->oldest('id')->first();
+    }
+
     public function poll(EvolutionProvider $provider)
     {
         try {
-            $resp = $provider->api()->connectionState();
+            $resp = $provider->api($this->canal())->connectionState();
             $this->state = $resp->successful()
                 ? (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido')
                 : 'desconhecido';
@@ -59,7 +65,7 @@ class Conexao extends Component
         $this->qrError = null;
 
         try {
-            $resp = $provider->api()->connect();
+            $resp = $provider->api($this->canal())->connect();
             if (! $resp->successful()) {
                 $this->qrError = 'Falha ao obter o QR (HTTP ' . $resp->status() . ').';
 
@@ -96,9 +102,8 @@ class Conexao extends Component
             return;
         }
 
-        Channel::query()
-            ->where('instance', config('services.evolution.instance'))
-            ->update(['status' => $map[$this->state]]);
+        // MT-2: sincroniza o canal DA CONTA (nunca o de outra).
+        $this->canal()?->update(['status' => $map[$this->state]]);
     }
 
     public function render()

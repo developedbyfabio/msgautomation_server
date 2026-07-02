@@ -60,7 +60,8 @@ class GroupNameResolver
         }
 
         try {
-            $resp = $this->provider->api()->groupInfo($jid);
+            // MT-2: credenciais/instancia do CANAL da conta (fallback env dentro).
+            $resp = $this->provider->api(\App\Models\Channel::defaultFor($accountId))->groupInfo($jid);
             if (! $resp->successful()) {
                 return null;
             }

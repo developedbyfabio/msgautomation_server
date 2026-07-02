@@ -18,12 +18,14 @@ class EnsureWhatsappConnected
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // MT-0: lookup por INSTANCIA (config, fase 1) — bypass nomeado do escopo por
-        // conta, como o webhook (instance e globalmente unica). Na MT-2 este gate
-        // passa a olhar o canal DA CONTA do contexto.
-        $status = Channel::withoutAccountScope()
-            ->where('instance', config('services.evolution.instance'))
-            ->value('status');
+        // MT-2: o gate olha o canal DA CONTA do contexto (setado pelo
+        // SetAccountContext). Sem contexto/canal (bootstrap): deixa passar —
+        // a pagina decide (e queries de dominio falham alto se for o caso).
+        try {
+            $status = Channel::query()->oldest('id')->value('status');
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            $status = null;
+        }
 
         if ($status === 'disconnected') {
             return redirect()->route('conexao');

@@ -25,11 +25,17 @@ class StatusConexao extends Component
     public bool $confirmingDisconnect = false;
     public int $blips = 0;
 
+    /** MT-2: o canal DA CONTA do contexto. */
+    private function canal(): ?Channel
+    {
+        return Channel::query()->oldest('id')->first();
+    }
+
     public function refresh(EvolutionProvider $provider): void
     {
         $estado = 'desconhecido';
         try {
-            $resp = $provider->api()->connectionState();
+            $resp = $provider->api($this->canal())->connectionState();
             if ($resp->successful()) {
                 $estado = (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido');
             }
@@ -68,9 +74,8 @@ class StatusConexao extends Component
             return;
         }
 
-        Channel::query()
-            ->where('instance', config('services.evolution.instance'))
-            ->update(['status' => $map[$this->state]]);
+        // MT-2: sincroniza o canal DA CONTA (nunca o de outra).
+        $this->canal()?->update(['status' => $map[$this->state]]);
     }
 
     public function confirmDisconnect(): void
@@ -89,7 +94,7 @@ class StatusConexao extends Component
         $this->confirmingDisconnect = false;
 
         try {
-            $resp = $provider->api()->logout();
+            $resp = $provider->api($this->canal())->logout();
             if (! $resp->successful()) {
                 $this->dispatch('toast', message: 'Falha ao desconectar (HTTP ' . $resp->status() . ').', type: 'error');
 
@@ -115,7 +120,7 @@ class StatusConexao extends Component
         $this->qrError = null;
 
         try {
-            $resp = $provider->api()->connect();
+            $resp = $provider->api($this->canal())->connect();
             if (! $resp->successful()) {
                 $this->qrError = 'Falha ao obter o QR (HTTP ' . $resp->status() . ').';
 

@@ -412,10 +412,18 @@ class Configuracoes extends Component
     {
         // P-4: preview HONESTO do rodape — o MESMO renderizador do envio, com a
         // palavra que esta SALVA (o form pode ter valor ainda nao persistido).
+        $canal = \App\Models\Channel::query()->oldest('id')->first();
+        // MT-2: URL do webhook por token MASCARADA (token nunca inteiro na tela).
+        $webhookMascarado = '(sem token)';
+        if ($canal?->webhook_token) {
+            $t = (string) $canal->webhook_token;
+            $webhookMascarado = '/webhook/evolution/' . substr($t, 0, 4) . '...' . substr($t, -4);
+        }
+
         return view('livewire.configuracoes', [
             'footerPreview' => $responder->render($this->proactive_optout_footer),
-            // CH-1: badge somente-leitura do provedor do canal da conta.
-            'canal' => \App\Models\Channel::query()->oldest('id')->first(),
+            'canal' => $canal,
+            'canalWebhookMascarado' => $webhookMascarado,
         ]);
     }
 }

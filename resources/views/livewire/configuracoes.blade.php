@@ -2,18 +2,30 @@
     <div class="mx-auto max-w-3xl p-6 space-y-6">
         <h1 class="text-xl font-semibold">Configuracoes / Freios</h1>
 
-        {{-- CANAL (CH-1: badge somente-leitura do provedor) --}}
+        {{-- CANAL (CH-1 badge; MT-2: estado + URL mascarada + origem das credenciais) --}}
         @if ($canal)
-            <div class="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div class="flex items-center gap-2">
-                    <flux:icon icon="signal" variant="micro" class="text-zinc-400" />
-                    <span class="font-medium">Canal:</span>
-                    <span class="text-zinc-500">{{ $canal->instance }}</span>
+            <div class="space-y-2 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <flux:icon icon="signal" variant="micro" class="text-zinc-400" />
+                        <span class="font-medium">Canal:</span>
+                        <span class="text-zinc-500">{{ $canal->instance }}</span>
+                        <span @class([
+                            'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $canal->status === 'connected',
+                            'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' => $canal->status !== 'connected',
+                        ])>{{ $canal->status }}</span>
+                    </div>
+                    <span class="rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                        title="Provedor deste canal. Outros provedores (WhatsApp Cloud API oficial) chegam nas fatias CH-2+.">
+                        {{ ['evolution' => 'Evolution', 'cloud_api' => 'Cloud API'][$canal->provider] ?? $canal->provider }}
+                    </span>
                 </div>
-                <span class="rounded bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                    title="Provedor deste canal. Outros provedores (WhatsApp Cloud API oficial) chegam nas fatias CH-2+.">
-                    {{ ['evolution' => 'Evolution', 'cloud_api' => 'Cloud API'][$canal->provider] ?? $canal->provider }}
-                </span>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+                    <span>Webhook: <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">{{ $canalWebhookMascarado }}</code></span>
+                    <span>Credenciais: {{ empty($canal->credentials) ? 'env (fallback — rode msg:channel:sync-env)' : 'no canal (cifradas)' }}</span>
+                    <a href="{{ route('conexao') }}" wire:navigate class="underline">conexao / QR</a>
+                </div>
             </div>
         @endif
 

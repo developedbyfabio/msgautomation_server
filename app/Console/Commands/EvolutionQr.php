@@ -12,13 +12,13 @@ use Illuminate\Support\Facades\Storage;
  */
 class EvolutionQr extends Command
 {
-    protected $signature = 'evolution:qr';
+    protected $signature = 'evolution:qr {--account= : ID da conta (default: a mais antiga)}';
 
     protected $description = 'Gera/exibe o QR da instancia da Evolution para conectar o numero';
 
     public function handle(EvolutionProvider $provider): int
     {
-        $api = $provider->api(); // CH-1: comando opera VIA provider
+        $api = $provider->api($this->canalDaConta()); // MT-2: canal DA CONTA
         $resp = $api->connect();
 
         if (! $resp->successful()) {
@@ -61,5 +61,15 @@ class EvolutionQr extends Command
         $this->line('Escaneie pelo WhatsApp do celular: Aparelhos conectados -> Conectar aparelho.');
 
         return self::SUCCESS;
+    }
+
+    /** MT-2: resolve o canal da conta (--account ou a mais antiga). */
+    private function canalDaConta(): ?\App\Models\Channel
+    {
+        $account = $this->option('account')
+            ? \App\Models\Account::find((int) $this->option('account'))
+            : \App\Models\Account::query()->oldest('id')->first();
+
+        return $account ? \App\Models\Channel::defaultFor($account->id) : null;
     }
 }

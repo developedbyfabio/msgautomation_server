@@ -620,6 +620,26 @@ class TenantIsolationTest extends TestCase
             ->assertOk()->assertSee('RESPOSTA-DA-CONTA-A')->assertDontSee('RESPOSTA-DA-CONTA-B');
     }
 
+    // ---- MT-2: canal/credenciais por conta nao vazam --------------------------------------
+
+    public function test_canal_da_b_invisivel_e_intocavel_no_contexto_a(): void
+    {
+        // Tela /configuracoes do usuario da A mostra SO o canal da A.
+        config(['tenancy.single_account_fallback' => false]);
+        $userA = \App\Models\User::create(['name' => 'A', 'email' => 'canal-a@x.local', 'password' => \Illuminate\Support\Facades\Hash::make('senha-forte-123')]);
+        $userA->accounts()->attach($this->a->id, ['role' => 'owner']);
+        $this->actingAs($userA)->get('/configuracoes')
+            ->assertOk()->assertSee('inst-a')->assertDontSee('inst-b');
+
+        // Sync de status no contexto A NUNCA toca o canal da B.
+        \Illuminate\Support\Facades\Http::swap(new \Illuminate\Http\Client\Factory);
+        \Illuminate\Support\Facades\Http::fake(['*' => \Illuminate\Support\Facades\Http::response(['instance' => ['state' => 'close']], 200)]);
+        app(AccountContext::class)->set($this->a->id);
+        Livewire::test(\App\Livewire\StatusConexao::class)->call('refresh');
+        $this->assertSame('disconnected', $this->chA->fresh()->status);
+        $this->assertSame('connected', $this->chB->fresh()->status); // B intocado
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void
