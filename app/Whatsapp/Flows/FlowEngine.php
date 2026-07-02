@@ -202,12 +202,13 @@ class FlowEngine
         return $normInput === $this->norm($optInput);
     }
 
-    /** Normaliza a entrada: lower, trim, tira "." ")" finais (ex.: "1." -> "1"). */
+    /**
+     * MATCH-1: normalizador UNICO (caixa, acento, pontuacao, emoji, espacos) —
+     * "1", " 1 ", "1.", "1)" e "1️⃣" viram "1"; "sair"/"SAIR!"/"saír" idem.
+     */
     private function norm(string $value): string
     {
-        $value = mb_strtolower(trim($value), 'UTF-8');
-
-        return rtrim($value, '.)');
+        return \App\Whatsapp\TextNormalizer::normalize($value);
     }
 
     private function invalidPrefix(Flow $flow, FlowNode $node): string

@@ -597,6 +597,24 @@ class TenantIsolationTest extends TestCase
         Http::assertSent(fn ($r) => $r['text'] === "oi\n\nResponda SAIR-B pra sair.");
     }
 
+    // ---- MATCH-1: sem-match isolado por conta --------------------------------------------
+
+    public function test_sem_match_registra_na_conta_certa_e_nao_vaza_no_painel(): void
+    {
+        // MESMO texto sem match nas duas contas espelhadas (IA off nas duas).
+        $this->webhook('inst-a', 'pergunta perdida na A', 'UM-A');
+        $this->webhook('inst-b', 'pergunta perdida na B', 'UM-B');
+
+        $this->assertDatabaseHas('unmatched_messages', ['account_id' => $this->a->id, 'text' => 'pergunta perdida na A']);
+        $this->assertDatabaseHas('unmatched_messages', ['account_id' => $this->b->id, 'text' => 'pergunta perdida na B']);
+
+        // Painel no contexto A: so o sem-match da A.
+        app(AccountContext::class)->clear(); // fallback = A
+        Livewire::test(\App\Livewire\Painel::class)
+            ->assertSee('pergunta perdida na A')
+            ->assertDontSee('pergunta perdida na B');
+    }
+
     // ---- MT-1: HTTP por usuario (vinculo), sem fallback ---------------------------------
 
     public function test_http_por_usuario_carrega_so_a_conta_do_vinculo_sem_fallback(): void

@@ -123,7 +123,7 @@
                     <div class="mt-2 flex items-center gap-2">
                         <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-800">{{ $simStatus }}</span>
                         <form wire:submit="enviarSim" class="flex flex-1 items-center gap-2">
-                            <input type="text" wire:model="simInput" placeholder="digite uma opcao (ex.: 1)" class="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <input type="text" wire:model="simInput" placeholder="digite uma opcao (ex.: 1 — caixa/acento/pontuacao ignorados: 1., 1) e 1️⃣ tambem valem)" class="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                             <button type="submit" class="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Enviar</button>
                         </form>
                     </div>

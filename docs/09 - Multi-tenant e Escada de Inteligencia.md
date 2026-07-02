@@ -634,3 +634,38 @@ Detalhes: docs/relatorios/2026-07-02-mt2.md.
 **MT-3 (onboarding da conta 2) NAO executa ate a conta 2 ser real (ordem do
 Fabio). Proximo da ordem CH-D1 depois disso: CH-2 (Cloud API reativo-only) —
 e o MATCH-1 ja esta autorizado a rodar apos o MT-2 (prompt recebido).**
+
+
+---
+
+## MATCH-1 — ENTREGUE (2026-07-02) — matching inteligente sem IA
+
+A classe do bug do "Que horas são?" morreu. Regra de normalizacao OFICIAL
+(`App\Whatsapp\TextNormalizer::normalize`, o normalizador UNICO — proibido
+normalizar diferente em pontos diferentes): NFKC (best-effort ext-intl) ->
+invisiveis (nbsp/zero-width/FE0F) -> caixa baixa -> fold de acentos ->
+REMOCAO de pontuacao/simbolos/emoji (bordas E meio: "wi-fi"="wifi",
+"horas?!"="horas", "1."="1️⃣"="1") -> colapso de espacos + trim.
+- Aplicado nos DOIS lados em: RuleMatcher (exact/starts_with/contains com a
+  mesma fronteira de palavra; fuzzy sobre normalizado), gatilhos de entrada de
+  fluxo, OPCOES de menu, sair/cancelar e palavra de opt-out (P-1 refatorada
+  pro mesmo normalizador). REGEX intocada (texto cru; tooltip documenta).
+- S5: "estrito" = EXATO sobre o normalizado (frase inteira); contains/
+  tolerante com senha segue bloqueado (guarda inalterada).
+- Perf: `normalized_text` persistida (rule_triggers indexed + flow_triggers),
+  observer em TODA escrita + backfill idempotente na migration; mensagem
+  normalizada 1x por processamento.
+- Auditoria de colisoes pos-normalizacao (conta 1): ZERO colisoes regra x
+  regra e fluxo x regra ("Horas ?" da regra 3 normalizou pra "horas" sem
+  colidir com ninguem). Detector e testador operam normalizados.
+- Testador: mostra as formas normalizadas dos dois lados ("casou via") e AVISA
+  sessao de fluxo ativa (o fluxo intercepta antes das regras).
+- Log de SEM-MATCH: `unmatched_messages` (silencio ELEGIVEL: aprovado, nao
+  grupo, nao opt-out; gravado no pipeline quando IA nao elegivel e nos 6+1
+  pontos de silencio da IA), retencao 30d (`unmatched:prune` 03:10), bloco
+  "Sem resposta" no /painel (contagem + frequencia) com "VIRAR REGRA" pelo
+  RuleWriter (todas as guardas; gatilho Contem tolerante por default; item
+  some ao promover).
+- 502 -> 518 verdes, ZERO mudanca de expectativa em teste antigo (nenhum
+  dependia de pontuacao no casamento). Gate de isolamento estendido
+  (sem-match por conta). Proximo da ordem: CH-2.

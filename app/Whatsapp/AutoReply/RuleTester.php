@@ -56,6 +56,17 @@ class RuleTester
         $matching = $this->matcher->allMatching($accountId, $channelId, $sample, $jid);
         $rule = $matching[0] ?? null;
 
+        // MATCH-1 — transparencia: a forma NORMALIZADA da mensagem (por que casa)
+        // e o aviso de SESSAO DE FLUXO ATIVA (o fluxo intercepta ANTES das regras —
+        // a lacuna que o diagnostico do "Que horas são?" revelou).
+        $normMensagem = $this->matcher->normalize($sample);
+        $fluxoAtivo = $jid !== null && \App\Models\FlowSession::withoutAccountScope()
+            ->where('account_id', $accountId)
+            ->where('remote_jid', $jid)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->exists();
+
         // Camada 3 — info da IA (dry-run, SEM chamar a API). So com contato escolhido.
         $ai = $this->aiInfo($accountId, $channelId, $contact, $jid);
 
@@ -70,6 +81,8 @@ class RuleTester
                 'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
                 'ai' => $ai,
                 'fora_por_tag' => $foraPorTag,
+                'norm_mensagem' => $normMensagem,
+                'fluxo_ativo' => $fluxoAtivo,
             ];
         }
 
@@ -134,6 +147,12 @@ class RuleTester
                 ? $rule->tags()->pluck('name')->implode(', ')
                 : null,
             'fora_por_tag' => $foraPorTag,
+            // MATCH-1: os dois lados normalizados ("casou via").
+            'norm_mensagem' => $normMensagem,
+            'norm_gatilho' => $trigger && $trigger['type'] !== 'regex'
+                ? $this->matcher->normalize((string) $trigger['value'])
+                : null,
+            'fluxo_ativo' => $fluxoAtivo,
         ];
     }
 

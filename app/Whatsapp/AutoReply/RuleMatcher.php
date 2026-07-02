@@ -275,13 +275,14 @@ class RuleMatcher
         return false;
     }
 
+    /**
+     * MATCH-1: delega ao normalizador UNICO (caixa, acentos, unicode invisivel,
+     * PONTUACAO/emoji e espacos). Mantido como metodo publico porque opt-out e
+     * outros pontos ja dependem desta API — a implementacao agora e uma so.
+     */
     public function normalize(string $value): string
     {
-        $value = Str::ascii($value);          // fold de acento -> ascii
-        $value = mb_strtolower($value, 'UTF-8');
-        $value = preg_replace('/\s+/', ' ', $value);
-
-        return trim($value);
+        return \App\Whatsapp\TextNormalizer::normalize($value);
     }
 
     /**
@@ -296,7 +297,9 @@ class RuleMatcher
             return $this->regexMatches($raw, (string) $trigger['value']);
         }
 
-        $normValue = $this->normalize((string) $trigger['value']);
+        // MATCH-1: usa a forma normalizada PERSISTIDA (rule_triggers.normalized_text,
+        // preenchida por observer + backfill); fallback = normaliza na hora (legado).
+        $normValue = (string) (($trigger['normalized'] ?? null) ?: $this->normalize((string) $trigger['value']));
         if ($normValue === '') {
             return false;
         }

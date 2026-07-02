@@ -117,6 +117,10 @@
                     <p class="mb-2 text-[11px] text-zinc-400">Qualquer gatilho que casar dispara a regra.</p>
                     @error('triggers') <p class="mb-2 text-xs text-red-500">{{ $message }}</p> @enderror
                     <div class="space-y-2">
+                        <p class="mb-1 flex items-center gap-1 text-[11px] text-zinc-400">
+                            Como o casamento funciona
+                            <x-info-tip text="MATCH-1: caixa, ACENTOS, espacos extras e PONTUACAO/emoji sao ignorados nos dois lados (gatilho e mensagem) — 'Que horas são?' casa 'que horas sao'. EXCECAO: Regex casa contra o texto CRU, sem nenhuma normalizacao — quem escolhe regex controla a precisao." />
+                        </p>
                         @foreach ($triggers as $i => $t)
                             {{-- S4: [tipo] [precisao] [texto] [x] na MESMA linha. --}}
                             <div wire:key="trg-{{ $i }}" class="flex flex-wrap items-start gap-2 sm:flex-nowrap">
@@ -373,10 +377,17 @@
                 </div>
 
                 @if ($testResult)
+                    @if ($testResult['fluxo_ativo'] ?? false)
+                        <div class="mb-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                            <flux:icon icon="exclamation-triangle" variant="micro" class="mt-0.5 shrink-0" />
+                            <span>Este contato tem <strong>sessao de fluxo ATIVA</strong> — na vida real o fluxo intercepta a mensagem ANTES das regras (o resultado abaixo vale quando a sessao terminar).</span>
+                        </div>
+                    @endif
                     <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-700 dark:bg-zinc-800/50">
                         @if (! ($testResult['ok'] ?? false))
                             <p class="text-amber-600 dark:text-amber-400">{{ $testResult['erro'] ?? 'Erro.' }}</p>
                         @elseif (! $testResult['matched'])
+                            <p class="text-[11px] text-zinc-400">Forma normalizada testada: <span class="font-mono">"{{ $testResult['norm_mensagem'] ?? '' }}"</span></p>
                             <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="x-circle" variant="micro" /> Nenhuma regra casaria (determinístico).</p>
                             @if (! empty($testResult['fora_por_tag']))
                                 <p class="mt-1 flex items-start gap-1.5 text-[11px] text-purple-600 dark:text-purple-300">
@@ -433,6 +444,9 @@
                                         <flux:icon icon="tag" variant="micro" class="mt-0.5 size-3 shrink-0" />
                                         <span>Fora por tag: {{ implode(' · ', $testResult['fora_por_tag']) }}</span>
                                     </p>
+                                @endif
+                                @if ($testResult['norm_gatilho'] ?? null)
+                                    <p class="text-[11px] text-zinc-400">Casou via forma normalizada: <span class="font-mono">"{{ $testResult['norm_mensagem'] }}"</span> x gatilho <span class="font-mono">"{{ $testResult['norm_gatilho'] }}"</span> (caixa, acentos, espacos e pontuacao ignorados).</p>
                                 @endif
                                 <p class="text-xs text-zinc-500">Gatilho: <span class="font-mono">{{ $testResult['trigger'] }}</span>
                                     @if (($testResult['trigger_precision'] ?? 'exato') !== 'exato')

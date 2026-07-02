@@ -178,5 +178,50 @@
                 @endif
             </div>
         </div>
+
+        {{-- MATCH-1: sem-match -> oportunidade de regra --}}
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="mb-2 flex items-center gap-1 text-sm font-semibold">
+                Sem resposta ({{ $periodos[$periodo] }})
+                <x-info-tip text="Mensagens de contatos APROVADOS que terminaram em silencio: nenhuma regra/fluxo casou e a IA nao respondeu. Grupos e contatos silenciados nao entram. Retencao de 30 dias. Cada item pode VIRAR REGRA pelo mesmo caminho oficial (todas as guardas)." />
+                <span class="ml-auto rounded bg-zinc-100 px-2 py-0.5 text-xs font-medium dark:bg-zinc-800">{{ $semResposta['total'] }}</span>
+            </div>
+            @forelse ($semResposta['itens'] as $u)
+                <div class="flex items-center gap-2 border-t border-zinc-100 py-1.5 text-sm first:border-t-0 dark:border-zinc-800" wire:key="um-{{ $u->id }}">
+                    <span class="min-w-0 flex-1 truncate" title="{{ $u->text }}">"{{ $u->text }}"</span>
+                    <span class="shrink-0 text-[11px] text-zinc-400">{{ $u->vezes }}x</span>
+                    <button type="button" wire:click="abrirVirarRegra({{ $u->id }})"
+                        class="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        Virar regra
+                    </button>
+                </div>
+            @empty
+                <p class="text-xs text-zinc-400">Nenhum silencio elegivel no periodo — tudo que chegou de contato aprovado foi respondido (ou virou pendencia).</p>
+            @endforelse
+        </div>
+
+    {{-- MODAL: virar regra (caminho oficial, gatilho tolerante por default) --}}
+    @if ($promoteUnmatchedId)
+        <x-modal wireClose="fecharVirarRegra" title="Virar regra (a partir do sem-match)">
+            <div class="space-y-3">
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Gatilho (Contem, tolerante a erros de digitacao)</label>
+                    <input type="text" wire:model="uTrigger" data-autofocus class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('uTrigger') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Resposta</label>
+                    <textarea wire:model="uResponse" rows="3" placeholder="ex.: {saudacao}, {nome}! ..." class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    @error('uResponse') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-400">Regra nasce GLOBAL e ativa. Caixa, acentos e pontuacao sao ignorados no casamento. Ajustes finos (escopo, mais gatilhos) em /regras.</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="fecharVirarRegra" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                    <button type="button" wire:click="confirmVirarRegra" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Criar regra</button>
+                </div>
+            </div>
+        </x-modal>
+    @endif
+
     </div>
 </div>

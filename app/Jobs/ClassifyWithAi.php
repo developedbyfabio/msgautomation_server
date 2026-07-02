@@ -127,6 +127,7 @@ class ClassifyWithAi implements ShouldQueue
             $sensitiveFlagged = $result->needsApproval;
         } elseif ($aiMode !== 'conhecimento') {
             // Sem candidatas e sem base -> nada a classificar (silencio estrutural).
+            $this->registrarSemResposta($incoming); // MATCH-1
             return;
         }
 
@@ -200,6 +201,7 @@ class ClassifyWithAi implements ShouldQueue
         // a 2a chamada na base).
         if ($result->unknown) {
             $log('silenciou', $result->reason ?: 'ia_indisponivel', null);
+            $this->registrarSemResposta($incoming); // MATCH-1
 
             return true;
         }
@@ -214,6 +216,7 @@ class ClassifyWithAi implements ShouldQueue
                 return false; // 2o fallback: base de conhecimento (quem loga e o degrau 2)
             }
             $log('silenciou', 'sem_regra', null);
+            $this->registrarSemResposta($incoming); // MATCH-1
 
             return true;
         }
@@ -251,6 +254,7 @@ class ClassifyWithAi implements ShouldQueue
         // Modelo recomenda nao responder.
         if (! $result->shouldReply) {
             $log('silenciou', 'modelo_nao_responde', $rule);
+            $this->registrarSemResposta($incoming); // MATCH-1
 
             return true;
         }
@@ -357,6 +361,7 @@ class ClassifyWithAi implements ShouldQueue
             if ($apiSpent) {
                 // Ja gastou a classificacao por regra (sem regra) e a base esta vazia.
                 $log('silenciou', 'sem_conhecimento');
+            $this->registrarSemResposta($incoming); // MATCH-1
             }
 
             // Base vazia sem chamada gasta: silencio estrutural, sem log (como Fatia 1).
@@ -384,6 +389,7 @@ class ClassifyWithAi implements ShouldQueue
         // Erro/cota/JSON invalido -> "nao sei" -> silencia.
         if ($result->unknown) {
             $log('silenciou', $result->reason ?: 'ia_indisponivel', model: $result->model);
+            $this->registrarSemResposta($incoming); // MATCH-1
 
             return;
         }
@@ -411,6 +417,7 @@ class ClassifyWithAi implements ShouldQueue
                 $escala($log('escalou', 'conteudo_high', confidence: $result->confidence, model: $result->model), 'conteudo_high', null, $result->confidence);
             } else {
                 $log('silenciou', 'sem_grounding', confidence: $result->confidence, model: $result->model);
+            $this->registrarSemResposta($incoming); // MATCH-1
             }
 
             return;
@@ -485,5 +492,15 @@ class ClassifyWithAi implements ShouldQueue
         } catch (UniqueConstraintViolationException) {
             // Ja existe pendencia pra esta mensagem (corrida) -> mantem a primeira.
         }
+    }
+
+    /** MATCH-1 — IA terminou em silencio: o sem-match e registrado (oportunidade). */
+    private function registrarSemResposta(\App\Models\IncomingMessage $incoming): void
+    {
+        \App\Models\UnmatchedMessage::record(
+            (int) $incoming->account_id,
+            (string) $incoming->remote_jid,
+            $incoming->text,
+        );
     }
 }

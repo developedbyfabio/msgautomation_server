@@ -229,6 +229,11 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             if ($guard->aiEligible($account->id, $jid)) {
                 // MT-0: account_id serializado — o job restaura o contexto no handle.
                 ClassifyWithAi::dispatch($message->id, $account->id);
+            } elseif ($guard->contactGatePasses($account->id, $jid)) {
+                // MATCH-1: silencio ELEGIVEL vira registro (grupo/fromMe ja sairam
+                // antes; contato nao aprovado/opt-out NAO entra — ali nao ha
+                // oportunidade de regra). A IA, quando elegivel, decide no job.
+                \App\Models\UnmatchedMessage::record($account->id, $jid, $data->text);
             }
 
             return;

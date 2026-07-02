@@ -14,3 +14,6 @@ Illuminate\Support\Facades\Schedule::command('ai:expire-approvals')->dailyAt('03
 // Proativas P-3 — tick por minuto: so ENFILEIRA envios vencidos de contas com o
 // interruptor proativo ligado (hoje nenhuma; roda barato e nao faz nada).
 Illuminate\Support\Facades\Schedule::command('proactive:tick')->everyMinute();
+
+// MATCH-1 — retencao do log de sem-match (30 dias; leve, roda de madrugada).
+Illuminate\Support\Facades\Schedule::command('unmatched:prune')->dailyAt('03:10');
