@@ -188,6 +188,8 @@ class ChannelPerAccountTest extends TestCase
             ->assertSuccessful();
         Http::assertSent(fn ($r) => str_contains($r->url(), '/webhook/set/inst-t')
             && data_get($r->data(), 'webhook.url') === 'http://app-host:8190/webhook/evolution/' . $canal->webhook_token
-            && data_get($r->data(), 'webhook.headers') === []);
+            // headers vao como OBJETO json vazio ("{}") — exigencia da Evolution v2.3.7.
+            && (array) data_get($r->data(), 'webhook.headers') === []
+            && str_contains((string) $r->body(), '"headers":{}'));
     }
 }

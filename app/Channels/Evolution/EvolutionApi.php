@@ -77,7 +77,9 @@ class EvolutionApi
             'webhook' => [
                 'enabled' => true,
                 'url' => $url,
-                'headers' => $headers,
+                // Evolution v2.3.7 valida headers como OBJETO json: array vazio do
+                // PHP serializa como [] (lista) e leva HTTP 400 — cast resolve.
+                'headers' => (object) $headers,
                 'byEvents' => false,
                 'base64' => false,
                 'events' => $events,
