@@ -617,3 +617,20 @@ seletor de conta ativa (so com 2+), `msg:user:create` com senha via prompt ocult
 Backfill: Fabio = owner da conta 1 (verificado). 494 verdes (8 novos + gate
 estendido com usuarios espelhados via HTTP). Smoke: webhook vivo intocado.
 Detalhes: docs/relatorios/2026-07-02-mt1.md. **MT-2 so apos o gate do Fabio.**
+
+
+---
+
+## MT-2 — ENTREGUE (2026-07-02) — webhook vivo migrado; MT-3 AGUARDA a conta 2
+
+Canal/instancia por conta: ChannelProvisioner (instancia unica, token,
+credenciais cifradas; nunca toca webhook vivo divergente), env -> canal 1 via
+msg:channel:sync-env (idempotente), telas/gate/comandos no canal DA CONTA.
+Webhook da conta 1 MIGRADO pra rota por token com gate do Fabio + validacao
+por mensagem organica real; secret global REMOVIDO em commit separado
+reversivel (bdff7e6). Bug real da Evolution v2.3.7 corrigido no caminho
+(headers como objeto json). 502 verdes; gate de isolamento estendido.
+Detalhes: docs/relatorios/2026-07-02-mt2.md.
+**MT-3 (onboarding da conta 2) NAO executa ate a conta 2 ser real (ordem do
+Fabio). Proximo da ordem CH-D1 depois disso: CH-2 (Cloud API reativo-only) —
+e o MATCH-1 ja esta autorizado a rodar apos o MT-2 (prompt recebido).**
