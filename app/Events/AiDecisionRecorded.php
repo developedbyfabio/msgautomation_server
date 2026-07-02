@@ -18,6 +18,7 @@ class AiDecisionRecorded
         public readonly int $aiDecisionId,
         public readonly string $remoteJid,
         public readonly string $acao,
+        public readonly ?string $intent = null,
     ) {
     }
 }

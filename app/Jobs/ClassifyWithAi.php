@@ -174,7 +174,7 @@ class ClassifyWithAi implements ShouldQueue
                 'model' => $result->model,
             ]);
             // Kanban K-1 — evento de dominio (sem regra default; K-2/tags usam).
-            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao));
+            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao, $d->intent));
 
             return $d;
         };
@@ -320,7 +320,7 @@ class ClassifyWithAi implements ShouldQueue
                 'model' => $model,
             ]);
             // Kanban K-1 — evento de dominio (sem regra default; K-2/tags usam).
-            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao));
+            event(new \App\Events\AiDecisionRecorded((int) $d->account_id, (int) $d->id, (string) $d->remote_jid, $acao, $d->intent));
 
             return $d;
         };

@@ -33,6 +33,8 @@ class Fluxos extends Component
     /** @var array<int,int> */
     public array $scopeContactIds = [];
     public string $scopeSearch = '';
+    /** @var array<int,int> T-1: tags do escopo 'tags' */
+    public array $scopeTagIds = [];
 
     // Buffers de edicao da arvore (por id).
     /** @var array<int,string> */
@@ -96,6 +98,7 @@ class Fluxos extends Component
             $this->triggers = [['type' => 'contains', 'value' => '', 'precision' => 'exato', 'fuzzy_level' => 'media']];
         }
         $this->scopeContactIds = $flow->contacts->pluck('id')->all();
+        $this->scopeTagIds = $flow->tags()->pluck('tags.id')->all();
         $this->scopeSearch = '';
         $this->loadNodeBuffers($flow);
         $this->resetValidation();
@@ -125,7 +128,7 @@ class Fluxos extends Component
             $temSenha = $flow->nodes()->get()->contains(fn ($n) => $vault->hasRef((string) $n->message));
             if ($temSenha) {
                 if (($flow->scope ?: 'global') !== 'contatos') {
-                    $this->dispatch('toast', message: 'Este fluxo usa senha ({senha:...}) em um nó. Use escopo "Contatos Especificos" antes de ligar (senao a senha vaza pra quem disparar).', type: 'error');
+                    $this->dispatch('toast', message: 'Este fluxo usa senha ({senha:...}) em um nó. Use escopo "Contatos Especificos" antes de ligar (tag/global nao valem: a senha vazaria pra quem disparar).', type: 'error');
 
                     return;
                 }
@@ -187,7 +190,7 @@ class Fluxos extends Component
 
         $this->validate([
             'name' => 'required|string|max:120',
-            'scope' => 'required|in:global,contatos',
+            'scope' => 'required|in:global,contatos,tags',
             'timeout_seconds' => 'required|integer|min:60|max:86400',
             'invalid_message' => 'nullable|string|max:500',
             'triggers' => 'required|array|min:1',
@@ -203,12 +206,24 @@ class Fluxos extends Component
             }
         }
 
-        $scope = $this->scope === 'contatos' ? 'contatos' : 'global';
+        $scope = in_array($this->scope, ['contatos', 'tags'], true) ? $this->scope : 'global';
         $contactIds = [];
         if ($scope === 'contatos') {
             $contactIds = Contact::query()->where('account_id', $this->accountId())->whereIn('id', $this->scopeContactIds)->pluck('id')->all();
             if ($contactIds === []) {
                 $this->addError('scopeContactIds', 'Escopo "contatos": selecione ao menos um contato.');
+
+                return;
+            }
+        }
+
+        // T-1: escopo por tag (entra quem tem QUALQUER uma). A guarda de segredo do
+        // toggleFluxo segue exigindo 'contatos' pra fluxo com {senha:} — tag nunca.
+        $tagIds = [];
+        if ($scope === 'tags') {
+            $tagIds = \App\Models\Tag::query()->whereIn('id', $this->scopeTagIds)->pluck('id')->all();
+            if ($tagIds === []) {
+                $this->addError('scopeTagIds', 'Escopo "tag": selecione ao menos uma tag.');
 
                 return;
             }
@@ -229,6 +244,7 @@ class Fluxos extends Component
             'fuzzy_level' => ($t['type'] !== 'regex' && ($t['precision'] ?? 'exato') === 'tolerante') ? ($t['fuzzy_level'] ?? 'media') : null,
         ], $this->triggers));
         $flow->contacts()->sync($contactIds);
+        $flow->tags()->sync($tagIds);
 
         $this->dispatch('toast', message: 'Configuracao do fluxo salva.');
     }

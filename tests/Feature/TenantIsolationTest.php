@@ -354,6 +354,54 @@ class TenantIsolationTest extends TestCase
         $this->assertSame($colunaB, (int) $cardB->fresh()->column_id); // B intocado
     }
 
+    // ---- Tags (T-1): homonimas nao se cruzam; escopo/acoes por conta ---------------------
+
+    public function test_tags_homonimas_em_contas_espelhadas_nao_se_cruzam(): void
+    {
+        // MESMO nome de tag nas duas contas (unique e POR CONTA).
+        $tagA = \App\Models\Tag::create(['account_id' => $this->a->id, 'name' => 'vip']);
+        $tagB = \App\Models\Tag::create(['account_id' => $this->b->id, 'name' => 'vip']);
+
+        // Regra por tag na A (gatilho identico ao da B nao existe — usa outro texto).
+        $contatoA = Contact::withoutAccountScope()->where('account_id', $this->a->id)->where('remote_jid', self::JID)->first();
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+        $regraA = \App\Models\AutoReplyRule::create(['account_id' => $this->a->id, 'match_type' => 'contains', 'match_value' => 'promo', 'response_text' => 'PROMO-DA-A', 'enabled' => true, 'scope' => 'tags']);
+        $regraA->triggers()->create(['match_type' => 'contains', 'match_value' => 'promo']);
+        $regraA->responses()->create(['response_text' => 'PROMO-DA-A']);
+        $regraA->tags()->attach($tagA->id);
+
+        // Contato da B tem a tag "vip" DA B — nao pode casar a regra da A.
+        $contatoB->tags()->attach($tagB->id, ['origin' => 'manual']);
+        $this->webhook('inst-b', 'promo', 'TG1');
+        Http::assertNothingSent();
+
+        // Contato da A com a tag "vip" DA A: casa.
+        $contatoA->tags()->attach($tagA->id, ['origin' => 'manual']);
+        $this->webhook('inst-a', 'promo', 'TG2');
+        Http::assertSent(fn ($r) => $r['text'] === 'PROMO-DA-A');
+    }
+
+    public function test_acao_de_tag_do_board_da_a_nao_toca_contato_da_b(): void
+    {
+        $tagA = \App\Models\Tag::create(['account_id' => $this->a->id, 'name' => 'lead']);
+        $boardA = \App\Models\Board::withoutAccountScope()->where('account_id', $this->a->id)->first();
+        \App\Models\BoardRule::create([
+            'account_id' => $this->a->id, 'board_id' => $boardA->id,
+            'event_type' => 'mensagem_recebida', 'conditions' => null,
+            'action_type' => 'add_tag', 'tag_id' => $tagA->id, 'active' => true, 'position' => -1,
+        ]);
+
+        // MESMO jid nas duas contas: o webhook da A tagueia SO o contato da A.
+        $this->webhook('inst-a', 'oi', 'TG3');
+        $this->webhook('inst-b', 'oi', 'TG4');
+
+        $contatoA = Contact::withoutAccountScope()->where('account_id', $this->a->id)->where('remote_jid', self::JID)->first();
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+        // Pivo direto (sem scope): prova crua de que so o contato da A foi tagueado.
+        $this->assertSame(1, \Illuminate\Support\Facades\DB::table('contact_tag')->where('contact_id', $contatoA->id)->count());
+        $this->assertSame(0, \Illuminate\Support\Facades\DB::table('contact_tag')->where('contact_id', $contatoB->id)->count());
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

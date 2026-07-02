@@ -223,7 +223,7 @@ class KanbanEngineTest extends TestCase
         // Engine quebrado injetado: o listener captura, loga e o pipeline segue.
         $this->app->instance(BoardEngine::class, new class(app(\App\Tenancy\AccountContext::class)) extends BoardEngine
         {
-            public function apply(string $eventType, int $accountId, string $remoteJid, int $eventRef, ?string $direction = null): void
+            public function apply(string $eventType, int $accountId, string $remoteJid, int $eventRef, ?string $direction = null, array $meta = []): void
             {
                 throw new \RuntimeException('kanban quebrado de proposito');
             }

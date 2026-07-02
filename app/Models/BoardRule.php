@@ -21,7 +21,9 @@ class BoardRule extends Model
         'board_id',
         'event_type',   // mensagem_recebida | resposta_enviada | envio_manual | fluxo_no | ia_decisao
         'conditions',
-        'to_column_id',
+        'action_type',  // move_column (first-match) | add_tag | remove_tag (cumulativas)
+        'to_column_id', // so move_column
+        'tag_id',       // so add_tag/remove_tag
         'active',
         'is_default', // regra do provisioner (editar/desativar pede confirmacao na UI)
         'position',
@@ -45,5 +47,10 @@ class BoardRule extends Model
     public function toColumn(): BelongsTo
     {
         return $this->belongsTo(BoardColumn::class, 'to_column_id');
+    }
+
+    public function tag(): BelongsTo
+    {
+        return $this->belongsTo(Tag::class);
     }
 }

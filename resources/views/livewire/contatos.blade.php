@@ -2,12 +2,18 @@
     <div class="mx-auto max-w-4xl p-6 space-y-4">
         <div class="flex items-center justify-between gap-3">
             <h1 class="text-xl font-semibold">Contatos / Agenda</h1>
-            <div class="relative w-64">
-                <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-zinc-400">
-                    <flux:icon icon="magnifying-glass" variant="micro" />
-                </span>
-                <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar nome ou numero..."
-                    class="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-8 pr-3 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+            <div class="flex items-center gap-2">
+                <div class="relative w-64">
+                    <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-zinc-400">
+                        <flux:icon icon="magnifying-glass" variant="micro" />
+                    </span>
+                    <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar nome ou numero..."
+                        class="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-8 pr-3 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                </div>
+                <button type="button" wire:click="openTags"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                    <flux:icon icon="tag" variant="micro" /> Tags
+                </button>
             </div>
         </div>
 
@@ -27,6 +33,16 @@
                         <div class="truncate text-xs text-zinc-500">{{ $c->remote_jid }}</div>
                         @if ($c->notes)
                             <div class="truncate text-xs text-zinc-400">{{ $c->notes }}</div>
+                        @endif
+                        @if ($c->tags->isNotEmpty())
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                @foreach ($c->tags->take(4) as $t)
+                                    <x-tag-chip :color="$t->color" small wire:key="lt-{{ $c->id }}-{{ $t->id }}">{{ $t->name }}</x-tag-chip>
+                                @endforeach
+                                @if ($c->tags->count() > 4)
+                                    <span class="text-[10px] text-zinc-400">+{{ $c->tags->count() - 4 }}</span>
+                                @endif
+                            </div>
                         @endif
                     </div>
 
@@ -81,6 +97,11 @@
                     <textarea wire:model="editNotes" rows="3" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
                 </div>
 
+                {{-- T-1: tags do contato (componente reutilizavel) --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <livewire:contact-tags :contact-id="$editing->id" :key="'ctags-'.$editing->id" />
+                </div>
+
                 {{-- IA por contato (Camada 3) --}}
                 <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                     <label class="inline-flex items-center gap-2 text-sm font-medium">
@@ -129,6 +150,62 @@
                 <button type="button" wire:click="cancelMute" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
                 <button type="button" wire:click="muteConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
                     <flux:icon icon="no-symbol" variant="micro" /> Silenciar
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    {{-- T-1 MODAL: gerenciar tags --}}
+    @if ($showTags && ! $deletingTag)
+        <x-modal wireClose="closeTags" title="Gerenciar tags" maxWidth="lg">
+            <div class="space-y-2">
+                <p class="text-xs text-zinc-500">Renomear/trocar cor vale na hora. Excluir mostra onde a tag e usada e pede confirmacao.</p>
+                @forelse ($tagList as $tag)
+                    <div class="flex items-center gap-2" wire:key="tg-{{ $tag->id }}">
+                        <x-tag-chip :color="$tagColors[$tag->id] ?? $tag->color" small>{{ $tagNames[$tag->id] ?? $tag->name }}</x-tag-chip>
+                        <input type="text" wire:model="tagNames.{{ $tag->id }}" maxlength="40"
+                            class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <select wire:model.live="tagColors.{{ $tag->id }}" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            @foreach (\App\Models\Tag::COLORS as $cor)
+                                <option value="{{ $cor }}">{{ $cor }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" wire:click="confirmDeleteTag({{ $tag->id }})" class="shrink-0 text-zinc-400 hover:text-red-500" aria-label="Excluir tag">
+                            <flux:icon icon="trash" variant="micro" />
+                        </button>
+                        @error('tagNames.' . $tag->id) <p class="text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                @empty
+                    <p class="py-3 text-center text-xs text-zinc-400">Nenhuma tag ainda. Crie pela primeira vez no painel de um contato.</p>
+                @endforelse
+            </div>
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="closeTags" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                    <button type="button" wire:click="saveTags" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                        <flux:icon icon="check" variant="micro" /> Salvar
+                    </button>
+                </div>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    {{-- T-1 MODAL: confirmar exclusao de tag (com uso) --}}
+    @if ($deletingTag)
+        @php $uso = $this->tagUsage($deletingTag->id); @endphp
+        <x-modal wireClose="cancelDeleteTag" title="Excluir tag">
+            <div class="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                <p>Excluir a tag <x-tag-chip :color="$deletingTag->color" small>{{ $deletingTag->name }}</x-tag-chip>?</p>
+                <ul class="list-disc pl-5 text-xs">
+                    <li>{{ $uso['contatos'] }} contato(s) perdem a tag na hora.</li>
+                    <li>{{ $uso['regras'] }} regra(s) e {{ $uso['fluxos'] }} fluxo(s) usam a tag como ESCOPO — ficam <strong>sem alcance</strong> ate voce ajustar.</li>
+                    <li>{{ $uso['kanban'] }} regra(s) de movimento do Kanban usam a tag — ficam inertes ate ajuste.</li>
+                </ul>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelDeleteTag" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="deleteTagConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                    <flux:icon icon="trash" variant="micro" /> Excluir
                 </button>
             </div>
         </x-modal>

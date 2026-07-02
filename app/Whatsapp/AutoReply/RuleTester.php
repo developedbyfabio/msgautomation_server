@@ -59,12 +59,17 @@ class RuleTester
         // Camada 3 — info da IA (dry-run, SEM chamar a API). So com contato escolhido.
         $ai = $this->aiInfo($accountId, $channelId, $contact, $jid);
 
+        // T-1 — transparencia do escopo por TAG: regras cujo gatilho casaria mas que
+        // ficaram fora porque o contato nao tem a(s) tag(s).
+        $foraPorTag = $this->foraPorTag($accountId, $channelId, $sample, $contact, $matching);
+
         if ($rule === null) {
             return [
                 'ok' => true,
                 'matched' => false,
                 'contato' => $contact?->push_name ?: ($jid ? \Illuminate\Support\Str::before($jid, '@') : null),
                 'ai' => $ai,
+                'fora_por_tag' => $foraPorTag,
             ];
         }
 
@@ -124,7 +129,53 @@ class RuleTester
             'freios' => $freios,
             'tambem' => $tambem, // outras regras que tambem casariam (perderam por especificidade)
             'ai' => $ai,
+            // T-1: por que casou/nao casou por tag (transparencia do escopo).
+            'casou_por_tag' => ($rule->scope ?: 'global') === 'tags'
+                ? $rule->tags()->pluck('name')->implode(', ')
+                : null,
+            'fora_por_tag' => $foraPorTag,
         ];
+    }
+
+    /**
+     * T-1 — regras com escopo por TAG cujo gatilho casaria a mensagem mas que ficaram
+     * FORA do match (o contato nao tem nenhuma das tags). So com contato escolhido.
+     *
+     * @param  array<int,\App\Models\AutoReplyRule>  $matching
+     * @return array<int,string>
+     */
+    private function foraPorTag(int $accountId, ?int $channelId, string $sample, ?Contact $contact, array $matching): array
+    {
+        if ($contact === null) {
+            return [];
+        }
+
+        $matchingIds = array_map(fn ($r) => (int) $r->id, $matching);
+        $out = [];
+
+        $regrasTag = \App\Models\AutoReplyRule::query()
+            ->with(['triggers', 'tags'])
+            ->where('account_id', $accountId)
+            ->where('enabled', true)
+            ->where('scope', 'tags')
+            ->where(function ($q) use ($channelId) {
+                $q->whereNull('channel_id');
+                if ($channelId !== null) {
+                    $q->orWhere('channel_id', $channelId);
+                }
+            })
+            ->get();
+
+        foreach ($regrasTag as $r) {
+            if (in_array((int) $r->id, $matchingIds, true)) {
+                continue; // elegivel — casou normalmente
+            }
+            if ($this->matcher->listMatches($r->triggerList(), $sample)) {
+                $out[] = '#' . $r->id . ' (exige tag: ' . $r->tags->pluck('name')->implode(', ') . ')';
+            }
+        }
+
+        return $out;
     }
 
     /**

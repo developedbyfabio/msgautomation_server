@@ -35,4 +35,12 @@ class Contact extends Model
     {
         return $this->belongsTo(Account::class);
     }
+
+    /** Tags T-1 — segmentacao (pivo com origem: manual | board_rule | ai_intent). */
+    public function tags(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'contact_tag')
+            ->withPivot(['origin', 'origin_ref'])
+            ->withTimestamps();
+    }
 }

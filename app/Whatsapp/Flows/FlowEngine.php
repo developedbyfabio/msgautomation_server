@@ -50,7 +50,7 @@ class FlowEngine
     /** Fluxo elegivel cujo gatilho de entrada casa (primeiro por id; escopo respeitado). */
     public function entryFlow(int $accountId, string $text, string $jid): ?Flow
     {
-        $flows = Flow::query()->with(['triggers', 'contacts'])
+        $flows = Flow::query()->with(['triggers', 'contacts', 'tags'])
             ->where('account_id', $accountId)->where('enabled', true)->orderBy('id')->get();
 
         foreach ($flows as $flow) {
@@ -217,12 +217,28 @@ class FlowEngine
         return $base . "\n\n";
     }
 
-    /** Escopo: 'contatos' so se o remetente esta na lista; 'global' sempre. */
+    /**
+     * Escopo: 'contatos' so se o remetente esta na lista; 'tags' (T-1) se o
+     * remetente tem QUALQUER tag do fluxo (avaliado na hora — tag entra/sai,
+     * o alcance muda na proxima mensagem); 'global' sempre.
+     */
     private function scopeEligible(Flow $flow, string $jid): bool
     {
-        if (($flow->scope ?: 'global') === 'global') {
+        $scope = $flow->scope ?: 'global';
+        if ($scope === 'global') {
             return true;
         }
+
+        if ($scope === 'tags') {
+            $contact = \App\Models\Contact::query()->where('remote_jid', $jid)->first();
+            if ($contact === null) {
+                return false;
+            }
+            $flowTags = $flow->relationLoaded('tags') ? $flow->tags : $flow->tags()->get();
+
+            return $flowTags->pluck('id')->intersect($contact->tags()->pluck('tags.id'))->isNotEmpty();
+        }
+
         $contatos = $flow->relationLoaded('contacts') ? $flow->contacts : $flow->contacts()->get();
 
         return $contatos->contains(fn ($c) => $c->remote_jid === $jid);

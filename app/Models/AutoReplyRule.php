@@ -63,6 +63,12 @@ class AutoReplyRule extends Model
         return $this->belongsToMany(Contact::class, 'rule_contacts');
     }
 
+    /** Tags do escopo 'tags' (T-1): casa quem tem QUALQUER uma. */
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'rule_tag');
+    }
+
     /** Frases-exemplo da intencao (Camada 3). Opcionais; ajudam a IA a casar a regra. */
     public function aiExamples(): HasMany
     {

@@ -61,7 +61,7 @@ class RuleMatcher
         }
 
         $rules = AutoReplyRule::query()
-            ->with(['triggers', 'responses', 'contacts'])
+            ->with(['triggers', 'responses', 'contacts', 'tags'])
             ->where('account_id', $accountId)
             ->where('enabled', true)
             ->where(function ($q) use ($channelId) {
@@ -73,10 +73,15 @@ class RuleMatcher
             ->orderBy('id')
             ->get();
 
+        // T-1: tags do remetente calculadas UMA vez (escopo 'tags' avaliado na hora
+        // do match — tag entra/sai, o alcance muda na proxima mensagem).
+        $senderTagIds = $this->tagIdsFor($remoteJid);
+
         $matches = [];
         foreach ($rules as $rule) {
-            // S3: escopo. Regra 'contatos' so entra se o remetente esta na lista.
-            if (! $this->scopeEligible($rule, $remoteJid)) {
+            // S3/T-1: escopo. 'contatos' exige o remetente na lista; 'tags' exige
+            // QUALQUER tag da regra no remetente.
+            if (! $this->scopeEligible($rule, $remoteJid, $senderTagIds)) {
                 continue;
             }
             $score = $this->bestTriggerScore($rule, $raw, $normText);
@@ -106,8 +111,10 @@ class RuleMatcher
      */
     public function aiCandidates(int $accountId, ?int $channelId, ?string $remoteJid): \Illuminate\Support\Collection
     {
+        $senderTagIds = $this->tagIdsFor($remoteJid);
+
         return AutoReplyRule::query()
-            ->with(['triggers', 'responses', 'contacts', 'aiExamples'])
+            ->with(['triggers', 'responses', 'contacts', 'tags', 'aiExamples'])
             ->where('account_id', $accountId)
             ->where('enabled', true)
             ->where('ai_match_enabled', true)
@@ -119,7 +126,7 @@ class RuleMatcher
             })
             ->orderBy('id')
             ->get()
-            ->filter(fn ($rule) => $this->scopeEligible($rule, $remoteJid))
+            ->filter(fn ($rule) => $this->scopeEligible($rule, $remoteJid, $senderTagIds))
             ->values();
     }
 
@@ -149,9 +156,26 @@ class RuleMatcher
         return ['exact' => 4, 'starts_with' => 3, 'contains' => 2, 'regex' => 1][$type] ?? 0;
     }
 
+    /** T-1 — especificidade de escopo: contatos especificos (2) > tag (1) > global (0). */
     private function scopeRank(AutoReplyRule $rule): int
     {
-        return ($rule->scope ?? 'global') === 'contatos' ? 1 : 0;
+        return match ($rule->scope ?: 'global') {
+            'contatos' => 2,
+            'tags' => 1,
+            default => 0,
+        };
+    }
+
+    /** Ids das tags do remetente (escopo 'tags'; avaliado na hora do match). */
+    private function tagIdsFor(?string $remoteJid): array
+    {
+        if ($remoteJid === null) {
+            return [];
+        }
+
+        $contact = \App\Models\Contact::query()->where('remote_jid', $remoteJid)->first();
+
+        return $contact ? $contact->tags()->pluck('tags.id')->map(fn ($id) => (int) $id)->all() : [];
     }
 
     private function valueLength(array $trigger): int
@@ -162,18 +186,27 @@ class RuleMatcher
             : mb_strlen($this->normalize((string) $trigger['value']));
     }
 
-    /** S3 — a regra e elegivel para este remetente? */
-    private function scopeEligible(AutoReplyRule $rule, ?string $remoteJid): bool
+    /** S3/T-1 — a regra e elegivel para este remetente? */
+    private function scopeEligible(AutoReplyRule $rule, ?string $remoteJid, array $senderTagIds = []): bool
     {
-        if (($rule->scope ?: 'global') === 'global') {
+        $scope = $rule->scope ?: 'global';
+        if ($scope === 'global') {
             return true;
         }
 
-        // Escopo 'contatos': precisa saber o remetente e ele tem que estar na lista.
+        // Escopos restritos exigem saber quem e o remetente.
         if ($remoteJid === null) {
             return false;
         }
 
+        // T-1: escopo por TAG — casa quem tem QUALQUER tag da regra.
+        if ($scope === 'tags') {
+            $tags = $rule->relationLoaded('tags') ? $rule->tags : $rule->tags()->get();
+
+            return $tags->pluck('id')->map(fn ($id) => (int) $id)->intersect($senderTagIds)->isNotEmpty();
+        }
+
+        // Escopo 'contatos': o remetente tem que estar na lista.
         $contatos = $rule->relationLoaded('contacts') ? $rule->contacts : $rule->contacts()->get();
 
         return $contatos->contains(fn ($c) => $c->remote_jid === $remoteJid);

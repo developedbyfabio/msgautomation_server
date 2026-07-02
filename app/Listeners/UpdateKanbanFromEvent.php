@@ -38,7 +38,8 @@ class UpdateKanbanFromEvent implements ShouldQueue
                 $event instanceof FlowNodeReached => $this->engine->apply(
                     'fluxo_no', $event->accountId, $event->remoteJid, $event->flowSessionId, null),
                 $event instanceof AiDecisionRecorded => $this->engine->apply(
-                    'ia_decisao', $event->accountId, $event->remoteJid, $event->aiDecisionId, null),
+                    'ia_decisao', $event->accountId, $event->remoteJid, $event->aiDecisionId, null,
+                    ['intent' => $event->intent, 'acao' => $event->acao]),
                 default => null,
             };
         } catch (\Throwable $e) {

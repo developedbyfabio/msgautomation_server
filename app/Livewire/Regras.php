@@ -38,6 +38,8 @@ class Regras extends Component
     /** @var array<int,int> */
     public array $scopeContactIds = [];
     public string $scopeSearch = '';
+    /** @var array<int,int> T-1: tags do escopo 'tags' */
+    public array $scopeTagIds = [];
 
     // Camada 3 (IA) — "deixe a IA casar mensagens parecidas" + frases-exemplo.
     public bool $aiMatchEnabled = false;
@@ -62,7 +64,7 @@ class Regras extends Component
             'enabled' => 'boolean',
             'cooldownMode' => 'required|in:global,sempre,1x_dia,cada_n',
             'cooldownMinutes' => 'required_if:cooldownMode,cada_n|integer|min:1|max:100000',
-            'scope' => 'required|in:global,contatos',
+            'scope' => 'required|in:global,contatos,tags',
             'scopeContactIds' => 'array',
             'scopeContactIds.*' => 'integer',
         ];
@@ -88,6 +90,7 @@ class Regras extends Component
         $this->cooldownMinutes = 60;
         $this->scope = 'global';
         $this->scopeContactIds = [];
+        $this->scopeTagIds = [];
         $this->scopeSearch = '';
         $this->aiMatchEnabled = false;
         $this->aiExamples = [];
@@ -117,6 +120,7 @@ class Regras extends Component
         $this->cooldownMinutes = (int) ($rule->cooldown_minutes ?: 60);
         $this->scope = $rule->scope ?: 'global';
         $this->scopeContactIds = $rule->contacts->pluck('id')->all();
+        $this->scopeTagIds = $rule->tags()->pluck('tags.id')->all();
         $this->scopeSearch = '';
         $this->aiMatchEnabled = (bool) $rule->ai_match_enabled;
         $this->aiExamples = $rule->aiExampleList();
@@ -193,6 +197,7 @@ class Regras extends Component
             'cooldown_minutes' => $this->cooldownMinutes,
             'scope' => $this->scope,
             'contact_ids' => $this->scopeContactIds,
+            'tag_ids' => $this->scopeTagIds,
             'ai_match_enabled' => $this->aiMatchEnabled,
             'ai_examples' => $this->aiExamples,
         ], $this->editingId);
@@ -289,7 +294,7 @@ class Regras extends Component
     public function render()
     {
         // Fatia 0: ordem da lista = criacao (id); a precedencia agora e por especificidade.
-        $rules = $this->query()->with(['triggers', 'responses', 'contacts'])->orderBy('id')->get();
+        $rules = $this->query()->with(['triggers', 'responses', 'contacts', 'tags'])->orderBy('id')->get();
         $deleting = $this->confirmingDeleteId ? $rules->firstWhere('id', $this->confirmingDeleteId) : null;
 
         // Fatia 0: detector de sobreposicao (avisa regras que casariam a mesma mensagem).
@@ -315,6 +320,7 @@ class Regras extends Component
         $secretNames = $this->showForm ? app(SecretVault::class)->names($this->accountId()) : [];
 
         return view('livewire.regras', [
+            'allTags' => ($this->showForm) ? \App\Models\Tag::query()->orderBy('name')->get() : collect(),
             'rules' => $rules,
             'deleting' => $deleting,
             'contacts' => $contacts,

@@ -65,6 +65,8 @@
                             <span class="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800"><flux:icon icon="clock" variant="micro" class="size-3" /> {{ $freqLabel }}</span>
                             @if ($rule->scope === 'contatos')
                                 <span class="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-300"><flux:icon icon="user" variant="micro" class="size-3" /> {{ $rule->contacts->count() }} contato(s)</span>
+                            @elseif ($rule->scope === 'tags')
+                                <span class="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-purple-700 dark:bg-purple-950 dark:text-purple-300"><flux:icon icon="tag" variant="micro" class="size-3" /> tag: {{ $rule->tags->pluck('name')->implode(', ') }}</span>
                             @else
                                 <span class="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800"><flux:icon icon="globe-alt" variant="micro" class="size-3" /> todos</span>
                             @endif
@@ -239,9 +241,12 @@
                 {{-- ESCOPO (S2 textos + S3 checkboxes) --}}
                 <div>
                     <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Escopo</label>
-                    <div class="flex items-center gap-4 text-sm">
+                    <div class="flex flex-wrap items-center gap-4 text-sm">
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os Aprovados</label>
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> Contatos Especificos</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="tags"> Contatos com tag
+                            <x-info-tip text="Casa quem tem QUALQUER uma das tags marcadas, avaliado na hora da mensagem (tag entra/sai, o alcance muda na proxima). Regra com {senha:} NAO pode usar tag — segredo exige lista explicita de contatos." />
+                        </label>
                     </div>
                     @error('scope') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     @if ($scope === 'contatos')
@@ -272,6 +277,20 @@
                         </div>
                         <p class="mt-1 text-[11px] text-zinc-400">Marque os contatos. A regra so dispara para esses contatos.</p>
                         @error('scopeContactIds') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
+                    @if ($scope === 'tags')
+                        <div class="mt-2 flex flex-wrap gap-2 rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+                            @forelse ($allTags as $t)
+                                <label class="inline-flex cursor-pointer items-center gap-1.5 text-sm" wire:key="rtag-{{ $t->id }}">
+                                    <input type="checkbox" value="{{ $t->id }}" wire:model.live="scopeTagIds" class="rounded border-zinc-300 dark:border-zinc-700">
+                                    <x-tag-chip :color="$t->color" small>{{ $t->name }}</x-tag-chip>
+                                </label>
+                            @empty
+                                <p class="text-xs text-zinc-400">Nenhuma tag ainda. Crie no painel de um contato (/contatos).</p>
+                            @endforelse
+                        </div>
+                        <p class="mt-1 text-[11px] text-zinc-400">Casa quem tem QUALQUER uma das tags (avaliado a cada mensagem).</p>
+                        @error('scopeTagIds') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
                     @endif
                 </div>
 
@@ -359,6 +378,12 @@
                             <p class="text-amber-600 dark:text-amber-400">{{ $testResult['erro'] ?? 'Erro.' }}</p>
                         @elseif (! $testResult['matched'])
                             <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="x-circle" variant="micro" /> Nenhuma regra casaria (determinístico).</p>
+                            @if (! empty($testResult['fora_por_tag']))
+                                <p class="mt-1 flex items-start gap-1.5 text-[11px] text-purple-600 dark:text-purple-300">
+                                    <flux:icon icon="tag" variant="micro" class="mt-0.5 size-3 shrink-0" />
+                                    <span>Gatilho casaria, mas o contato NAO tem a tag: {{ implode(' · ', $testResult['fora_por_tag']) }}</span>
+                                </p>
+                            @endif
                             @php $ai = $testResult['ai'] ?? null; @endphp
                             @if ($ai)
                                 <div class="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-2 text-xs dark:border-indigo-900 dark:bg-indigo-950/30">
@@ -398,6 +423,17 @@
                                 <p class="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-300">
                                     <flux:icon icon="check-circle" variant="micro" /> Casaria a regra #{{ $testResult['rule_id'] }}
                                 </p>
+                                @if ($testResult['casou_por_tag'] ?? null)
+                                    <p class="flex items-center gap-1.5 text-[11px] text-purple-600 dark:text-purple-300">
+                                        <flux:icon icon="tag" variant="micro" class="size-3" /> Casou por TAG (contato tem: {{ $testResult['casou_por_tag'] }}).
+                                    </p>
+                                @endif
+                                @if (! empty($testResult['fora_por_tag']))
+                                    <p class="flex items-start gap-1.5 text-[11px] text-purple-600 dark:text-purple-300">
+                                        <flux:icon icon="tag" variant="micro" class="mt-0.5 size-3 shrink-0" />
+                                        <span>Fora por tag: {{ implode(' · ', $testResult['fora_por_tag']) }}</span>
+                                    </p>
+                                @endif
                                 <p class="text-xs text-zinc-500">Gatilho: <span class="font-mono">{{ $testResult['trigger'] }}</span>
                                     @if (($testResult['trigger_precision'] ?? 'exato') !== 'exato')
                                         <span class="rounded bg-amber-100 px-1 text-amber-700 dark:bg-amber-950 dark:text-amber-300">tolerante</span>

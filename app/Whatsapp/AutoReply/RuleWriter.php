@@ -76,7 +76,7 @@ class RuleWriter
             return ['rule' => null, 'errors' => ['responses' => 'Cadastre ao menos uma resposta.']];
         }
 
-        $scope = ($dados['scope'] ?? 'global') === 'contatos' ? 'contatos' : 'global';
+        $scope = in_array($dados['scope'] ?? 'global', ['contatos', 'tags'], true) ? $dados['scope'] : 'global';
         // Contatos do escopo, validados como do mesmo account.
         $contactIds = [];
         if ($scope === 'contatos') {
@@ -87,9 +87,24 @@ class RuleWriter
             }
         }
 
+        // T-1 — tags do escopo, validadas como da mesma conta.
+        $tagIds = [];
+        if ($scope === 'tags') {
+            $tagIds = \App\Models\Tag::withoutAccountScope()->where('account_id', $accountId)
+                ->whereIn('id', $dados['tag_ids'] ?? [])->pluck('id')->all();
+            if ($tagIds === []) {
+                return ['rule' => null, 'errors' => ['scopeTagIds' => 'Escopo "tag": selecione ao menos uma tag.']];
+            }
+        }
+
         // S5 — guarda de escopo para regras que devolvem SENHA ({senha:...}).
         $temSenha = collect($responses)->contains(fn ($r) => $this->vault->hasRef((string) $r));
         if ($temSenha) {
+            // T-1: TAG e dinamica (um evento/regra de board pode aplica-la a qualquer
+            // contato) — segredo exige lista EXPLICITA de contatos. Nunca por tag.
+            if ($scope === 'tags') {
+                return ['rule' => null, 'errors' => ['scope' => 'Esta regra envia uma senha ({senha:...}) e NAO pode usar escopo por tag: tag e dinamica (eventos podem aplica-la a qualquer contato). Use "Contatos Especificos" e selecione quem pode receber.']];
+            }
             if ($scope !== 'contatos') {
                 return ['rule' => null, 'errors' => ['scope' => 'Esta regra envia uma senha ({senha:...}). A senha iria em texto pra QUALQUER contato que disparasse. Use escopo "Contatos Especificos" e selecione quem pode receber.']];
             }
@@ -135,6 +150,7 @@ class RuleWriter
         $rule->responses()->delete();
         $rule->responses()->createMany(array_map(fn ($r) => ['response_text' => $r], $responses));
         $rule->contacts()->sync($contactIds);
+        $rule->tags()->sync($tagIds); // T-1: escopo por tag ([] fora do escopo 'tags')
 
         // Frases-exemplo da IA: re-sincroniza (substitui).
         $rule->aiExamples()->delete();

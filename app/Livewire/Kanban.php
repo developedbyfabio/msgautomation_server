@@ -28,6 +28,7 @@ use Livewire\Component;
 class Kanban extends Component
 {
     public string $search = '';
+    public ?int $filterTagId = null; // T-1: filtro por tag junto da busca
 
     // Historico do card (modal).
     public ?int $historyCardId = null;
@@ -45,8 +46,18 @@ class Kanban extends Component
     public string $rEvent = 'mensagem_recebida';
     public string $rCondition = 'none';
     public string $rConditionSlug = '';
+    public string $rIntent = '';                 // T-1: condicao por intent (ia_decisao)
+    public string $rAction = 'move_column';      // T-1: move_column | add_tag | remove_tag
     public ?int $rToColumnId = null;
+    public ?int $rTagId = null;                  // T-1: alvo das acoes de tag
     public bool $rActive = true;
+
+    /** T-1 — acoes disponiveis da regra de movimento. */
+    public const ACOES = [
+        'move_column' => 'Mover o card pra coluna (first-match: a primeira vence)',
+        'add_tag' => 'Aplicar tag no contato (cumulativa: todas que casam aplicam)',
+        'remove_tag' => 'Remover tag do contato (cumulativa)',
+    ];
 
     // Confirmacao leve pra mexer em regra DEFAULT.
     public ?int $confirmingDefaultRuleId = null;
@@ -68,6 +79,7 @@ class Kanban extends Component
         'card_present' => 'Card ja existe',
         'in_column' => 'Card esta na coluna...',
         'not_in_column' => 'Card NAO esta na coluna...',
+        'intent' => 'Intent da IA e... (so evento "IA decidiu"; casa quando a IA RESPONDEU com esse intent)',
     ];
 
     // ---- board -----------------------------------------------------------------
@@ -295,8 +307,10 @@ class Kanban extends Component
         $this->confirmingDefaultAction = '';
         $this->editingRuleId = $rule->id;
         $this->rEvent = (string) $rule->event_type;
-        [$this->rCondition, $this->rConditionSlug] = $this->parseCondition((array) $rule->conditions);
-        $this->rToColumnId = (int) $rule->to_column_id;
+        [$this->rCondition, $this->rConditionSlug, $this->rIntent] = $this->parseCondition((array) $rule->conditions);
+        $this->rAction = (string) ($rule->action_type ?: 'move_column');
+        $this->rToColumnId = $rule->to_column_id !== null ? (int) $rule->to_column_id : null;
+        $this->rTagId = $rule->tag_id !== null ? (int) $rule->tag_id : null;
         $this->rActive = (bool) $rule->active;
         $this->resetValidation();
         $this->showRuleForm = true;
@@ -336,7 +350,10 @@ class Kanban extends Component
         $this->rEvent = 'mensagem_recebida';
         $this->rCondition = 'none';
         $this->rConditionSlug = '';
+        $this->rIntent = '';
+        $this->rAction = 'move_column';
         $this->rToColumnId = null;
+        $this->rTagId = null;
         $this->rActive = true;
         $this->resetValidation();
         $this->showRuleForm = true;
@@ -358,13 +375,31 @@ class Kanban extends Component
 
             return;
         }
-        // Destino OBRIGATORIO e do board da conta.
-        $destino = $this->rToColumnId ? $board->columns()->where('id', $this->rToColumnId)->first() : null;
-        if (! $destino) {
-            $this->addError('rToColumnId', 'Escolha a coluna de destino.');
+        if (! array_key_exists($this->rAction, self::ACOES)) {
+            $this->addError('rAction', 'Acao invalida.');
 
             return;
         }
+
+        // Alvo OBRIGATORIO do tipo certo (T-1): coluna pra move_column; tag pras acoes de tag.
+        $destino = null;
+        $tag = null;
+        if ($this->rAction === 'move_column') {
+            $destino = $this->rToColumnId ? $board->columns()->where('id', $this->rToColumnId)->first() : null;
+            if (! $destino) {
+                $this->addError('rToColumnId', 'Escolha a coluna de destino.');
+
+                return;
+            }
+        } else {
+            $tag = $this->rTagId ? \App\Models\Tag::query()->find($this->rTagId) : null;
+            if (! $tag) {
+                $this->addError('rTagId', 'Escolha a tag.');
+
+                return;
+            }
+        }
+
         if (! array_key_exists($this->rCondition, self::CONDICOES)) {
             $this->addError('rCondition', 'Condicao invalida.');
 
@@ -376,11 +411,25 @@ class Kanban extends Component
 
             return;
         }
+        if ($this->rCondition === 'intent') {
+            if ($this->rEvent !== 'ia_decisao') {
+                $this->addError('rCondition', 'Condicao por intent so vale pro evento "IA decidiu".');
+
+                return;
+            }
+            if (trim($this->rIntent) === '') {
+                $this->addError('rIntent', 'Informe o intent.');
+
+                return;
+            }
+        }
 
         $dados = [
             'event_type' => $this->rEvent,
             'conditions' => $this->buildCondition(),
-            'to_column_id' => $destino->id,
+            'action_type' => $this->rAction,
+            'to_column_id' => $destino?->id,
+            'tag_id' => $tag?->id,
             'active' => $this->rActive,
         ];
 
@@ -423,23 +472,26 @@ class Kanban extends Component
         return BoardRule::query()->where('board_id', $this->board()->id)->find($id);
     }
 
-    /** @return array{0:string,1:string} [tipo, slug] */
+    /** @return array{0:string,1:string,2:string} [tipo, slug, intent] */
     private function parseCondition(array $cond): array
     {
         if (($cond['card'] ?? null) === 'absent') {
-            return ['card_absent', ''];
+            return ['card_absent', '', ''];
         }
         if (($cond['card'] ?? null) === 'present') {
-            return ['card_present', ''];
+            return ['card_present', '', ''];
         }
         if (isset($cond['card_in_column'])) {
-            return ['in_column', (string) $cond['card_in_column']];
+            return ['in_column', (string) $cond['card_in_column'], ''];
         }
         if (isset($cond['not_in_column'])) {
-            return ['not_in_column', (string) $cond['not_in_column']];
+            return ['not_in_column', (string) $cond['not_in_column'], ''];
+        }
+        if (isset($cond['intent'])) {
+            return ['intent', '', (string) $cond['intent']];
         }
 
-        return ['none', ''];
+        return ['none', '', ''];
     }
 
     private function buildCondition(): ?array
@@ -449,6 +501,7 @@ class Kanban extends Component
             'card_present' => ['card' => 'present'],
             'in_column' => ['card_in_column' => $this->rConditionSlug],
             'not_in_column' => ['not_in_column' => $this->rConditionSlug],
+            'intent' => ['intent' => trim($this->rIntent)],
             default => null,
         };
     }
@@ -456,7 +509,7 @@ class Kanban extends Component
     /** Rotulo pt-BR da condicao de uma regra (lista). */
     public function conditionLabel(BoardRule $rule, Board $board): string
     {
-        [$tipo, $slug] = $this->parseCondition((array) $rule->conditions);
+        [$tipo, $slug, $intent] = $this->parseCondition((array) $rule->conditions);
         $nomeCol = $slug !== '' ? ($board->columns->firstWhere('slug', $slug)?->name ?? $slug) : '';
 
         return match ($tipo) {
@@ -464,6 +517,7 @@ class Kanban extends Component
             'card_present' => 'card ja existe',
             'in_column' => 'card em "' . $nomeCol . '"',
             'not_in_column' => 'card fora de "' . $nomeCol . '"',
+            'intent' => 'IA respondeu intent "' . $intent . '"',
             default => 'sempre',
         };
     }
@@ -478,11 +532,15 @@ class Kanban extends Component
         $busca = mb_strtolower(trim($this->search), 'UTF-8');
         $cards = Card::query()
             ->where('board_id', $board->id)
-            ->with('contact:id,push_name,remote_jid')
+            ->with(['contact:id,push_name,remote_jid', 'contact.tags:id,name,color'])
             ->orderByDesc('last_interaction_at')
             ->limit(500)
             ->get()
             ->filter(function (Card $c) use ($busca) {
+                // T-1: filtro por tag junto da busca.
+                if ($this->filterTagId !== null && ! $c->contact?->tags->contains('id', $this->filterTagId)) {
+                    return false;
+                }
                 if ($busca === '') {
                     return true;
                 }
@@ -503,9 +561,10 @@ class Kanban extends Component
             ] : null;
         }
 
-        $rules = $this->showRules ? $board->rules()->with('toColumn')->get() : collect();
+        $rules = $this->showRules ? $board->rules()->with(['toColumn', 'tag'])->get() : collect();
 
         return view('livewire.kanban', [
+            'allTags' => \App\Models\Tag::query()->orderBy('name')->get(),
             'board' => $board,
             'columns' => $board->columns()->get(),
             'cardsByColumn' => $cards,

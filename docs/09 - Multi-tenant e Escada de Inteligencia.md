@@ -254,7 +254,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 3 | **MT-0** Scoping estrutural | **ENTREGUE** — AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
 | 4 | **K-1** Kanban modelo+eventos | **ENTREGUE** — boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
 | 5 | **K-2** Kanban UI | **ENTREGUE** — /kanban board + mover manual + historico + editor de colunas e board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
-| 6 | **T-1** Tags | tags + pivot + chips na UI + acao "aplicar tag" nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
+| 6 | **T-1** Tags | **ENTREGUE** — tags + pivot com origem + chips na UI + acoes de tag nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
 | 7 | **P-1** Proativas: freios+opt-in | Bloco proativo nas settings (tudo OFF), `proactive_opt_in` no contato + registro de consentimento + opt-out por regra de sistema | MT-0 | Medio | Aprovar defaults dos tetos |
 | 8 | **P-2** Campanhas com gate | campaigns/targets draft→preview→aprovar; scheduler (unit novo) + fila `proactive` + `SendProactive` (modo proactive no Sender) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
 | 9 | **P-3** Reativacao via Kanban | TempoEstourou + campanha continua ("sumiu X dias na coluna Y → Z") com os mesmos gates | P-2, K-2 | Alto (ban) | Acompanhar 1 ciclo real com teto minusculo |
@@ -439,3 +439,48 @@ POST). Suite final: **361 verdes** (347 anteriores sem mudanca de expectativa).
 
 **Melhoria futura registrada:** drag-and-drop no board (exige lib JS; menu atende).
 **Proxima fatia da ordem (D1): T-1 (tags).**
+
+---
+
+## T-1 — ENTREGUE (2026-07-02)
+
+Tags como camada de SEGMENTACAO (N9): nunca enviam nada. Pre-requisito da segmentacao das
+proativas (P-fatias). Suite final: **378 verdes** (361 anteriores sem mudanca de expectativa).
+
+**Schema (migration `000028`, aditivo, escopado):** `tags` (nome UNICO por conta, cor da paleta
+de badges), pivo `contact_tag` (UNIQUE contato+tag = idempotencia; ORIGEM rastreada: manual |
+board_rule | ai_intent + origin_ref), pivos de escopo `rule_tag`/`flow_tag`, e `board_rules` +=
+`action_type` (move_column default | add_tag | remove_tag) + `tag_id` (to_column_id virou
+nullable). Regras existentes viram move_column (identico).
+
+**SEMANTICA DO MOTOR (documentada e testada):** `move_column` segue FIRST-MATCH (so a primeira
+regra de coluna que casa move); `add_tag`/`remove_tag` sao CUMULATIVAS (todas as que casam
+aplicam, antes ou depois do move). Condicao nova `{"intent": "x"}` (so evento ia_decisao): casa
+quando a IA RESPONDEU (acima do limiar) com o intent — origem do pivo vira `ai_intent`/`intent`.
+Tag excluida: pivos caem (cascade), board_rules de tag ficam inertes (tag_id null), regras/
+fluxos com a tag como ESCOPO ficam sem alcance ate ajuste (aviso com contagem de uso no modal).
+
+**Escopo por tag em regras e fluxos:** terceira opcao "Contatos com tag" (casa quem tem QUALQUER
+uma; avaliado NA HORA do match — tag entra/sai, alcance muda na proxima mensagem).
+**Especificidade atualizada: contatos especificos (2) > tag (1) > global (0)** — demais
+desempates intactos. Detector de conflito ja cobre tag×global e tag×especifica (ignora escopo
+de proposito; provado por teste). Testador explica "casou por TAG" e "gatilho casaria, mas o
+contato NAO tem a tag".
+
+**GUARDA S5 (dura):** regra que devolve `{senha:}` NAO pode usar escopo por tag — tag e
+DINAMICA (um evento pode aplica-la a qualquer contato); segredo exige lista explicita.
+Bloqueado no RuleWriter E na UI com mensagem clara. Fluxo com `{senha:}` segue exigindo
+"Contatos Especificos" pra ligar (tag/global nao valem). Base de conhecimento nao tem escopo
+por tag (segue so com contatos explicitos — guarda existente intacta).
+
+**UI:** chips com cor no painel do contato (/contatos e /conversas — componente reutilizavel
+`contact-tags` com autocomplete + criar na hora + remover, tooltip com origem/data); "Gerenciar
+tags" em /contatos (renomear/cor/excluir com uso e confirmacao); Kanban com chips no card +
+filtro por tag; editor de regras do Kanban com select de ACAO (coluna OU tag) + condicao por
+intent (descricoes pt-BR).
+
+**Gate estendido:** tags homonimas em contas espelhadas nao se cruzam (regra por tag da A nao
+casa contato da B com tag homonima); acao de tag do board da A nao toca contato da B.
+
+**Proxima fatia da ordem (D1): P-1 — freios das proativas (bloco proativo nas settings, tudo
+OFF; opt-in explicito por contato com registro de consentimento; opt-out por regra de sistema).**

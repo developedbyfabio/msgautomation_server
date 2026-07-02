@@ -62,6 +62,7 @@ class BoardProvisioner
                 'board_id' => $board->id,
                 'event_type' => $evento,
                 'conditions' => $cond,
+                'action_type' => 'move_column',
                 'to_column_id' => $cols[$destino]->id,
                 'active' => true,
                 'is_default' => true,

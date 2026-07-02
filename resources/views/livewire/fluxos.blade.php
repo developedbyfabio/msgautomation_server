@@ -158,6 +158,7 @@
                     <div class="flex items-center gap-4 text-sm">
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="global"> Todos os Aprovados</label>
                         <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="contatos"> Contatos Especificos</label>
+                        <label class="inline-flex items-center gap-1.5"><input type="radio" wire:model.live="scope" value="tags"> Contatos com tag</label>
                     </div>
                     @if ($scope === 'contatos')
                         <div class="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -177,6 +178,20 @@
                             </div>
                         </div>
                         @error('scopeContactIds') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
+                    @if ($scope === 'tags')
+                        <div class="mt-2 flex flex-wrap gap-2 rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+                            @forelse (\App\Models\Tag::query()->orderBy('name')->get() as $t)
+                                <label class="inline-flex cursor-pointer items-center gap-1.5 text-sm" wire:key="ftag-{{ $t->id }}">
+                                    <input type="checkbox" value="{{ $t->id }}" wire:model.live="scopeTagIds" class="rounded border-zinc-300 dark:border-zinc-700">
+                                    <x-tag-chip :color="$t->color" small>{{ $t->name }}</x-tag-chip>
+                                </label>
+                            @empty
+                                <p class="text-xs text-zinc-400">Nenhuma tag ainda. Crie no painel de um contato (/contatos).</p>
+                            @endforelse
+                        </div>
+                        <p class="mt-1 text-[11px] text-zinc-400">Entra no fluxo quem tem QUALQUER uma das tags. Fluxo com {senha:} exige "Contatos Especificos" pra ligar (tag nao vale).</p>
+                        @error('scopeTagIds') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     @endif
                 </div>
 

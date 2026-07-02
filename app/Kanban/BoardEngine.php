@@ -43,17 +43,23 @@ class BoardEngine
     /**
      * Aplica um evento ao board default da conta.
      *
+     * SEMANTICA DAS ACOES (T-1, documentada e testada):
+     *  - move_column: FIRST-MATCH — so a primeira regra de coluna que casa move;
+     *  - add_tag/remove_tag: CUMULATIVAS — TODAS as regras de tag que casam aplicam
+     *    (antes ou depois do move, na ordem da lista).
+     *
      * @param  string  $eventType  tipo estavel (EVENT_TYPES)
      * @param  int  $eventRef  id do registro de origem (incoming/log/decisao/sessao)
      * @param  ?string  $direction  'in' | 'out' | null (nao muda)
+     * @param  array{intent?:?string,acao?:?string}  $meta  extras do evento (condicao por intent)
      */
-    public function apply(string $eventType, int $accountId, string $remoteJid, int $eventRef, ?string $direction = null): void
+    public function apply(string $eventType, int $accountId, string $remoteJid, int $eventRef, ?string $direction = null, array $meta = []): void
     {
         if (str_ends_with($remoteJid, '@g.us')) {
             return; // Kanban e de conversas com PESSOAS (grupos fora, como no robo)
         }
 
-        $this->context->runAs($accountId, function () use ($eventType, $remoteJid, $eventRef, $direction) {
+        $this->context->runAs($accountId, function () use ($eventType, $remoteJid, $eventRef, $direction, $meta) {
             $contact = Contact::query()->where('remote_jid', $remoteJid)->first();
             if ($contact === null) {
                 return; // observador puro: nao cria contato
@@ -66,7 +72,8 @@ class BoardEngine
 
             $card = Card::query()->where('board_id', $board->id)->where('contact_id', $contact->id)->first();
 
-            // Re-entrega do MESMO evento: ja gerou transicao neste card -> so touch.
+            // Re-entrega do MESMO evento: ja gerou transicao neste card -> so touch
+            // (acoes de tag ja aplicadas na 1a execucao; pivo unique segura o resto).
             if ($card !== null && CardTransition::query()
                 ->where('card_id', $card->id)
                 ->where('event_type', $eventType)
@@ -77,7 +84,6 @@ class BoardEngine
                 return;
             }
 
-            // First-match nas regras ativas do board pro evento, em ordem.
             $rules = BoardRule::query()
                 ->where('board_id', $board->id)
                 ->where('event_type', $eventType)
@@ -85,13 +91,22 @@ class BoardEngine
                 ->orderBy('position')
                 ->get();
 
+            $moveu = false;
             foreach ($rules as $rule) {
-                if (! $this->matches($rule, $card)) {
+                if (! $this->matches($rule, $card, $meta)) {
                     continue;
                 }
 
-                $card = $this->moveOrCreate($board->id, (int) $contact->id, $card, $rule, $eventType, $eventRef);
-                break;
+                if (($rule->action_type ?: 'move_column') === 'move_column') {
+                    if ($moveu || $rule->to_column_id === null) {
+                        continue; // first-match: a primeira coluna vence; sem destino = invalida
+                    }
+                    $card = $this->moveOrCreate($board->id, (int) $contact->id, $card, $rule, $eventType, $eventRef);
+                    $moveu = true;
+                } else {
+                    // add_tag / remove_tag: cumulativo (todas as que casam).
+                    $this->applyTagAction($rule, $contact);
+                }
             }
 
             if ($card !== null) {
@@ -100,8 +115,8 @@ class BoardEngine
         });
     }
 
-    /** Condicoes minimas (JSON) da regra contra o estado atual do card. */
-    private function matches(BoardRule $rule, ?Card $card): bool
+    /** Condicoes minimas (JSON) da regra contra o estado atual do card + meta do evento. */
+    private function matches(BoardRule $rule, ?Card $card, array $meta = []): bool
     {
         $cond = (array) $rule->conditions;
 
@@ -122,8 +137,41 @@ class BoardEngine
                 return false;
             }
         }
+        // T-1: condicao por INTENT (evento ia_decisao): casa quando a IA RESPONDEU
+        // (acima do limiar) com o intent exato — ex.: "pedir_pix" -> tag.
+        if (isset($cond['intent'])) {
+            if (($meta['intent'] ?? null) !== $cond['intent'] || ($meta['acao'] ?? null) !== 'respondeu') {
+                return false;
+            }
+        }
 
         return true;
+    }
+
+    /** Aplica/remove a tag da regra no CONTATO (origem rastreada; idempotente). */
+    private function applyTagAction(BoardRule $rule, Contact $contact): void
+    {
+        if ($rule->tag_id === null) {
+            return; // alvo removido/invalido -> regra inerte
+        }
+
+        if ($rule->action_type === 'remove_tag') {
+            $contact->tags()->detach($rule->tag_id);
+
+            return;
+        }
+
+        // add_tag — origem: 'ai_intent' quando a condicao e por intent (ref = intent);
+        // senao 'board_rule' (ref = id da regra). Pivo UNIQUE = idempotente.
+        $cond = (array) $rule->conditions;
+        $origin = isset($cond['intent']) ? 'ai_intent' : 'board_rule';
+        $ref = isset($cond['intent']) ? (string) $cond['intent'] : (string) $rule->id;
+
+        try {
+            $contact->tags()->attach($rule->tag_id, ['origin' => $origin, 'origin_ref' => $ref]);
+        } catch (UniqueConstraintViolationException) {
+            // Tag ja aplicada -> no-op (re-aplicacao/re-entrega).
+        }
     }
 
     /** Cria o card no destino ou move o existente, registrando a transicao com causa. */

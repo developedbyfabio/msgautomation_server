@@ -321,6 +321,13 @@
                     </div>
                 </div>
 
+                {{-- T-1: tags do contato (segmentacao; componente reutilizavel) --}}
+                @if ($selectedContact)
+                    <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+                        <livewire:contact-tags :contact-id="$selectedContact->id" :key="'ctags-'.$selectedContact->id" />
+                    </div>
+                @endif
+
                 {{-- Midias recentes (so lista; render real e fatia futura) --}}
                 <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
                     <div class="mb-2 flex items-center justify-between">

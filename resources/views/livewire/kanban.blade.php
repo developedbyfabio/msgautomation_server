@@ -6,13 +6,20 @@
                 <x-info-tip text="Cada conversa individual e um card que se move sozinho pelos eventos do robo (regras de movimento) ou pela sua mao. O Kanban so OBSERVA: nunca envia mensagem nem muda o comportamento do robo." />
             </div>
             <div class="flex items-center gap-2">
-                <div class="relative w-64">
+                <div class="relative w-56">
                     <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-zinc-400">
                         <flux:icon icon="magnifying-glass" variant="micro" />
                     </span>
                     <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar contato..."
                         class="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-8 pr-3 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                 </div>
+                {{-- T-1: filtro por tag --}}
+                <select wire:model.live="filterTagId" class="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    <option value="">Todas as tags</option>
+                    @foreach ($allTags as $t)
+                        <option value="{{ $t->id }}">{{ $t->name }}</option>
+                    @endforeach
+                </select>
                 <button type="button" wire:click="openRules"
                     class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                     <flux:icon icon="bolt" variant="micro" /> Regras de movimento
@@ -52,6 +59,16 @@
                                             @endif
                                             <span>{{ $card->last_interaction_at?->diffForHumans() ?? '-' }}</span>
                                         </div>
+                                        @if ($card->contact?->tags->isNotEmpty())
+                                            <div class="mt-1 flex flex-wrap gap-1">
+                                                @foreach ($card->contact->tags->take(3) as $t)
+                                                    <x-tag-chip :color="$t->color" small wire:key="kt-{{ $card->id }}-{{ $t->id }}">{{ $t->name }}</x-tag-chip>
+                                                @endforeach
+                                                @if ($card->contact->tags->count() > 3)
+                                                    <span class="text-[10px] text-zinc-400">+{{ $card->contact->tags->count() - 3 }}</span>
+                                                @endif
+                                            </div>
+                                        @endif
                                     </a>
                                     <flux:dropdown position="bottom" align="end">
                                         <button type="button" class="rounded p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Acoes do card">
@@ -186,7 +203,11 @@
                                     <span class="font-medium">{{ \Illuminate\Support\Str::before(\App\Livewire\Kanban::EVENTOS[$rule->event_type] ?? $rule->event_type, ' — ') }}</span>
                                     <span class="text-zinc-400">+ {{ $this->conditionLabel($rule, $board) }}</span>
                                     <flux:icon icon="arrow-right" variant="micro" class="inline size-3 text-zinc-400" />
-                                    <span class="font-medium">{{ $rule->toColumn?->name ?? '?' }}</span>
+                                    @if (($rule->action_type ?: 'move_column') === 'move_column')
+                                        <span class="font-medium">{{ $rule->toColumn?->name ?? '?' }}</span>
+                                    @else
+                                        <span class="font-medium">{{ $rule->action_type === 'add_tag' ? '+tag' : '-tag' }} "{{ $rule->tag?->name ?? '?' }}"</span>
+                                    @endif
                                 </div>
                                 <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
                                     @if ($rule->is_default)<span class="rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">padrao</span>@endif
@@ -254,6 +275,18 @@
                     @error('rEvent') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
+                    <label class="mb-1 flex items-center gap-1 text-xs font-medium">
+                        Acao
+                        <x-info-tip text="Mover pra coluna segue FIRST-MATCH (so a primeira regra de coluna que casa move). Acoes de tag sao CUMULATIVAS: todas as que casam aplicam. Tags nao enviam nada — segmentam." />
+                    </label>
+                    <select wire:model.live="rAction" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        @foreach (\App\Livewire\Kanban::ACOES as $valor => $rotulo)
+                            <option value="{{ $valor }}">{{ $rotulo }}</option>
+                        @endforeach
+                    </select>
+                    @error('rAction') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label class="mb-1 block text-xs font-medium">Condicao</label>
                     <select wire:model.live="rCondition" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                         @foreach (\App\Livewire\Kanban::CONDICOES as $valor => $rotulo)
@@ -269,17 +302,37 @@
                         </select>
                         @error('rConditionSlug') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     @endif
+                    @if ($rCondition === 'intent')
+                        <input type="text" wire:model="rIntent" placeholder="ex.: pedir_pix"
+                            class="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        @error('rIntent') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        <p class="mt-1 text-[11px] text-zinc-400">Casa quando a IA RESPONDEU com esse intent (acima do limiar). Veja os intents na aba "Decisoes da IA" do /revisao.</p>
+                    @endif
                 </div>
-                <div>
-                    <label class="mb-1 block text-xs font-medium">Mover o card para</label>
-                    <select wire:model="rToColumnId" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                        <option value="">Escolha a coluna destino...</option>
-                        @foreach ($columns as $col)
-                            <option value="{{ $col->id }}">{{ $col->name }}</option>
-                        @endforeach
-                    </select>
-                    @error('rToColumnId') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                </div>
+                @if ($rAction === 'move_column')
+                    <div>
+                        <label class="mb-1 block text-xs font-medium">Mover o card para</label>
+                        <select wire:model="rToColumnId" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <option value="">Escolha a coluna destino...</option>
+                            @foreach ($columns as $col)
+                                <option value="{{ $col->id }}">{{ $col->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('rToColumnId') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                @else
+                    <div>
+                        <label class="mb-1 block text-xs font-medium">{{ $rAction === 'add_tag' ? 'Aplicar a tag' : 'Remover a tag' }}</label>
+                        <select wire:model="rTagId" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <option value="">Escolha a tag...</option>
+                            @foreach ($allTags as $t)
+                                <option value="{{ $t->id }}">{{ $t->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('rTagId') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        <p class="mt-1 text-[11px] text-zinc-400">Sem tags ainda? Crie no painel de um contato (/contatos).</p>
+                    </div>
+                @endif
                 <label class="inline-flex items-center gap-2 text-sm">
                     <input type="checkbox" wire:model="rActive" class="rounded border-zinc-300 dark:border-zinc-700"> Ativa
                 </label>

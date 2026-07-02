@@ -27,6 +27,12 @@ class Flow extends Model
         return $this->belongsTo(Account::class);
     }
 
+    /** Tags do escopo 'tags' (T-1): entra quem tem QUALQUER uma. */
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'flow_tag');
+    }
+
     public function triggers(): HasMany
     {
         return $this->hasMany(FlowTrigger::class);
