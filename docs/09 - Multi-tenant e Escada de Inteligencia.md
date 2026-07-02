@@ -693,3 +693,47 @@ Preparacao da mudanca pro VPS Hostinger, SEM tocar o robo vivo daqui:
   APP_KEY e SECRETS_KEY (IDENTICOS, decifram banco/cofre), GEMINI_API_KEY,
   EVOLUTION_API_KEY, WEBHOOK_SECRET (legado), DB_PASSWORD, docker/evolution/.env.
 - O provisionamento do VPS e OUTRO prompt, rodado la, seguindo o checklist.
+
+
+---
+
+## PRODUCAO = VPS HOSTINGER — CUTOVER CONCLUIDO (DEPLOY-1, 2026-07-02)
+
+**A producao agora e o VPS Hostinger** (srv1780620.hstgr.cloud, Campinas-SP).
+O servidor DTI esta REBAIXADO A DEV. Cutover executado com a regra de ouro
+respeitada (zero janelas com duas Evolution conectadas): congelamento no DTI
+(kill switch OFF + services parados) -> dump final incremental (+271 msgs do
+intervalo) restaurado no VPS -> logout da instancia no DTI -> QR escaneado na
+Evolution do VPS (state=open 21:09 UTC) -> validacao real fim a fim
+("Que horas sao?" respondida em ~10s com hora certa de SP + card no Kanban;
+fluxo Menu completo com sessao completed). Estado dos switches: robo ON,
+IA OFF, proativas OFF (proativas vieram ON no dump inicial e foram desligadas
+pelo caminho oficial).
+
+Infra nova (detalhes nos relatorios DEPLOY-1 F1/F2/F3 em docs/relatorios/):
+- App em /srv/www/msgautomation, units systemd (serve 8080 / worker / scheduler).
+- Evolution PROPRIA (stack msgautomation_evo, 127.0.0.1:8090) — isolada da
+  Evolution do Nextgest que ja morava no VPS (8088). Redis do app em 6380.
+- Webhook por token (MT-2) validado; suite 530/530 verde no VPS.
+- Tunel Cloudflare: wa.nextgest.com.br (SO /webhook/*) e painel.nextgest.com.br
+  (Cloudflare Access com One-time PIN). Nenhuma porta do app aberta na internet.
+
+**CHECKLIST PRO FABIO APLICAR NO DTI (agora dev):**
+1. Kill switch do robo: OFF permanente (ja ficou OFF no congelamento — conferir).
+2. Evolution do DTI: instancia desconectada PERMANENTE (logout feito no cutover;
+   nao reescanear QR la — reescanear derrubaria a sessao da producao).
+3. Services msgautomation-{serve,worker,scheduler}: `systemctl disable` (alem de
+   parados) pra nao voltarem num reboot.
+4. Banco de la: pode ficar como massa de dev (dados reais ate 2026-07-02 21:05).
+5. Dump final (dump-final-2105.sql.gz) guardado por 30 dias como fallback de
+   rollback (copias: DTI e VPS em /root/msgautomation-migracao/).
+6. TENANCY_SINGLE_ACCOUNT_FALLBACK e APP_ENV de la: ajustar quando for usar como
+   dev (sem pressa; nada roda la ate religar na mao).
+
+**Rollback (enquanto o dump de 30 dias viver):** logout da Evolution do VPS ->
+QR de volta no DTI -> religar services de la. Dados novos do intervalo ficam no
+VPS pra avaliacao.
+
+**Proximo passo (gate): DEPLOY-1 F4 = CH-2 Parte B** — Cloud API oficial com
+numero de teste, agora SEM firewall corporativo no caminho (graph.facebook.com
+alcancavel do VPS, ~3.5ms).
