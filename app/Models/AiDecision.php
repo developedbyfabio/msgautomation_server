@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Decisao da IA (Camada 3): o que a IA classificou e o que fez com a mensagem.
- * acao: respondeu | escalou | silenciou. Alimenta a revisao/loop da Camada 5.
+ * acao: respondeu | escalou | silenciou. origem: regra (casou regra por IA, Fatia 1) |
+ * base (base de conhecimento, Fatia 2) — com knowledge_ids (entradas usadas) e
+ * resposta_resumo REDIGIDO. Alimenta a revisao/loop da Camada 5.
  * NUNCA guarda valor de segredo nem a mensagem crua.
  */
 class AiDecision extends Model
@@ -21,6 +23,9 @@ class AiDecision extends Model
         'intent',
         'confidence',
         'acao',
+        'origem',          // regra | base
+        'knowledge_ids',   // ids das entradas da base usadas (JSON)
+        'resposta_resumo', // resumo redigido da resposta ([senha: nome], nunca o valor)
         'motivo',
         'model',
     ];
@@ -29,6 +34,7 @@ class AiDecision extends Model
     {
         return [
             'confidence' => 'float',
+            'knowledge_ids' => 'array',
         ];
     }
 

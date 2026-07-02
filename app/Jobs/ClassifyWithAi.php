@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Ai\AiAnswerRequest;
 use App\Ai\AiClassification;
 use App\Ai\AiClassificationRequest;
 use App\Contracts\AiClassifier;
@@ -9,8 +10,10 @@ use App\Models\AiDecision;
 use App\Models\AutoReplyRule;
 use App\Models\Contact;
 use App\Models\IncomingMessage;
+use App\Models\Knowledge;
 use App\Whatsapp\AutoReply\AntiBanGuard;
 use App\Whatsapp\AutoReply\RuleMatcher;
+use App\Whatsapp\AutoReply\RuleResponder;
 use App\Whatsapp\Secrets\SecretVault;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -18,19 +21,24 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
- * Camada 3 (IA) Fatia 1 — FALLBACK: roda so quando fluxo/regra NAO resolveram (o
- * pipeline so despacha este job nesse caso). Classifica a mensagem contra as regras
- * com "IA casa parecidas" ligada e:
- *   - responde com a RESPOSTA DA REGRA (via SendAutoReply -> Sender: todos os freios +
- *     R2 + idempotencia + {senha} resolvido local), OU
- *   - escala (silencia agora + loga; fila de aprovacao vem na Fatia 3), OU
- *   - silencia (nao classificou / erro / cota / modelo disse nao).
+ * Camada 3 (IA) — FALLBACK: roda so quando fluxo/regra NAO resolveram (o pipeline so
+ * despacha este job nesse caso). Dois degraus, na ordem:
  *
- * Roda FORA do webhook (fila) porque a API tem latencia/429. Pre-checagens baratas
- * ANTES de gastar chamada. NUNCA envia valor de segredo pro modelo. Uma decisao por
- * mensagem (idempotente por incoming_message_id em ai_decisions).
+ *  1. (Fatia 1) casar REGRA por IA: classifica a mensagem contra as regras com "IA
+ *     casa parecidas" ligada e responde com a RESPOSTA DA REGRA, escala ou silencia.
+ *  2. (Fatia 2) so no modo `conhecimento` do contato, quando nenhuma regra casou:
+ *     pede ao modelo resposta FUNDAMENTADA SO nas entradas candidatas da base
+ *     (ativas, permitidas pro contato, APENAS low/medium — `high` NUNCA vai pro
+ *     modelo e NUNCA e respondido direto). Sem grounding = "nao sei" = silencio.
+ *
+ * Toda resposta sai por SendAutoReply -> Sender (todos os freios + R2 + idempotencia
+ * + {senha} resolvido local no POST). Roda FORA do webhook (fila) porque a API tem
+ * latencia/429. Pre-checagens baratas ANTES de gastar chamada. NUNCA envia valor de
+ * segredo pro modelo. Uma decisao por mensagem (idempotente por incoming_message_id
+ * em ai_decisions).
  */
 class ClassifyWithAi implements ShouldQueue
 {
@@ -41,8 +49,13 @@ class ClassifyWithAi implements ShouldQueue
     ) {
     }
 
-    public function handle(AiClassifier $ai, AntiBanGuard $guard, RuleMatcher $matcher, SecretVault $vault): void
-    {
+    public function handle(
+        AiClassifier $ai,
+        AntiBanGuard $guard,
+        RuleMatcher $matcher,
+        SecretVault $vault,
+        RuleResponder $responder,
+    ): void {
         $incoming = IncomingMessage::with('channel')->find($this->incomingMessageId);
         if (! $incoming || ! $incoming->channel) {
             return;
@@ -76,28 +89,56 @@ class ClassifyWithAi implements ShouldQueue
             return;
         }
 
+        $topics = $guard->settingsFor($accountId)->aiApprovalTopics();
+
+        // ---- Degrau 1 (Fatia 1): casar regra por IA -------------------------------
         // Candidatas: regras com "IA casa parecidas" ligada, elegiveis pro contato.
         $candidates = $matcher->aiCandidates($accountId, $incoming->channel_id, $jid);
-        if ($candidates->isEmpty()) {
-            // Sem candidatas -> nada a classificar (silencio estrutural, nao gasta API).
+        $sensitiveFlagged = false;
+
+        if ($candidates->isNotEmpty()) {
+            // MINIMIZACAO: so mensagem + gatilhos/exemplos. Nunca resposta/segredo.
+            $payload = $candidates->map(fn (AutoReplyRule $r) => [
+                'rule_id' => (int) $r->id,
+                'triggers' => $r->triggerList()->pluck('value')->all(),
+                'examples' => $r->aiExampleList(),
+            ])->all();
+
+            $result = $ai->classify(new AiClassificationRequest($text, $payload, $topics));
+
+            if ($this->decideByRule($incoming, $contact, $aiMode, $result, $candidates, $guard, $vault)) {
+                return;
+            }
+
+            // Nenhuma regra casou e o contato esta em modo `conhecimento` -> degrau 2.
+            // Tema sensivel ja sinalizado aqui evita gastar a 2a chamada la embaixo.
+            $sensitiveFlagged = $result->needsApproval;
+        } elseif ($aiMode !== 'conhecimento') {
+            // Sem candidatas e sem base -> nada a classificar (silencio estrutural).
             return;
         }
 
-        // MINIMIZACAO: so mensagem + gatilhos/exemplos. Nunca resposta/segredo.
-        $payload = $candidates->map(fn (AutoReplyRule $r) => [
-            'rule_id' => (int) $r->id,
-            'triggers' => $r->triggerList()->pluck('value')->all(),
-            'examples' => $r->aiExampleList(),
-        ])->all();
-
-        $topics = $guard->settingsFor($accountId)->aiApprovalTopics();
-
-        $result = $ai->classify(new AiClassificationRequest($text, $payload, $topics));
-
-        $this->decide($incoming, $contact, $aiMode, $result, $candidates, $guard, $vault);
+        // ---- Degrau 2 (Fatia 2): base de conhecimento (so modo `conhecimento`) ----
+        $this->answerFromKnowledge(
+            $incoming,
+            $contact,
+            $ai,
+            $guard,
+            $vault,
+            $responder,
+            $topics,
+            apiSpent: $candidates->isNotEmpty(),
+            sensitiveFlagged: $sensitiveFlagged,
+        );
     }
 
-    private function decide(
+    /**
+     * Degrau 1 — decide a partir da classificacao por REGRA (Fatia 1). Retorna true
+     * quando a decisao foi tomada (logada); false SO quando nenhuma regra casou e o
+     * contato esta em modo `conhecimento` (cai pro degrau 2, sem logar aqui — uma
+     * decisao por mensagem).
+     */
+    private function decideByRule(
         IncomingMessage $incoming,
         ?Contact $contact,
         string $aiMode,
@@ -105,7 +146,7 @@ class ClassifyWithAi implements ShouldQueue
         Collection $candidates,
         AntiBanGuard $guard,
         SecretVault $vault,
-    ): void {
+    ): bool {
         $log = function (string $acao, ?string $motivo, ?AutoReplyRule $rule) use ($incoming, $contact, $result) {
             AiDecision::create([
                 'account_id' => $incoming->account_id,
@@ -116,16 +157,18 @@ class ClassifyWithAi implements ShouldQueue
                 'intent' => $result->intent !== '' ? $result->intent : null,
                 'confidence' => $result->confidence,
                 'acao' => $acao,
+                'origem' => 'regra',
                 'motivo' => $motivo,
                 'model' => $result->model,
             ]);
         };
 
-        // Erro/cota/resposta invalida -> silencia.
+        // Erro/cota/resposta invalida -> silencia (a API esta com problema; nao gasta
+        // a 2a chamada na base).
         if ($result->unknown) {
             $log('silenciou', $result->reason ?: 'ia_indisponivel', null);
 
-            return;
+            return true;
         }
 
         // A regra escolhida DEVE estar entre as candidatas (nunca confia em id de fora).
@@ -134,9 +177,12 @@ class ClassifyWithAi implements ShouldQueue
             : null;
 
         if ($rule === null) {
+            if ($aiMode === 'conhecimento') {
+                return false; // 2o fallback: base de conhecimento (quem loga e o degrau 2)
+            }
             $log('silenciou', 'sem_regra', null);
 
-            return;
+            return true;
         }
 
         // Guarda dura LOCAL: a IA NUNCA auto-envia uma resposta que contem segredo
@@ -145,35 +191,35 @@ class ClassifyWithAi implements ShouldQueue
         if ($temSenha) {
             $log('escalou', 'contem_senha', $rule);
 
-            return;
+            return true;
         }
 
         // Modo do contato = aprovacao: nunca responde direto (so sugere -> Fatia 3).
         if ($aiMode === 'aprovacao') {
             $log('escalou', 'modo_aprovacao', $rule);
 
-            return;
+            return true;
         }
 
         // Tema sensivel sinalizado pelo modelo (pagamento, compromissos, ...).
         if ($result->needsApproval) {
             $log('escalou', 'tema_aprovacao', $rule);
 
-            return;
+            return true;
         }
 
         // Abaixo do limiar de confianca -> escala (humano decide).
         if ($result->confidence < $guard->aiConfidenceThreshold($incoming->account_id)) {
             $log('escalou', 'baixa_confianca', $rule);
 
-            return;
+            return true;
         }
 
         // Modelo recomenda nao responder.
         if (! $result->shouldReply) {
             $log('silenciou', 'modelo_nao_responde', $rule);
 
-            return;
+            return true;
         }
 
         // RESPONDE: despacha pela via NORMAL (delay humano). O Sender aplica todos os
@@ -187,5 +233,163 @@ class ClassifyWithAi implements ShouldQueue
             ->delay(now()->addSeconds(random_int($min, $max)));
 
         $log('respondeu', null, $rule);
+
+        return true;
+    }
+
+    /**
+     * Degrau 2 (Fatia 2) — resposta fundamentada na base de conhecimento.
+     *
+     * Regras duras: `high` NUNCA vai pro modelo e NUNCA e respondido direto (escala);
+     * resposta so sai se grounded nas entradas fornecidas (ids validados), acima do
+     * limiar, sem tema de aprovacao e sem segredo ({senha:} nunca auto-enviado pela
+     * IA). Qualquer outro caso silencia/escala e LOGA em ai_decisions (origem base).
+     */
+    private function answerFromKnowledge(
+        IncomingMessage $incoming,
+        ?Contact $contact,
+        AiClassifier $ai,
+        AntiBanGuard $guard,
+        SecretVault $vault,
+        RuleResponder $responder,
+        array $topics,
+        bool $apiSpent,
+        bool $sensitiveFlagged,
+    ): void {
+        if ($contact === null) {
+            return; // modo conhecimento exige contato (aiEligible ja garante; defensivo)
+        }
+
+        $accountId = (int) $incoming->account_id;
+
+        $log = function (
+            string $acao,
+            ?string $motivo,
+            array $knowledgeIds = [],
+            ?string $resumo = null,
+            ?float $confidence = null,
+            ?string $model = null,
+        ) use ($incoming, $contact, $vault) {
+            AiDecision::create([
+                'account_id' => $incoming->account_id,
+                'contact_id' => $contact->id,
+                'incoming_message_id' => $incoming->id,
+                'remote_jid' => $incoming->remote_jid,
+                'confidence' => $confidence,
+                'acao' => $acao,
+                'origem' => 'base',
+                'knowledge_ids' => $knowledgeIds !== [] ? array_values($knowledgeIds) : null,
+                // Resumo sempre REDIGIDO ({senha:nome} -> [senha: nome]); nunca o valor.
+                'resposta_resumo' => $resumo !== null && $resumo !== ''
+                    ? Str::limit($vault->redact($resumo), 180)
+                    : null,
+                'motivo' => $motivo,
+                'model' => $model,
+            ]);
+        };
+
+        // Candidatas: ativas + permitidas pro contato (pivo vazio = qualquer contato
+        // com IA). Separa low/medium (vao ao modelo) de high (NUNCA vai).
+        $todas = Knowledge::query()->candidatesFor($accountId, (int) $contact->id)->get();
+        $entradas = $todas->filter(fn (Knowledge $k) => in_array($k->sensitivity, ['low', 'medium'], true))->values();
+        $temHigh = $todas->contains(fn (Knowledge $k) => $k->sensitivity === 'high');
+
+        if ($entradas->isEmpty()) {
+            if ($temHigh) {
+                // A resposta pode estar no conteudo high (que o modelo nao ve) ->
+                // nunca responde direto; humano revisa (fila visual na Fatia 3).
+                $log('escalou', 'conteudo_high');
+
+                return;
+            }
+            if ($apiSpent) {
+                // Ja gastou a classificacao por regra (sem regra) e a base esta vazia.
+                $log('silenciou', 'sem_conhecimento');
+            }
+
+            // Base vazia sem chamada gasta: silencio estrutural, sem log (como Fatia 1).
+            return;
+        }
+
+        // Tema sensivel ja sinalizado na classificacao por regra -> escala direto
+        // (temas de aprovacao NUNCA sao respondidos; poupa a 2a chamada de API).
+        if ($sensitiveFlagged) {
+            $log('escalou', 'tema_aprovacao');
+
+            return;
+        }
+
+        // MINIMIZACAO: so id/titulo/conteudo das entradas low/medium permitidas.
+        // Placeholders ({senha:nome}, {nome}, ...) vao INTACTOS — nunca expandidos.
+        $payload = $entradas->map(fn (Knowledge $k) => [
+            'id' => (int) $k->id,
+            'title' => (string) $k->title,
+            'content' => (string) $k->content,
+        ])->all();
+
+        $result = $ai->answer(new AiAnswerRequest((string) $incoming->text, $payload, $topics));
+
+        // Erro/cota/JSON invalido -> "nao sei" -> silencia.
+        if ($result->unknown) {
+            $log('silenciou', $result->reason ?: 'ia_indisponivel', model: $result->model);
+
+            return;
+        }
+
+        // Entradas usadas DEVEM estar entre as candidatas (nunca confia em id de fora).
+        $usadas = $entradas->whereIn('id', $result->sourceIds)->values();
+        $usadasIds = $usadas->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // Tema sensivel sinalizado pelo modelo -> nunca responde direto.
+        if ($result->needsApproval) {
+            $log('escalou', 'tema_aprovacao', $usadasIds, $result->answer, $result->confidence, $result->model);
+
+            return;
+        }
+
+        // IA nunca inventa: sem grounding (ou sem entradas validas) nao ha resposta.
+        if (! $result->grounded || $result->answer === '' || $usadas->isEmpty()) {
+            if ($temHigh) {
+                $log('escalou', 'conteudo_high', confidence: $result->confidence, model: $result->model);
+            } else {
+                $log('silenciou', 'sem_grounding', confidence: $result->confidence, model: $result->model);
+            }
+
+            return;
+        }
+
+        // Guarda dura LOCAL (mesma da Fatia 1): a IA NUNCA auto-envia segredo — nem
+        // com {senha:} na resposta, nem fundamentada em entrada que contem {senha:}.
+        $temSenha = $vault->hasRef($result->answer)
+            || $usadas->contains(fn (Knowledge $k) => $vault->hasRef((string) $k->content));
+        if ($temSenha) {
+            $log('escalou', 'contem_senha', $usadasIds, $result->answer, $result->confidence, $result->model);
+
+            return;
+        }
+
+        // Abaixo do limiar de confianca -> escala (humano decide).
+        if ($result->confidence < $guard->aiConfidenceThreshold($accountId)) {
+            $log('escalou', 'baixa_confianca', $usadasIds, $result->answer, $result->confidence, $result->model);
+
+            return;
+        }
+
+        // RESPONDE: placeholders comuns ({nome}/{saudacao}/{data}/{hora}) renderizados
+        // LOCALMENTE agora; {senha:} nunca chega aqui (guarda acima). Envio pela via
+        // NORMAL (delay humano) -> Sender (todos os freios + R2 + idempotencia).
+        $textoFinal = $responder->render($result->answer, [
+            'nome' => $incoming->push_name,
+            'now' => now(),
+        ]);
+
+        $settings = $guard->settingsFor($accountId);
+        $min = (int) $settings->delay_min_seconds;
+        $max = (int) max($min, $settings->delay_max_seconds);
+
+        SendAutoReply::dispatch($incoming->id, null, $textoFinal)
+            ->delay(now()->addSeconds(random_int($min, $max)));
+
+        $log('respondeu', null, $usadasIds, $result->answer, $result->confidence, $result->model);
     }
 }

@@ -1,11 +1,12 @@
 # Camada 3 (IA classificadora) + Camada 5 (aprendizado via UI)
 
-Status: **Fatia 1 ENTREGUE** (driver Gemini + classificador + toggles + escalar). Fatias 2-4
-pendentes (ver fim). A IA e **FALLBACK** que encaixa no pipeline atual — NAO reescreve o que
-funciona. Kill switch do robo (`auto_reply_settings.enabled`) intocado. **Tudo nasce OFF:** com
-a Fatia 1 no ar e nada ligado, o robo se comporta EXATAMENTE como antes.
+Status: **Fatias 1 e 2 ENTREGUES** (driver Gemini + classificador + toggles + escalar; base de
+conhecimento + modo `conhecimento` + valores locais). Fatias 3-4 pendentes (ver fim). A IA e
+**FALLBACK** que encaixa no pipeline atual — NAO reescreve o que funciona. Kill switch do robo
+(`auto_reply_settings.enabled`) intocado. **Tudo nasce OFF:** com as Fatias 1-2 no ar e nada
+ligado, o robo se comporta EXATAMENTE como antes (`ai_mode=conhecimento` e opt-in por contato).
 
-> Detalhe do que foi construido na Fatia 1: ver secao "Fatia 1 — entregue" no fim deste doc.
+> Detalhe do que foi construido: ver secoes "Fatia 1 — entregue" e "Fatia 2 — entregue" no fim.
 
 ## Principio
 A IA entra como **ultimo recurso**: so quando fluxo/regra NAO resolveram. Nao e um
@@ -110,7 +111,7 @@ recebimento — latencia/429 nao seguram o webhook nem a persistencia. Pre-checa
 - **Fatia 1** — driver Gemini + classificador + `ai_enabled` global + `ai_enabled`/`ai_mode` por
   contato + `ai_match_enabled` na regra + escalar + `ai_decisions`. Testada com MOCK (sem enviar),
   respeitando freios. Default `intencao` conservador.
-- **Fatia 2** — base de conhecimento + sensibilidade + resolucao local de valores.
+- **Fatia 2** — base de conhecimento + sensibilidade + resolucao local de valores. **ENTREGUE.**
 - **Fatia 3** — `pending_approvals` + painel `/revisao` (Enviar/Editar/Ignorar).
 - **Fatia 4 (Camada 5)** — "virar regra" + limiar/temas finos na UI + polimento.
 
@@ -190,8 +191,58 @@ API (silencia e loga). Nunca em codigo/commit/log.
 **Testes:** `AiFallbackTest` (19) + `GeminiDriverTest` (9), driver e envio MOCKADOS (nunca API/envio
 real). Suite completa verde e sequencial.
 
-## Pendente (Fatias 2-4)
-- **Fatia 2:** base de conhecimento (`knowledge`) + sensibilidade + valores locais (modo `conhecimento`).
+---
+
+## Fatia 2 — entregue
+
+**O que e:** base de conhecimento (`/conhecimento`) + modo `conhecimento` por contato funcional
+como SEGUNDO fallback: primeiro a IA tenta casar regra (Fatia 1); se nenhuma casou, tenta responder
+FUNDAMENTADA SO no conteudo da base. Sem grounding = "nao sei" = silencio. IA nunca inventa.
+
+**Schema (migrations aditivas `2026_07_02_000021`..`000022`):**
+- `knowledge` (`title`, `content`, `sensitivity` low|medium|high default medium, `active`) +
+  pivo `knowledge_contacts` (vazio = qualquer contato com IA em modo conhecimento; preenchido =
+  so os listados).
+- `ai_decisions` += `origem` (regra|base), `knowledge_ids` (JSON, entradas usadas), `resposta_resumo`
+  (REDIGIDO — nunca valor de segredo).
+
+**Regras duras provadas por teste:**
+- `high` NUNCA vai pro modelo (fica fora do payload) e NUNCA e respondido direto — quando a base
+  low/medium nao resolve e existe `high` candidata, loga `escalou`/`conteudo_high` (fila = Fatia 3).
+- Resposta so sai se `grounded=true` + `source_ids` dentro das candidatas + acima do limiar + sem
+  tema de aprovacao. JSON malformado/erro/cota -> "nao sei" -> silencia e loga.
+- MINIMIZACAO: pro modelo vai so a mensagem + id/titulo/conteudo das entradas low/medium permitidas.
+  Placeholders (`{senha:nome}`, `{nome}`, ...) vao INTACTOS — nunca expandidos antes do modelo.
+- Guarda de segredo (mesma da Fatia 1): a IA nunca auto-envia `{senha:...}` — nem na resposta, nem
+  fundamentada em entrada usada que contem a referencia (`escalou`/`contem_senha`).
+- Valores locais: placeholders comuns renderizados no despacho (RuleResponder::render); `{senha:}`
+  resolvido SO no POST (Sender). Toda resposta sai por `SendAutoReply` -> `Sender` (freios + R2 +
+  idempotencia).
+
+**Codigo:**
+- Contrato `AiClassifier` ganhou `answer(AiAnswerRequest): AiAnswer` (DTOs novos em `App\Ai`).
+  `GeminiDriver::answer` com prompt de sistema TRAVADO proprio ("responde EXCLUSIVAMENTE com as
+  entradas fornecidas"), JSON forcado (`answer/grounded/confidence/needs_approval/source_ids`),
+  mesma infra de retry/backoff/cota (cota diaria COMPARTILHADA entre classify e answer).
+- `ClassifyWithAi` reorganizado em 2 degraus: `decideByRule()` (Fatia 1, intacto) e
+  `answerFromKnowledge()` (Fatia 2). No modo `conhecimento`, "sem regra" nao loga `sem_regra` —
+  cai pro degrau 2 (UMA decisao por mensagem). Tema sensivel sinalizado na classificacao escala
+  direto sem gastar a 2a chamada. Erro/cota na classificacao NAO tenta a base.
+- `Knowledge::candidatesFor` (scope): ativas + permitidas pro contato.
+
+**UI (Camada 4):**
+- `/conhecimento` — CRUD no padrao das outras paginas (busca, badges de sensibilidade, modais,
+  tooltips "i", seletor buscavel de contatos permitidos igual ao das regras). Aviso explicito do
+  comportamento de `high` no select e na lista.
+- `/contatos` — modo `conhecimento` ativo no select, com tooltip explicando o que libera.
+- Testador (`/regras`) — dry-run informa "elegivel pra base de conhecimento (N entrada(s)
+  candidata(s))" quando o contato esta em modo conhecimento (sem chamar a API).
+
+**Testes:** `KnowledgeModeTest` (28) + `ConhecimentoUiTest` (8) + `GeminiDriverTest` (+6 do answer),
+driver e envio MOCKADOS (nunca API/envio real). Suite completa: 279 verdes, sequencial.
+
+## Pendente (Fatias 3-4)
 - **Fatia 3:** fila de aprovacao (`pending_approvals`) + painel `/revisao` (Enviar/Editar/Ignorar) —
-  hoje o `escalou` so fica logado em `ai_decisions`.
-- **Fatia 4 (Camada 5):** "virar regra" + limiar/temas editaveis na UI + polimento.
+  hoje o `escalou` (incl. `conteudo_high` e `contem_senha` da base) so fica logado em `ai_decisions`.
+- **Fatia 4 (Camada 5):** "virar regra" (e "virar entrada da base") + limiar/temas editaveis na UI +
+  polimento.

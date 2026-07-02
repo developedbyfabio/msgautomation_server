@@ -6,6 +6,7 @@
         ['senhas', 'Senhas', 'key'],
         ['regras', 'Regras', 'bolt'],
         ['fluxos', 'Fluxos', 'rectangle-stack'],
+        ['conhecimento', 'Conhecimento', 'book-open'],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth'],
     ];
 @endphp

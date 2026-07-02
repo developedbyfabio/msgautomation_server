@@ -362,15 +362,25 @@
                             @php $ai = $testResult['ai'] ?? null; @endphp
                             @if ($ai)
                                 <div class="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-2 text-xs dark:border-indigo-900 dark:bg-indigo-950/30">
-                                    @if ($ai['contato_ligada'] && $ai['global_ligada'] && $ai['candidatas'] > 0)
-                                        <p class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
-                                            <flux:icon icon="sparkles" variant="micro" /> A IA classificaria esta mensagem ({{ $ai['candidatas'] }} regra(s) candidata(s), modo {{ $ai['modo'] }}).
-                                        </p>
-                                        <p class="mt-0.5 text-[11px] text-zinc-500">Se reconhecer a intencao com confianca suficiente, responde com a resposta da regra; senao, escala. (Este teste nao chama a IA.)</p>
+                                    @if ($ai['contato_ligada'] && $ai['global_ligada'] && ($ai['candidatas'] > 0 || ($ai['base_candidatas'] ?? 0) > 0))
+                                        @if ($ai['candidatas'] > 0)
+                                            <p class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
+                                                <flux:icon icon="sparkles" variant="micro" /> A IA classificaria esta mensagem ({{ $ai['candidatas'] }} regra(s) candidata(s), modo {{ $ai['modo'] }}).
+                                            </p>
+                                            <p class="mt-0.5 text-[11px] text-zinc-500">Se reconhecer a intencao com confianca suficiente, responde com a resposta da regra; senao, escala. (Este teste nao chama a IA.)</p>
+                                        @endif
+                                        @if ($ai['modo'] === 'conhecimento' && ($ai['base_candidatas'] ?? 0) > 0)
+                                            <p class="flex items-center gap-1.5 {{ $ai['candidatas'] > 0 ? 'mt-1.5' : '' }} text-indigo-700 dark:text-indigo-300">
+                                                <flux:icon icon="book-open" variant="micro" /> Elegivel pra base de conhecimento ({{ $ai['base_candidatas'] }} entrada(s) candidata(s)).
+                                            </p>
+                                            <p class="mt-0.5 text-[11px] text-zinc-500">Quando nenhuma regra casar (nem por IA), a IA tenta responder fundamentada SO nessas entradas (low/medium permitidas). Sem fundamento, silencia. (Este teste nao chama a IA.)</p>
+                                        @elseif ($ai['modo'] === 'conhecimento')
+                                            <p class="flex items-center gap-1.5 mt-1.5 text-zinc-500"><flux:icon icon="book-open" variant="micro" /> Modo conhecimento, mas nenhuma entrada da base e candidata pra este contato (ativa, permitida, low/medium).</p>
+                                        @endif
                                     @elseif ($ai['contato_ligada'] && ! $ai['global_ligada'])
                                         <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada no contato, mas o kill switch da IA esta OFF (Configuracoes). Nao atuaria.</p>
                                     @elseif ($ai['contato_ligada'] && $ai['candidatas'] === 0)
-                                        <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada, mas nenhuma regra tem "IA casa parecidas" habilitada. Nao ha o que casar.</p>
+                                        <p class="flex items-center gap-1.5 text-zinc-500"><flux:icon icon="sparkles" variant="micro" /> IA ligada, mas nenhuma regra tem "IA casa parecidas" habilitada{{ $ai['modo'] === 'conhecimento' ? ' e nao ha entrada candidata na base' : '' }}. Nao ha o que casar.</p>
                                     @else
                                         <p class="flex items-center gap-1.5 text-zinc-400"><flux:icon icon="sparkles" variant="micro" /> IA desligada para este contato.</p>
                                     @endif

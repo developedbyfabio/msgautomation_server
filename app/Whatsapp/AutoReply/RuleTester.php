@@ -129,10 +129,11 @@ class RuleTester
 
     /**
      * Camada 3 — quadro da IA no dry-run (NAO chama a API). Diz se a IA esta ligada
-     * (global + contato) e quantas regras candidatas existem pro contato. Serve pra
-     * mostrar "a IA classificaria esta mensagem" quando nada casa determinístico.
+     * (global + contato) e quantas regras candidatas existem pro contato. No modo
+     * `conhecimento` (Fatia 2), informa tambem quantas entradas da base sao
+     * candidatas (ativas, permitidas, so low/medium — as que iriam ao modelo).
      *
-     * @return array{global_ligada:bool,contato_ligada:bool,modo:string,candidatas:int}|null
+     * @return array{global_ligada:bool,contato_ligada:bool,modo:string,candidatas:int,base_candidatas:int}|null
      */
     private function aiInfo(int $accountId, ?int $channelId, ?\App\Models\Contact $contact, ?string $jid): ?array
     {
@@ -147,6 +148,10 @@ class RuleTester
             'contato_ligada' => (bool) $contact->ai_enabled && $modo !== 'rules_only',
             'modo' => $modo,
             'candidatas' => $this->matcher->aiCandidates($accountId, $channelId, $jid)->count(),
+            'base_candidatas' => $modo === 'conhecimento'
+                ? \App\Models\Knowledge::query()->candidatesFor($accountId, (int) $contact->id)
+                    ->whereIn('sensitivity', ['low', 'medium'])->count()
+                : 0,
         ];
     }
 

@@ -103,6 +103,7 @@ class AiFallbackTest extends TestCase
             app(\App\Whatsapp\AutoReply\AntiBanGuard::class),
             app(\App\Whatsapp\AutoReply\RuleMatcher::class),
             app(SecretVault::class),
+            app(\App\Whatsapp\AutoReply\RuleResponder::class),
         );
 
         return $fake;
@@ -376,15 +377,20 @@ class AiFallbackTest extends TestCase
 
 /**
  * Classificador FALSO pros testes — nunca toca na API. Guarda o request pra validar
- * a minimizacao (nada de segredo saindo).
+ * a minimizacao (nada de segredo saindo). answer() (Fatia 2) devolve "nao sei" por
+ * padrao — os cenarios do modo conhecimento vivem no KnowledgeModeTest.
  */
 class FakeAiClassifier implements AiClassifier
 {
     public int $calls = 0;
+    public int $answerCalls = 0;
     public ?AiClassificationRequest $lastRequest = null;
+    public ?\App\Ai\AiAnswerRequest $lastAnswerRequest = null;
 
-    public function __construct(private AiClassification $result)
-    {
+    public function __construct(
+        private AiClassification $result,
+        private ?\App\Ai\AiAnswer $answerResult = null,
+    ) {
     }
 
     public function classify(AiClassificationRequest $request): AiClassification
@@ -393,5 +399,13 @@ class FakeAiClassifier implements AiClassifier
         $this->lastRequest = $request;
 
         return $this->result;
+    }
+
+    public function answer(\App\Ai\AiAnswerRequest $request): \App\Ai\AiAnswer
+    {
+        $this->answerCalls++;
+        $this->lastAnswerRequest = $request;
+
+        return $this->answerResult ?? \App\Ai\AiAnswer::unknown('sem_resposta_fake');
     }
 }

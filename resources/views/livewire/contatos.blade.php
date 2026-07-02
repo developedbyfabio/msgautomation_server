@@ -93,14 +93,17 @@
                     </p>
                     @if ($editAiEnabled)
                         <div class="mt-2">
-                            <label class="mb-1 block text-xs font-medium">Modo</label>
+                            <label class="mb-1 flex items-center gap-1 text-xs font-medium">
+                                Modo
+                                <x-info-tip text="Conhecimento libera a IA a responder este contato com a base de conhecimento (pagina Conhecimento): primeiro tenta casar suas regras; se nenhuma casar, responde SO com o conteudo da base (low/medium) fundamentado — high nunca vai a IA nem e respondido direto. Sem fundamento, silencia." />
+                            </label>
                             <select wire:model="editAiMode" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                                 <option value="intencao">Intencao — casa suas regras e usa a resposta da regra</option>
                                 <option value="aprovacao">Aprovacao — so sugere, nunca envia sozinho</option>
-                                <option value="conhecimento">Conhecimento — base de conhecimento (em breve)</option>
+                                <option value="conhecimento">Conhecimento — regras por IA + base de conhecimento</option>
                                 <option value="rules_only">Rules only — IA nao age</option>
                             </select>
-                            <p class="mt-1 text-[11px] text-zinc-400">Recomendado: Intencao (conservador). "Conhecimento" ainda nao esta ativo (Fatia 2).</p>
+                            <p class="mt-1 text-[11px] text-zinc-400">Recomendado: Intencao (conservador). "Conhecimento" tambem responde pela base (so entradas low/medium permitidas; nunca inventa).</p>
                         </div>
                     @endif
                 </div>

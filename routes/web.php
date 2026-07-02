@@ -3,6 +3,7 @@
 use App\Http\Controllers\EvolutionWebhookController;
 use App\Livewire\Conexao;
 use App\Livewire\Configuracoes;
+use App\Livewire\Conhecimento;
 use App\Livewire\Contatos;
 use App\Livewire\Conversas;
 use App\Livewire\Fluxos;
@@ -34,6 +35,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/senhas', Senhas::class)->name('senhas');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
+    // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.
+    Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
 
     Route::middleware('whatsapp.connected')->group(function () {
         Route::get('/conversas', Conversas::class)->name('conversas');

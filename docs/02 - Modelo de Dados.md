@@ -186,6 +186,25 @@ Engine: `ClassifyWithAi` (job) usa `RuleMatcher::aiCandidates` + `AntiBanGuard::
 `AiClassifier` (Gemini) e, se responder, despacha `SendAutoReply` com a resposta DA REGRA (Sender
 aplica todos os freios + R2 + `{senha}` local). Guarda dura: a IA nunca auto-envia `{senha:...}`.
 
+## Camada 3 (IA) — Fatia 2 (`2026_07_02_000021`.. `..._000022`, aditivo)
+Base de conhecimento + modo `conhecimento` funcional. Tudo segue opt-in/OFF por padrao.
+- `knowledge` — entradas da base: `account_id`, `title`, `content` (texto; pode conter
+  placeholders `{senha:nome}`/`{nome}`/... — resolvidos SO no envio, nunca expandidos antes do
+  modelo), `sensitivity` (`low|medium|high`, default `medium`), `active` (default true).
+  REGRA DURA: `high` NUNCA vai pro modelo e NUNCA e respondido direto (escala).
+- `knowledge_contacts` — pivo de permissao (`knowledge_id`, `contact_id`, unique). SEM linhas =
+  entrada disponivel pra QUALQUER contato com IA em modo conhecimento; COM linhas = so os listados.
+- `ai_decisions` += `origem` (`regra|base`, default `regra`), `knowledge_ids` (JSON, ids das
+  entradas usadas, sem FK dura), `resposta_resumo` (resumo REDIGIDO — `[senha: nome]`, nunca o valor).
+
+Engine (degrau 2 do `ClassifyWithAi`, so `ai_mode=conhecimento`): quando nenhuma regra casou (nem
+por IA), monta candidatas via `Knowledge::candidatesFor` (ativas + permitidas, SO low/medium vao ao
+modelo) e chama `AiClassifier::answer` (resposta fundamentada; JSON `answer/grounded/confidence/
+needs_approval/source_ids`). So envia se grounded em ids candidatos + acima do limiar + sem tema de
+aprovacao + sem `{senha:}` (na resposta OU nas entradas usadas); qualquer outro caso silencia/escala
+e loga. Envio via `SendAutoReply` com texto (placeholders comuns renderizados local; `{senha}` no
+Sender).
+
 ## Notas
 - `raw_payload` guarda o payload **completo** — fonte de verdade pra evoluir o parsing depois sem perder dados.
-- Migrations: `database/migrations/2026_06_29_*` (ate `..._000020`).
+- Migrations: `database/migrations/2026_06_29_*` (ate `..._000020`) e `2026_07_02_*` (ate `..._000022`).
