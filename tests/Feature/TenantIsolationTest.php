@@ -597,6 +597,44 @@ class TenantIsolationTest extends TestCase
         Http::assertSent(fn ($r) => $r['text'] === "oi\n\nResponda SAIR-B pra sair.");
     }
 
+    // ---- CH-2: canal cloud e janelas de 24h por conta -------------------------------------
+
+    public function test_canal_cloud_roteia_pra_conta_certa_e_janela_nao_cruza(): void
+    {
+        // Canal cloud NA CONTA B (a A so tem Evolution).
+        $cloudB = Channel::create([
+            'account_id' => $this->b->id, 'instance' => '555666777888999', 'provider' => 'cloud_api',
+            'webhook_token' => 'tok-cloud-iso', 'status' => 'connected',
+            'credentials' => ['access_token' => 'tk-b', 'phone_number_id' => '555666777888999', 'waba_id' => 'w', 'verify_token' => 'v', 'app_secret' => 'sec-b'],
+        ]);
+        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::fake(['*' => Http::response(['messages' => [['id' => 'wamid.OUT']]], 200)]);
+
+        // POST ASSINADO pro canal da B (mesmo wa_id espelhado das duas contas).
+        $payload = ['entry' => [['changes' => [['value' => [
+            'metadata' => ['phone_number_id' => '555666777888999'],
+            'contacts' => [['profile' => ['name' => 'Cliente'], 'wa_id' => '5541999990000']],
+            'messages' => [['from' => '5541999990000', 'id' => 'wamid.ISO1', 'timestamp' => (string) now()->timestamp, 'type' => 'text', 'text' => ['body' => 'qual o horario?']]],
+        ]]]]]];
+        $raw = json_encode($payload);
+        $this->call('POST', '/webhook/cloud/tok-cloud-iso', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $raw, 'sec-b'),
+        ], $raw)->assertOk();
+
+        // Persistiu NA B, respondeu com a REGRA DA B (mesmo gatilho espelhado da A).
+        $this->assertDatabaseHas('incoming_messages', ['evolution_message_id' => 'wamid.ISO1', 'account_id' => $this->b->id, 'channel_id' => $cloudB->id]);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'graph.facebook.com')
+            && data_get($r->data(), 'text.body') === 'RESPOSTA-DA-CONTA-B');
+
+        // Janela: gravada pro CONTATO DA B no canal cloud da B — a A (mesmo jid
+        // espelhado) nao ganha janela nenhuma.
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+        $contatoA = Contact::withoutAccountScope()->where('account_id', $this->a->id)->where('remote_jid', self::JID)->first();
+        $this->assertDatabaseHas('contact_channel_windows', ['contact_id' => $contatoB->id, 'channel_id' => $cloudB->id, 'account_id' => $this->b->id]);
+        $this->assertSame(0, \App\Models\ContactChannelWindow::withoutAccountScope()->where('contact_id', $contatoA->id)->count());
+    }
+
     // ---- MATCH-1: sem-match isolado por conta --------------------------------------------
 
     public function test_sem_match_registra_na_conta_certa_e_nao_vaza_no_painel(): void

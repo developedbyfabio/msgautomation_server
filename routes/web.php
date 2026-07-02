@@ -76,3 +76,7 @@ Route::post('/webhook/evolution', EvolutionWebhookController::class)
 Route::post('/webhook/evolution/{token}', EvolutionWebhookController::class)
     ->middleware('webhook.secret')
     ->name('webhook.evolution.token');
+// CH-2 — canal oficial (Meta): GET = challenge, POST = mensagens (HMAC no middleware).
+Route::match(['get', 'post'], '/webhook/cloud/{token}', \App\Http\Controllers\ChannelWebhookController::class)
+    ->middleware('webhook.secret')
+    ->name('webhook.cloud');

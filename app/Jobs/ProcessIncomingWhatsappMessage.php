@@ -38,12 +38,23 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
 
     public function __construct(
         public readonly array $payload,
+        public readonly ?int $channelId = null, // CH-2: hint da rota (provider do canal normaliza)
     ) {
     }
 
     public function handle(WhatsappGateway $gateway, RuleMatcher $matcher, AntiBanGuard $guard): void
     {
-        $data = $gateway->normalizeIncoming($this->payload);
+        // CH-2: com hint da rota, quem normaliza e o provider DO CANAL (Cloud API
+        // adapta o payload da Meta). Sem hint (rota Evolution/legado/testes), o
+        // alias WhatsappGateway segue identico — o canal vivo nao muda.
+        $normalizador = $gateway;
+        if ($this->channelId !== null) {
+            $canalHint = Channel::withoutAccountScope()->find($this->channelId);
+            if ($canalHint !== null) {
+                $normalizador = app(\App\Channels\ProviderRegistry::class)->for($canalHint);
+            }
+        }
+        $data = $normalizador->normalizeIncoming($this->payload);
 
         // Evento que nao e mensagem (ou sem id) — nada a registrar.
         if ($data === null) {
@@ -81,6 +92,12 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         // Kanban K-1 — evento de dominio (listener em fila; observador puro).
         // So mensagens INDIVIDUAIS recebidas (popularContato ja exclui fromMe/grupo).
         if ($contato !== null) {
+            // CH-2 — janela de 24h POR CONTATO+CANAL: todo inbound re-abre a
+            // janela DESTE canal (a Evolution nem consulta; o cloud_api sim).
+            \App\Models\ContactChannelWindow::touchWindow(
+                (int) $account->id, (int) $contato->id, (int) $channel->id,
+            );
+
             event(new \App\Events\IncomingMessageStored(
                 (int) $account->id, (int) $message->id, (int) $contato->id, (string) $data->remoteJid,
             ));

@@ -495,7 +495,7 @@ class Revisao extends Component
     {
         $base = PendingApproval::query()
             ->where('account_id', $this->accountId())
-            ->with(['contact:id,push_name,remote_jid', 'incomingMessage:id,text,push_name,received_at'])
+            ->with(['contact:id,push_name,remote_jid', 'incomingMessage:id,text,push_name,received_at,channel_id'])
             ->latest('id');
 
         $itens = match ($this->filter) {
@@ -519,9 +519,30 @@ class Revisao extends Component
         $editing = $this->editingId ? $this->find($this->editingId) : null;
         $sending = $this->confirmingSendId ? $this->find($this->confirmingSendId) : null;
 
+        // CH-2 — countdown da janela de 24h POR PENDENCIA, so quando o canal de
+        // ENTRADA nao permite mensagem livre fora da janela (cloud_api). null =
+        // canal livre (Evolution) — nada e mostrado.
+        $janelas = [];
+        if ($this->filter === 'pendentes') {
+            $registry = app(\App\Channels\ProviderRegistry::class);
+            foreach ($itens as $p) {
+                $canal = $p->incomingMessage?->channel_id
+                    ? \App\Models\Channel::query()->find($p->incomingMessage->channel_id)
+                    : null;
+                if ($canal === null || $registry->for($canal)->capabilities()->mensagemLivreForaDaJanela) {
+                    continue;
+                }
+                $resta = \App\Models\ContactChannelWindow::restante((int) $p->account_id, (string) $p->remote_jid, (int) $canal->id);
+                $janelas[$p->id] = $resta !== null
+                    ? sprintf('%dh %02dmin', $resta->h + $resta->days * 24, $resta->i)
+                    : 'FECHADA';
+            }
+        }
+
         return view('livewire.revisao', [
             'itens' => $itens,
             'decisoes' => $decisoes,
+            'janelas' => $janelas,
             'editing' => $editing,
             'sending' => $sending,
             'vault' => app(SecretVault::class),

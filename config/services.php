@@ -42,6 +42,14 @@ return [
     ],
 
     // 2a Evolution (instancia isolada do msgautomation).
+    // CH-2 — WhatsApp Cloud API oficial (Meta). Credenciais SEMPRE por canal
+    // (cifradas); aqui so a base/versao do Graph (versao CONFIGURAVEL — a doc
+    // da Meta nao era alcancavel do ambiente; validacao real na Parte B).
+    'cloud_api' => [
+        'graph_base' => env('CLOUD_API_GRAPH_BASE', 'https://graph.facebook.com'),
+        'graph_version' => env('CLOUD_API_GRAPH_VERSION', 'v21.0'),
+    ],
+
     'evolution' => [
         'base_url' => env('EVOLUTION_BASE_URL', 'http://127.0.0.1:8090'),
         'api_key' => env('EVOLUTION_API_KEY'),

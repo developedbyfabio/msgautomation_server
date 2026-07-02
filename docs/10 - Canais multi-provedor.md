@@ -338,3 +338,42 @@ dominio muda por provedor.
 **Proximo da ordem CH-D1:** MT-1/MT-2 pelo prompt estagiado
 `msgautomation-mt123-futuro.md` — **COM o Fabio presente (tem gates)**; CH-2
 (Cloud API reativo-only, com o Cloudflare Tunnel do CH-D2) depois.
+
+
+---
+
+## CH-2 PARTE A — ENTREGUE (2026-07-02) — CloudApiProvider mockado completo
+
+**Verificacao da doc da Meta (passo obrigatorio): NAO FOI POSSIVEL deste
+ambiente.** WebFetch (harness) e o proprio servidor nao alcancam dominios Meta
+— a rede corporativa BLOQUEIA developers/graph.facebook.com (DNS resolve, TCP
+nao completa; Google/Cloudflare normais). Mitigacao: implementado pelo desenho
+CH-0 + contrato publico consolidado da Cloud API, com a VERSAO do Graph
+CONFIGURAVEL (`services.cloud_api.graph_version`, default v21.0) e os 5 pontos
+marcados pra VALIDACAO REAL na Parte B. **Pre-passo NOVO da Parte B: liberar
+os dominios da Meta no firewall da rede** (sem isso o servidor nem envia).
+
+O que entrou (tudo mockado, 518 -> 530 verdes, anteriores intactos):
+- `CloudApiProvider` (segunda implementacao do contrato CH-1): challenge GET
+  (hub.verify_token do canal), HMAC X-Hub-Signature-256 sobre o CORPO CRU com
+  app secret do canal (tempo constante; invalida = 401 + log, nunca processa);
+  adaptador Meta -> MESMO DTO (wa_id -> JID canonico NA BORDA; wamid na chave
+  de idempotencia legada; statuses ignorados com log leve — D5; nao-texto no
+  catch-all); sendText no Graph API com erros mapeados sem vazar token;
+  connectionState leve sob demanda. Capacidades: TUDO false (grupos, mensagem
+  livre, proativa, qr, template).
+- `channels.instance` = phone_number_id no canal cloud (mesma chave de
+  roteamento da instancia Evolution — provider_ref do desenho dispensado).
+- Rota `GET|POST /webhook/cloud/{token}` + `ChannelWebhookController`
+  (provider-agnostico; enfileira com HINT do canal — o provider certo
+  normaliza). A rota da Evolution segue no controller antigo, INTOCADA.
+- Janela de 24h POR CONTATO+CANAL: `contact_channel_windows` (touch em todo
+  inbound); Sender consulta a janela REAL quando o provider nega mensagem
+  livre (manual/aprovacao bloqueados com `janela_24h` SO no cloud); countdown
+  na pendencia do /revisao (aberta = resta Xh; fechada = aviso de bloqueio).
+- `msg:channel:create-cloud` (segredos por prompt oculto, cifrados);
+  /configuracoes lista TODOS os canais com "verificar conexao" no cloud.
+- Gate de isolamento estendido: canal cloud da B roteia/responde/grava janela
+  SO na B (mesmo wa_id espelhado nas duas contas).
+
+**Parte B (setup vivo, INTERATIVA) — aguardando o Fabio.**

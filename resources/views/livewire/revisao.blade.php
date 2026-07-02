@@ -86,6 +86,7 @@
                 @forelse ($itens as $p)
                     @php
                         $nome = $p->contact?->push_name ?: \Illuminate\Support\Str::before($p->remote_jid, '@');
+                        $janela = $janelas[$p->id] ?? null; // CH-2: so canal oficial
                         $sugestaoMask = $p->suggested_response ? $vault->mask($p->suggested_response) : null;
                     @endphp
                     <div class="p-3 space-y-2" wire:key="p-{{ $p->id }}">
@@ -135,6 +136,16 @@
                             @endif
                         </div>
 
+                        @if ($janela !== null)
+                            <p @class([
+                                'mt-1 flex items-center gap-1 text-[11px]',
+                                'text-zinc-400' => $janela !== 'FECHADA',
+                                'text-red-500' => $janela === 'FECHADA',
+                            ])>
+                                <flux:icon icon="clock" variant="micro" class="size-3" />
+                                Canal oficial (Meta): janela de 24h {{ $janela === 'FECHADA' ? 'FECHADA — aprovar agora sera bloqueado (janela_24h); este canal exige template pra iniciar (CH-3)' : 'aberta — resta ' . $janela }}
+                            </p>
+                        @endif
                         {{-- Acoes de envio (so pendente e dentro da validade) + promocao (Fatia 4) --}}
                         <div class="flex flex-wrap items-center gap-2 pt-1">
                             @if ($p->isActionable())

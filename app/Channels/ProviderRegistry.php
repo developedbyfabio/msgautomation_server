@@ -15,6 +15,7 @@ class ProviderRegistry
     /** @var array<string, class-string<ChannelProvider>|ChannelProvider> */
     private array $providers = [
         'evolution' => EvolutionProvider::class,
+        'cloud_api' => \App\Channels\CloudApi\CloudApiProvider::class, // CH-2
     ];
 
     /** Registra/substitui um provider (CH-2 e dublês de teste). */

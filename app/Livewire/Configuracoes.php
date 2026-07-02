@@ -280,6 +280,22 @@ class Configuracoes extends Component
         $this->proactive_optout_footer = (string) $s->proactive_optout_footer;
     }
 
+    /** CH-2 — sanidade LEVE sob demanda (nunca em loop): atualiza channels.status. */
+    public function verificarCanal(int $id): void
+    {
+        $canal = \App\Models\Channel::query()->find($id);
+        if (! $canal) {
+            return;
+        }
+
+        $estado = app(\App\Channels\ProviderRegistry::class)->for($canal)->connectionState($canal);
+        $mapa = ['connected' => 'connected', 'disconnected' => 'disconnected'];
+        if (isset($mapa[$estado])) {
+            $canal->update(['status' => $mapa[$estado]]);
+        }
+        $this->dispatch('toast', message: "Canal {$canal->instance}: {$estado}.", type: $estado === 'connected' ? 'success' : 'error');
+    }
+
     private function persistProactive(): void
     {
         $this->settings()->update([
@@ -412,18 +428,23 @@ class Configuracoes extends Component
     {
         // P-4: preview HONESTO do rodape — o MESMO renderizador do envio, com a
         // palavra que esta SALVA (o form pode ter valor ainda nao persistido).
-        $canal = \App\Models\Channel::query()->oldest('id')->first();
-        // MT-2: URL do webhook por token MASCARADA (token nunca inteiro na tela).
-        $webhookMascarado = '(sem token)';
-        if ($canal?->webhook_token) {
-            $t = (string) $canal->webhook_token;
-            $webhookMascarado = '/webhook/evolution/' . substr($t, 0, 4) . '...' . substr($t, -4);
-        }
+        // CH-2: a conta lista TODOS os canais (Evolution + Cloud API), cada um
+        // com URL de webhook mascarada (token nunca inteiro na tela).
+        $canais = \App\Models\Channel::query()->orderBy('id')->get()->map(function ($c) {
+            $mask = '(sem token)';
+            if ($c->webhook_token) {
+                $t = (string) $c->webhook_token;
+                $rota = $c->provider === 'cloud_api' ? 'cloud' : 'evolution';
+                $mask = "/webhook/{$rota}/" . substr($t, 0, 4) . '...' . substr($t, -4);
+            }
+            $c->setAttribute('webhook_mascarado', $mask);
+
+            return $c;
+        });
 
         return view('livewire.configuracoes', [
             'footerPreview' => $responder->render($this->proactive_optout_footer),
-            'canal' => $canal,
-            'canalWebhookMascarado' => $webhookMascarado,
+            'canais' => $canais,
         ]);
     }
 }

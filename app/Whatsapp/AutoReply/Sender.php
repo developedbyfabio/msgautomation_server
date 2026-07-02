@@ -98,14 +98,14 @@ class Sender
             }
         }
 
-        // 3d. CH-1 — capacidade do canal (consultada, nunca assumida): provedor sem
-        //     mensagem livre fora da janela de 24h (Cloud API, CH-2) BLOQUEIA os
-        //     modos que podem cair fora dela (manual/aprovacao tardios). Reativo
-        //     (auto/flow) responde segundos apos o inbound — janela aberta por
-        //     construcao. CH-2 troca o "assume fechada" pelo last_inbound_at real.
-        //     Evolution declara TRUE — este freio NUNCA dispara hoje (no-op).
+        // 3d. CH-2 — janela de 24h REAL por contato+CANAL: provedor sem mensagem
+        //     livre fora da janela (cloud_api) BLOQUEIA manual/aprovacao quando o
+        //     ultimo inbound NESTE canal passou de 24h. Reativo (auto/flow)
+        //     responde segundos apos o inbound — janela aberta por construcao.
+        //     Evolution declara TRUE — nem consulta (comportamento de sempre).
         if (in_array($mode, ['manual', 'aprovacao'], true)
-            && ! $this->providers->for($channel)->capabilities()->mensagemLivreForaDaJanela) {
+            && ! $this->providers->for($channel)->capabilities()->mensagemLivreForaDaJanela
+            && ! \App\Models\ContactChannelWindow::isOpen($accountId, $jid, (int) $channel->id)) {
             $log->update(['status' => 'blocked', 'motivo' => 'janela_24h']);
 
             return $log;
