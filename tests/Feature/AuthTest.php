@@ -19,6 +19,10 @@ class AuthTest extends TestCase
 
     private function user(string $password = 'segredo-forte-123'): User
     {
+        // MT-0: as telas operam na conta do CONTEXTO — como em producao, a conta
+        // existe antes da UI (seeder). O teste de auth reflete esse estado.
+        \App\Models\Account::firstOrCreate(['name' => 'T']);
+
         return User::create([
             'name' => 'Operador',
             'email' => 'op@exemplo.local',

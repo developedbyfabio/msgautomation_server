@@ -18,7 +18,10 @@ class EnsureWhatsappConnected
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $status = Channel::query()
+        // MT-0: lookup por INSTANCIA (config, fase 1) — bypass nomeado do escopo por
+        // conta, como o webhook (instance e globalmente unica). Na MT-2 este gate
+        // passa a olhar o canal DA CONTA do contexto.
+        $status = Channel::withoutAccountScope()
             ->where('instance', config('services.evolution.instance'))
             ->value('status');
 

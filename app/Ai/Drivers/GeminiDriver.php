@@ -163,7 +163,7 @@ TXT;
         usleep($base * (2 ** ($attempt - 1)) * 1000);
     }
 
-    /** Conta 1 chamada/dia (Sao Paulo). true = dentro da cota. */
+    /** Conta 1 chamada/dia (Sao Paulo) POR CONTA (MT-0). true = dentro da cota. */
     private function withinDailyCap(): bool
     {
         $cap = (int) config('services.gemini.daily_cap', 1000);
@@ -171,8 +171,11 @@ TXT;
             return true; // 0/negativo = sem cota local
         }
 
+        // MT-0: cota POR CONTA — uma conta esgotando a franquia nao silencia a IA
+        // das outras. O contexto vem do job (ClassifyWithAi seta antes de chamar).
+        $accountId = app(\App\Tenancy\AccountContext::class)->id();
         $dia = Carbon::now((string) config('app.display_timezone'))->format('Y-m-d');
-        $chave = "gemini:calls:{$dia}";
+        $chave = "ai:{$accountId}:gemini:calls:{$dia}";
         $usados = (int) Cache::get($chave, 0);
         if ($usados >= $cap) {
             return false;

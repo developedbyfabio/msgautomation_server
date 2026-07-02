@@ -50,6 +50,12 @@ Route::middleware('auth')->group(function () {
 });
 
 // Webhook da Evolution (Camada 1): valida origem -> enfileira -> 200.
+// Rota SEM token = secret global no header (retrocompat, DEPRECADO — e a URL que a
+// Evolution usa hoje; nao muda nesta fatia). Rota COM token = token por canal (MT-0;
+// a URL por instancia migra na MT-2).
 Route::post('/webhook/evolution', EvolutionWebhookController::class)
     ->middleware('webhook.secret')
     ->name('webhook.evolution');
+Route::post('/webhook/evolution/{token}', EvolutionWebhookController::class)
+    ->middleware('webhook.secret')
+    ->name('webhook.evolution.token');

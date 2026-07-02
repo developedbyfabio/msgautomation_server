@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class PendingApproval extends Model
 {
+    use BelongsToAccount;
+
     public const STATUSES = ['pending', 'approved', 'edited', 'rejected', 'expired'];
 
     protected $fillable = [

@@ -12,6 +12,7 @@ use App\Models\Contact;
 use App\Models\IncomingMessage;
 use App\Models\Knowledge;
 use App\Models\PendingApproval;
+use App\Tenancy\AccountContext;
 use App\Whatsapp\AutoReply\AntiBanGuard;
 use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\AutoReply\RuleResponder;
@@ -46,8 +47,10 @@ class ClassifyWithAi implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** $accountId (MT-0): contexto serializado; null (job antigo) -> resolve do incoming. */
     public function __construct(
         public readonly int $incomingMessageId,
+        public readonly ?int $accountId = null,
     ) {
     }
 
@@ -58,12 +61,19 @@ class ClassifyWithAi implements ShouldQueue
         SecretVault $vault,
         RuleResponder $responder,
     ): void {
-        $incoming = IncomingMessage::with('channel')->find($this->incomingMessageId);
-        if (! $incoming || ! $incoming->channel) {
+        // MT-0: acha a mensagem SEM escopo (unico bypass do job) e restaura o
+        // contexto ANTES de qualquer outra query (channel lazy ja escopado certo).
+        $incoming = IncomingMessage::withoutAccountScope()->find($this->incomingMessageId);
+        if (! $incoming) {
             return;
         }
 
-        $accountId = (int) $incoming->account_id;
+        $accountId = (isset($this->accountId) ? $this->accountId : null) ?? (int) $incoming->account_id;
+        app(AccountContext::class)->set($accountId);
+
+        if (! $incoming->channel) {
+            return;
+        }
         $jid = (string) $incoming->remote_jid;
         $text = (string) $incoming->text;
 
@@ -248,7 +258,7 @@ class ClassifyWithAi implements ShouldQueue
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($incoming->id, $rule->id)
+        SendAutoReply::dispatch($incoming->id, $rule->id, accountId: (int) $incoming->account_id)
             ->delay(now()->addSeconds(random_int($min, $max)));
 
         $log('respondeu', null, $rule);
@@ -427,7 +437,7 @@ class ClassifyWithAi implements ShouldQueue
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($incoming->id, null, $textoFinal)
+        SendAutoReply::dispatch($incoming->id, null, $textoFinal, accountId: (int) $incoming->account_id)
             ->delay(now()->addSeconds(random_int($min, $max)));
 
         $log('respondeu', null, $usadasIds, $result->answer, $result->confidence, $result->model);

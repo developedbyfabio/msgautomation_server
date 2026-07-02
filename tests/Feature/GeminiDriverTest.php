@@ -25,6 +25,10 @@ class GeminiDriverTest extends TestCase
             'services.gemini.retry_sleep_ms' => 0, // sem sleep real no teste
             'services.gemini.daily_cap' => 1000,
         ]);
+
+        // MT-0: a cota diaria e POR CONTA — o driver le o contexto (em producao,
+        // o job ClassifyWithAi define antes de chamar).
+        app(\App\Tenancy\AccountContext::class)->set(1);
     }
 
     private function req(): AiClassificationRequest

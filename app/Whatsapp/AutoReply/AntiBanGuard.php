@@ -89,7 +89,7 @@ class AntiBanGuard
                 return GuardDecision::allow();
             }
 
-            $ultimaContato = AutoReplyLog::query()
+            $ultimaContato = AutoReplyLog::withoutAccountScope()
                 ->where('account_id', $accountId)
                 ->where('remote_jid', $jid)
                 ->where('status', 'sent')
@@ -110,7 +110,7 @@ class AntiBanGuard
             return GuardDecision::allow();
         }
 
-        $ultima = AutoReplyLog::query()
+        $ultima = AutoReplyLog::withoutAccountScope()
             ->where('account_id', $accountId)
             ->where('rule_id', $ruleId)
             ->where('remote_jid', $jid)
@@ -301,7 +301,8 @@ class AntiBanGuard
 
     public function aiContactEnabled(int $accountId, string $jid): bool
     {
-        return (bool) (Contact::query()
+        // MT-0: API por parametro — bypass nomeado + WHERE explicito (ver settingsFor).
+        return (bool) (Contact::withoutAccountScope()
             ->where('account_id', $accountId)
             ->where('remote_jid', $jid)
             ->value('ai_enabled') ?? false);
@@ -314,7 +315,10 @@ class AntiBanGuard
 
     public function settingsFor(int $accountId): AutoReplySetting
     {
-        return AutoReplySetting::firstOrCreate(['account_id' => $accountId]);
+        // MT-0: o guard e uma API POR PARAMETRO (o chamador diz a conta) — bypass
+        // NOMEADO + WHERE explicito, pra nunca depender do contexto global (que
+        // poderia divergir em chamada cross-account legitima, ex.: gate de teste).
+        return AutoReplySetting::withoutAccountScope()->firstOrCreate(['account_id' => $accountId]);
     }
 
     private function checkCaps(int $accountId, AutoReplySetting $settings): GuardDecision
@@ -364,7 +368,8 @@ class AntiBanGuard
 
     public function contactMode(int $accountId, string $jid): string
     {
-        return (string) (Contact::query()
+        // MT-0: API por parametro — bypass nomeado + WHERE explicito (ver settingsFor).
+        return (string) (Contact::withoutAccountScope()
             ->where('account_id', $accountId)
             ->where('remote_jid', $jid)
             ->value('auto_reply_mode') ?? 'default');

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\AutoReplyRule;
 use App\Models\IncomingMessage;
+use App\Tenancy\AccountContext;
 use App\Whatsapp\AutoReply\RuleResponder;
 use App\Whatsapp\AutoReply\Sender;
 use Illuminate\Bus\Queueable;
@@ -26,20 +27,32 @@ class SendAutoReply implements ShouldQueue
      * $text opcional/legado: se vier preenchido, e usado direto. Se vier null
      * (caminho S7), a resposta e resolvida NO ENVIO via RuleResponder (escolha
      * aleatoria entre as respostas da regra + placeholders).
+     * $accountId (MT-0): contexto serializado; null (job antigo na fila durante o
+     * deploy) -> resolvido do proprio incoming via bypass nomeado.
      */
     public function __construct(
         public readonly int $incomingMessageId,
         public readonly ?int $ruleId,
         public readonly ?string $text = null,
         public readonly bool $flow = false,
+        public readonly ?int $accountId = null,
     ) {
     }
 
     public function handle(Sender $sender, RuleResponder $responder): void
     {
-        $incoming = IncomingMessage::with('channel')->find($this->incomingMessageId);
+        // MT-0: acha a mensagem SEM escopo (unico bypass do job) e restaura o
+        // contexto ANTES de qualquer outra query (channel lazy ja escopado certo).
+        $incoming = IncomingMessage::withoutAccountScope()->find($this->incomingMessageId);
 
-        if (! $incoming || ! $incoming->channel) {
+        if (! $incoming) {
+            return;
+        }
+
+        $aid = (isset($this->accountId) ? $this->accountId : null) ?? (int) $incoming->account_id;
+        app(AccountContext::class)->set($aid);
+
+        if (! $incoming->channel) {
             return;
         }
 

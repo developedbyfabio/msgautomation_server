@@ -76,6 +76,11 @@ class NormalizerCatchAllTest extends TestCase
 
     public function test_job_persiste_tipo_desconhecido_e_e_idempotente(): void
     {
+        // MT-0: a conta e resolvida pelo CANAL da instancia (como em producao, via
+        // seeder). Sem canal, o payload seria descartado por seguranca.
+        $account = \App\Models\Account::create(['name' => 'T']);
+        \App\Models\Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
+
         $payload = $this->payload('fooBarMessage', ['fooBarMessage' => ['x' => 1]], ['data' => ['key' => ['id' => 'FIXO-CATCHALL']]]);
 
         (new ProcessIncomingWhatsappMessage($payload))->handle(

@@ -251,7 +251,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 |---|---|---|---|---|---|
 | 1 | **IA-3** Fila de aprovacao | **ENTREGUE** — `pending_approvals` + /revisao (Enviar/Editar/Ignorar); escalou vira item acionavel | — | Baixo | Testar aprovar/editar/ignorar num contato real |
 | 2 | **IA-4** Virar regra | **ENTREGUE** — promocao a regra/entrada da base; limiar/temas editaveis em /configuracoes | IA-3 | Baixo | Validar 1 promocao e o efeito (proxima msg gratis) |
-| 3 | **MT-0** Scoping estrutural | AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
+| 3 | **MT-0** Scoping estrutural | **ENTREGUE** — AccountContext + BelongsToAccount/global scope + L1 (conta via instance) + L3 + L5 (token/canal) + L6 (cota IA/conta) + TenantIsolationTest | — | Medio (toca o miolo; zero mudanca de comportamento visivel) | Suite verde + isolamento provado; robô identico |
 | 4 | **K-1** Kanban modelo+eventos | boards/columns/cards/transitions + eventos de dominio nos pontos de escrita + board_rules padrao aplicando | MT-0 | Baixo | Ver cards se movendo sozinhos com regras default |
 | 5 | **K-2** Kanban UI | /kanban board + mover manual + historico + editor de board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
 | 6 | **T-1** Tags | tags + pivot + chips na UI + acao "aplicar tag" nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
@@ -318,3 +318,55 @@ websockets/paginacao do /conversas (pendencia antiga de UI, independente deste d
 
 *Desenho produzido em 2026-07-02 sobre o commit `a2b90f6`, suite 279 verde. Proximo passo:
 aprovacao/ajuste das decisoes D1-D6 pelo Fabio; nada sera implementado antes disso.*
+
+---
+
+## MT-0 — ENTREGUE (2026-07-02)
+
+Zero mudanca de comportamento da conta unica (suite anterior de 320 passou sem alteracao de
+expectativa; 3 ajustes de SETUP de teste refletindo producao — canal/conta que o seeder sempre
+cria). Suite final: **333 verdes** (incl. o gate novo). Webhook vivo validado pos-deploy.
+
+**Lacunas fechadas:**
+- **L1** — webhook resolve a conta pelo CANAL da instancia do payload (dado real validado antes:
+  `channels.instance='fabio-pessoal'` bate com 100% dos payloads recentes; nenhuma correcao de
+  dado necessaria). Instancia desconhecida: `Log::warning` + contador em cache
+  (`webhook:instancia_desconhecida:{dia}` e `:ultima`) e DESCARTA — nunca cai em outra conta.
+- **L2** — `Account::oldest()` eliminado do dominio: o unico fallback de conta unica vive no
+  `AccountContext` (config `tenancy.single_account_fallback`, fase 1 = true). Telas, layout e
+  comandos usam o contexto.
+- **L9** — guarda estrutural: trait `BelongsToAccount` (global scope `AccountScope` + `creating`
+  injeta `account_id`) em TODOS os 13 models com a coluna: Contact, AutoReplyRule,
+  AutoReplySetting, AutoReplyLog, IncomingMessage, Channel, Secret, Group, Flow, FlowSession,
+  AiDecision, Knowledge, PendingApproval (filhas sem a coluna herdam escopo via FK do pai).
+  Sem contexto e sem fallback: `MissingAccountContextException` — FALHA ALTO, nunca vaza em
+  silencio (provado por teste). Bypass SO nomeado: `Model::withoutAccountScope()` — usos:
+  webhook (canal por instancia), jobs (carregar o proprio registro pra restaurar contexto),
+  `EnsureWhatsappConnected` (gate por instancia, fase 1), `VerifyWebhookSecret` (token),
+  `AntiBanGuard` (API por parametro: settingsFor/contactMode/aiContactEnabled/logs de cooldown).
+- **L6** — cota diaria do Gemini POR CONTA (`ai:{accountId}:gemini:calls:{dia}`); demais freios
+  ja eram por conta (Throttle `autoreply:{accountId}:*`, dedupe de grupo) — validados no gate.
+- **L5 (parcial, retrocompat)** — `channels.webhook_token` (unico, gerado pros canais existentes)
+  + rota nova `/webhook/evolution/{token}`. A URL ATUAL (header secret global) segue valendo,
+  marcada **DEPRECADA** — a Evolution NAO foi reconfigurada nesta fatia.
+
+**Propagacao de contexto:** middleware `SetAccountContext` (grupo web; MT-1 troca a fonte pro
+usuario logado — ponto unico); jobs serializam `account_id` e restauram no handle (com fallback
+defensivo pro proprio registro, cobrindo jobs enfileirados durante o deploy);
+`Queue::before` limpa o contexto entre jobs (worker longevo nunca herda conta do job anterior);
+`ai:expire-approvals` itera todas as contas com `runAs` (`--account` restringe).
+
+**Gate permanente:** `TenantIsolationTest` (13 testes, contas ESPELHADAS — mesmo jid/gatilho/
+nome de secret): webhook por instancia responde so com dados da conta certa, secret homonimo
+resolve o valor certo, telas listam so o contexto, job de IA nao cruza (payload do modelo
+minimizado por conta), teto/cota/kill switch por conta, excecao sem contexto, creating injeta,
+bypass e o unico caminho cross-account, token por canal + retrocompat.
+**TODA fatia futura roda e ESTENDE este teste.**
+
+**Passo futuro (MT-2/onboarding) — migracao da URL do webhook:** trocar a URL configurada na
+Evolution de `/webhook/evolution` (header secret global) para `/webhook/evolution/{token-do-canal}`
+por instancia (`evolution:setup` por canal), validar trafego no novo caminho e so entao remover
+o caminho retrocompat do `VerifyWebhookSecret`. Mexe em config viva de producao: fazer com o
+Fabio no gate da MT-2.
+
+**Proxima fatia da ordem (D1):** Kanban **K-1** (modelo + eventos).

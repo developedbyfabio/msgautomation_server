@@ -23,7 +23,7 @@ class WhatsappSend extends Command
     {
         $account = $this->option('account')
             ? Account::find((int) $this->option('account'))
-            : Account::query()->oldest('id')->first();
+            : Account::find(app(\App\Tenancy\AccountContext::class)->id()); // MT-0: contexto (--account sobrepoe)
 
         if (! $account) {
             $this->error('Nenhuma account encontrada. Rode o seeder.');

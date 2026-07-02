@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\Channel;
 use App\Models\Contact;
 use App\Models\IncomingMessage;
+use App\Tenancy\AccountContext;
 use App\Whatsapp\AutoReply\AntiBanGuard;
 use App\Whatsapp\AutoReply\RuleMatcher;
 use App\Whatsapp\IncomingMessageData;
@@ -16,6 +17,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Recebe (Camada 1): normaliza + persiste com idempotencia.
@@ -47,8 +50,22 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        $account = $this->resolverAccount();
-        $channel = $this->resolverChannel($account, $data);
+        // MT-0 (L1): a CONTA vem do CANAL da instancia do payload — unico lookup
+        // legitimamente cross-account do pipeline (bypass NOMEADO). Instancia
+        // desconhecida: loga + conta no cache (diagnostico) e DESCARTA com
+        // seguranca — NUNCA cai em outra conta.
+        $channel = Channel::withoutAccountScope()->where('instance', $data->instance)->first();
+        if ($channel === null) {
+            Log::warning('Webhook: instancia desconhecida — payload descartado.', ['instance' => $data->instance]);
+            Cache::increment('webhook:instancia_desconhecida:' . now()->format('Y-m-d'));
+            Cache::put('webhook:instancia_desconhecida:ultima', $data->instance, now()->addDays(7));
+
+            return;
+        }
+
+        // Contexto de conta EXPLICITO pro resto do job (queries escopadas).
+        app(AccountContext::class)->set((int) $channel->account_id);
+        $account = $channel->account;
 
         $channel->forceFill(['last_event_at' => now()])->save();
 
@@ -61,21 +78,6 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
 
         $this->popularContato($account, $data, $guard);
         $this->avaliarAutoResposta($account, $channel, $message, $data, $matcher, $guard);
-    }
-
-    private function resolverAccount(): Account
-    {
-        // Single-user na Camada 1: uma unica linha-ancora.
-        return Account::query()->oldest('id')->first()
-            ?? Account::create(['name' => config('app.name', 'msgautomation')]);
-    }
-
-    private function resolverChannel(Account $account, IncomingMessageData $data): Channel
-    {
-        return Channel::firstOrCreate(
-            ['instance' => $data->instance],
-            ['account_id' => $account->id, 'status' => 'connected'],
-        );
     }
 
     private function persistir(Account $account, Channel $channel, IncomingMessageData $data): ?IncomingMessage
@@ -173,7 +175,8 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             // em job SEPARADO (a API tem latencia/429; nao trava o pipeline). Tudo OFF
             // por padrao -> este ramo nao dispara ate o Fabio ligar a IA.
             if ($guard->aiEligible($account->id, $jid)) {
-                ClassifyWithAi::dispatch($message->id);
+                // MT-0: account_id serializado — o job restaura o contexto no handle.
+                ClassifyWithAi::dispatch($message->id, $account->id);
             }
 
             return;
@@ -190,7 +193,7 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($message->id, $rule->id)
+        SendAutoReply::dispatch($message->id, $rule->id, accountId: $account->id)
             ->delay(now()->addSeconds(random_int($min, $max)));
     }
 
@@ -209,7 +212,7 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($message->id, null, $text, true)
+        SendAutoReply::dispatch($message->id, null, $text, true, accountId: $account->id)
             ->delay(now()->addSeconds(random_int($min, $max)));
     }
 }

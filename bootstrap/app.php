@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureWhatsappConnected;
+use App\Http\Middleware\SetAccountContext;
 use App\Http\Middleware\VerifyWebhookSecret;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'webhook.secret' => VerifyWebhookSecret::class,
             'whatsapp.connected' => EnsureWhatsappConnected::class,
         ]);
+
+        // MT-0 — contexto de conta em todo request web (fase 1: conta unica;
+        // MT-1: conta do usuario logado). Webhook nao passa aqui (o job resolve
+        // a conta pela instancia do payload).
+        $middleware->web(append: [SetAccountContext::class]);
 
         // O webhook externo nao tem token CSRF — isenta a rota.
         $middleware->validateCsrfTokens(except: [

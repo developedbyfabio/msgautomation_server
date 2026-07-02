@@ -32,6 +32,11 @@ class WebhookEvolutionTest extends TestCase
             'services.webhook.secret' => self::SECRET,
             'services.webhook.header' => 'X-Webhook-Secret',
         ]);
+
+        // MT-0: a conta e resolvida pelo CANAL da instancia (como em producao, onde
+        // o seeder cria conta+canal). Instancia sem canal = descartada por seguranca.
+        $account = \App\Models\Account::create(['name' => 'T']);
+        \App\Models\Channel::create(['account_id' => $account->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
     }
 
     private function fixture(array $overrides = []): array

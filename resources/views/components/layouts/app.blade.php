@@ -1,7 +1,7 @@
 @php
     $robo = \App\Models\AutoReplySetting::query()->value('enabled');
     // Fatia 3: contador de pendencias da IA (escopado pela conta-ancora, como as telas).
-    $navAccountId = (int) \App\Models\Account::query()->oldest('id')->value('id');
+    $navAccountId = app(\App\Tenancy\AccountContext::class)->id(); // MT-0: conta do contexto
     $expDias = (int) config('ai.approval_expire_days', 7);
     $pendencias = \App\Models\PendingApproval::query()
         ->where('account_id', $navAccountId)

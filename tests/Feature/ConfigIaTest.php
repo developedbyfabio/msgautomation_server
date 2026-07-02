@@ -240,7 +240,8 @@ class ConfigIaTest extends TestCase
             ->call('saveAi');
 
         $this->assertEqualsWithDelta(0.90, (float) $this->settings()->ai_confidence_threshold, 0.001);
-        $this->assertEqualsWithDelta(0.75, (float) AutoReplySetting::where('account_id', $accountB->id)->value('ai_confidence_threshold'), 0.001);
+        // Leitura cross-account de TESTE: so via bypass NOMEADO (MT-0).
+        $this->assertEqualsWithDelta(0.75, (float) AutoReplySetting::withoutAccountScope()->where('account_id', $accountB->id)->value('ai_confidence_threshold'), 0.001);
     }
 }
 

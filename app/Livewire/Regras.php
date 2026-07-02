@@ -282,10 +282,8 @@ class Regras extends Component
 
     private function accountId(): int
     {
-        $account = Account::query()->oldest('id')->first()
-            ?? Account::create(['name' => config('app.name', 'msgautomation')]);
-
-        return $account->id;
+        // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
+        return app(\App\Tenancy\AccountContext::class)->id();
     }
 
     public function render()

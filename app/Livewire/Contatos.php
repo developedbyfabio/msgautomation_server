@@ -96,7 +96,8 @@ class Contatos extends Component
 
     private function accountId(): int
     {
-        return (int) (Account::query()->oldest('id')->value('id') ?? 0);
+        // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
+        return app(\App\Tenancy\AccountContext::class)->id();
     }
 
     public function render()

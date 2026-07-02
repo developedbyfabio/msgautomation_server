@@ -149,8 +149,8 @@ class Conhecimento extends Component
 
     private function accountId(): int
     {
-        return (int) (Account::query()->oldest('id')->value('id')
-            ?? Account::create(['name' => config('app.name', 'msgautomation')])->id);
+        // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
+        return app(\App\Tenancy\AccountContext::class)->id();
     }
 
     public function render()

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,6 +11,8 @@ use Illuminate\Support\Collection;
 
 class Flow extends Model
 {
+    use BelongsToAccount;
+
     protected $fillable = [
         'account_id', 'name', 'enabled', 'scope', 'timeout_seconds', 'invalid_message', 'root_node_id',
     ];

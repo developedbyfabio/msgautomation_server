@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FlowSession extends Model
 {
+    use BelongsToAccount;
+
     protected $fillable = [
         'account_id', 'flow_id', 'remote_jid', 'current_node_id', 'status',
         'started_at', 'last_activity_at', 'expires_at',

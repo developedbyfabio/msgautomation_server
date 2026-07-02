@@ -26,6 +26,9 @@ class ResolveGroupName implements ShouldQueue
 
     public function handle(GroupNameResolver $resolver): void
     {
+        // MT-0: contexto explicito (account_id ja era serializado neste job).
+        app(\App\Tenancy\AccountContext::class)->set($this->accountId);
+
         $resolver->resolveNow($this->accountId, $this->jid);
     }
 }

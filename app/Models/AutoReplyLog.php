@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AutoReplyLog extends Model
 {
+    use BelongsToAccount;
+
     protected $fillable = [
         'account_id',
         'channel_id',

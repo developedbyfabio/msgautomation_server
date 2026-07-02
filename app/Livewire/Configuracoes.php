@@ -80,10 +80,8 @@ class Configuracoes extends Component
 
     private function settings(): AutoReplySetting
     {
-        $account = Account::query()->oldest('id')->first()
-            ?? Account::create(['name' => config('app.name', 'msgautomation')]);
-
-        return AutoReplySetting::firstOrCreate(['account_id' => $account->id]);
+        // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
+        return AutoReplySetting::firstOrCreate(['account_id' => app(\App\Tenancy\AccountContext::class)->id()]);
     }
 
     /**
