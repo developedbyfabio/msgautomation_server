@@ -40,6 +40,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
 
     Route::middleware('whatsapp.connected')->group(function () {
+        // M-1: painel do dono (leitura pura dos logs; primeiro item do menu).
+        Route::get('/painel', \App\Livewire\Painel::class)->name('painel');
         Route::get('/conversas', Conversas::class)->name('conversas');
         // Kanban K-2: board de conversas (observador puro; mover card e acao humana).
         Route::get('/kanban', \App\Livewire\Kanban::class)->name('kanban');

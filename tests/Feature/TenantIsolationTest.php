@@ -499,6 +499,25 @@ class TenantIsolationTest extends TestCase
         \Illuminate\Support\Carbon::setTestNow();
     }
 
+    // ---- Painel (M-1): agregados por conta ------------------------------------------------
+
+    public function test_painel_agrega_so_os_dados_da_conta_do_contexto(): void
+    {
+        // Movimento SO na conta A (webhook processa e responde).
+        $this->webhook('inst-a', 'qual o horario?', 'PM1');
+
+        $metrics = app(\App\Metrics\PainelMetrics::class);
+        $a = $metrics->dados($this->a->id, '7d');
+        $b = $metrics->dados($this->b->id, '7d');
+
+        $this->assertSame(1, $a['resumo']['recebidas']);
+        $this->assertSame(1, $a['resumo']['enviadas']);
+        // Conta B (mesmo jid espelhado): ZERO em tudo.
+        $this->assertSame(0, $b['resumo']['recebidas']);
+        $this->assertSame(0, $b['resumo']['enviadas']);
+        $this->assertNull($b['resumo']['mediana_primeira_resposta']);
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

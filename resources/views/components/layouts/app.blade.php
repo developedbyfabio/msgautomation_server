@@ -13,6 +13,7 @@
         ->whereHas('column', fn ($q) => $q->where('slug', 'novo'))
         ->count();
     $nav = [
+        ['painel', 'Painel', 'chart-bar', 0],
         ['conversas', 'Conversas', 'chat-bubble-left-right', 0],
         ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
         ['contatos', 'Contatos', 'users', 0],

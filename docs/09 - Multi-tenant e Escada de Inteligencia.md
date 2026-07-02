@@ -109,9 +109,9 @@ permanece identico; os degraus novos OBSERVAM e INICIAM, nunca reescrevem o pipe
 | N5 | IA base de conhecimento | ENTREGUE (Fatia 2) | — | — |
 | N6 | Escalar/aprovacao + virar regra | **ENTREGUE** (Fatias 3 e 4 — arco da IA completo) | ai_decisions, Sender | pending_approvals, /revisao, promotor de regra |
 | N7 | Kanban dirigido por conversa | DESENHO (abaixo) | eventos dos logs atuais | boards/cards/transicoes |
-| N8 | Proativas com gate | DESENHO (abaixo) | Sender/freios/filas | campanhas, scheduler, freios proprios |
-| N9 | Segmentacao/tags | DESENHO (abaixo) | escopo de contatos | tags manuais+automaticas |
-| N10 | Metricas | DESENHO (abaixo) | logs existentes | /painel agregado |
+| N8 | Proativas com gate | **ENTREGUE** (P-1..P-3; reativacao por tempo = P-4 futura) | Sender/freios/filas | campanhas, scheduler, freios proprios |
+| N9 | Segmentacao/tags | **ENTREGUE** (T-1) | escopo de contatos | tags manuais+automaticas |
+| N10 | Metricas | **ENTREGUE** (M-1) | logs existentes | /painel agregado |
 
 ### N7 — Kanban dirigido por conversa
 
@@ -258,7 +258,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 7 | **P-1** Proativas: freios+opt-in | **ENTREGUE** — bloco proativo nas settings (tudo OFF), opt-in + trilha de consentimento + opt-out por palavra + ProactiveGuard | MT-0 | Medio | Aprovar defaults dos tetos |
 | 8 | **P-2** Campanhas com gate | **ENTREGUE** (draft→preview→aprovar + agenda com jitter; SEM disparo — tick/job = P-3) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
 | 9 | **P-3** Disparo real | **ENTREGUE** — tick + SendProactiveMessage (claim atomico + guard + R2 + release) + estados running/done/paused + opt-out no meio; ARCO PROATIVO COMPLETO aguardando gate do Fabio (checklist em docs/relatorios/2026-07-02-p3.md). Reativacao por tempo via Kanban (TempoEstourou) fica como fatia futura P-4 | P-2, K-2 | Alto (ban) | Checklist de manha: 1o disparo real controlado |
-| 10 | **M-1** Metricas | /painel com agregados dos logs + funil do Kanban | K-1 (funil; resto independe) | Baixo | Validar numeros contra a realidade |
+| 10 | **M-1** Metricas | **ENTREGUE** — /painel com agregados dos logs + funil do Kanban (leitura pura, cache 60s) | K-1 (funil; resto independe) | Baixo | Validar numeros contra a realidade |
 | 11 | **MT-1** Multi-usuario | account_user (dono/operador) + policies + seletor de conta + auth ajustada | MT-0 | Medio | Criar o 1o operador |
 | 12 | **MT-2** Canal por conta | CRUD canal + EvolutionApi por canal + conexao/QR por conta + setup por canal | MT-0 (MT-1 recomendado antes) | Medio | Conectar um 2o numero de teste |
 | 13 | **MT-3** Onboarding de conta | Criar conta nova na UI (settings OFF + canal + QR) | MT-1, MT-2 | Medio | Abrir a conta 2 real |
@@ -526,3 +526,19 @@ da A nao consome da B; palavra na B revoga so o contato da B.
 **P-2 (proxima):** campanhas draft -> preview (lista EXATA de destinatarios) -> aprovar (gate
 humano) + scheduler com jitter. **P-3:** disparo real pelo Sender em modo `proactive` com
 allows() + claim atomico + R2 proprio.
+
+---
+
+## SEQUENCIA NOTURNA 2026-07-02 — P-2, P-3 e M-1 ENTREGUES
+
+**ESCADA DE INTELIGENCIA N0-N10 COMPLETA PARA USO PESSOAL.** Detalhes e checklist de
+manha em `docs/relatorios/2026-07-02-resumo-noite.md` (+ um relatorio por fatia).
+- P-2 (`e1c765f`): campanhas draft->preview->aprovar + agenda com jitter (sem disparo).
+- P-3 (`cf361c7`): disparo real — tick que so enfileira + job com claim atomico
+  (target e tetos) + Sender modo proactive com R2 no POST + estados running/done/
+  paused + opt-out no meio. TUDO OFF aguardando o gate do Fabio (1o disparo real
+  controlado). Scheduler: unit de REFERENCIA em deploy/systemd (instalar de manha).
+- M-1: /painel — leitura pura dos logs com cache 60s, barras CSS, periodos SP.
+- Fatia futura P-4: reativacao por tempo via Kanban (TempoEstourou) + opcao de
+  "dia util" na agenda.
+- Proximos arcos: MT-1..MT-3 quando a conta 2 for real.
