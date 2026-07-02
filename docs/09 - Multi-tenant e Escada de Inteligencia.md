@@ -256,7 +256,7 @@ cruzado em TODA fatia a partir de MT-0, gate do Fabio no fim de cada uma.
 | 5 | **K-2** Kanban UI | **ENTREGUE** — /kanban board + mover manual + historico + editor de colunas e board_rules | K-1 | Baixo | Usar o board 1 semana; ajustar colunas |
 | 6 | **T-1** Tags | **ENTREGUE** — tags + pivot com origem + chips na UI + acoes de tag nas board_rules + escopo por tag em regras/fluxos | K-1 | Baixo | Criar 2-3 tags reais e uma regra escopada |
 | 7 | **P-1** Proativas: freios+opt-in | **ENTREGUE** — bloco proativo nas settings (tudo OFF), opt-in + trilha de consentimento + opt-out por palavra + ProactiveGuard | MT-0 | Medio | Aprovar defaults dos tetos |
-| 8 | **P-2** Campanhas com gate | campaigns/targets draft→preview→aprovar; scheduler (unit novo) + fila `proactive` + `SendProactive` (modo proactive no Sender) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
+| 8 | **P-2** Campanhas com gate | **ENTREGUE** (draft→preview→aprovar + agenda com jitter; SEM disparo — tick/job = P-3) | P-1, K-1, T-1 | **Alto (ban)** | Aprovar a PRIMEIRA campanha com 2-3 contatos de teste (numeros do Fabio) |
 | 9 | **P-3** Reativacao via Kanban | TempoEstourou + campanha continua ("sumiu X dias na coluna Y → Z") com os mesmos gates | P-2, K-2 | Alto (ban) | Acompanhar 1 ciclo real com teto minusculo |
 | 10 | **M-1** Metricas | /painel com agregados dos logs + funil do Kanban | K-1 (funil; resto independe) | Baixo | Validar numeros contra a realidade |
 | 11 | **MT-1** Multi-usuario | account_user (dono/operador) + policies + seletor de conta + auth ajustada | MT-0 | Medio | Criar o 1o operador |

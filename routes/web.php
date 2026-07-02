@@ -47,6 +47,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/regras', Regras::class)->name('regras');
         // Fila de aprovacao da IA (Fatia 3): envia mensagens -> atras do gate de conexao.
         Route::get('/revisao', Revisao::class)->name('revisao');
+        // Campanhas proativas (P-2): gate humano draft->preview->aprovar (disparo = P-3).
+        Route::get('/campanhas', \App\Livewire\Campanhas::class)->name('campanhas');
         Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
     });
 });

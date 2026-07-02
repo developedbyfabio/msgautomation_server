@@ -433,6 +433,40 @@ class TenantIsolationTest extends TestCase
         $this->assertSame(0, \App\Models\ProactiveConsent::withoutAccountScope()->where('account_id', $this->a->id)->count());
     }
 
+    // ---- Campanhas (P-2): resolucao/targets por conta --------------------------------------
+
+    public function test_campanhas_publico_e_targets_nao_cruzam_contas(): void
+    {
+        // Tags HOMONIMAS ("vip") nas duas contas; contatos com MESMO jid e opt-in.
+        $tagA = \App\Models\Tag::create(['account_id' => $this->a->id, 'name' => 'vip']);
+        $tagB = \App\Models\Tag::create(['account_id' => $this->b->id, 'name' => 'vip']);
+        $contatoA = Contact::withoutAccountScope()->where('account_id', $this->a->id)->where('remote_jid', self::JID)->first();
+        $contatoB = Contact::withoutAccountScope()->where('account_id', $this->b->id)->where('remote_jid', self::JID)->first();
+        $contatoA->update(['proactive_opt_in' => true]);
+        $contatoB->update(['proactive_opt_in' => true]);
+        $contatoA->tags()->attach($tagA->id, ['origin' => 'manual']);
+        $contatoB->tags()->attach($tagB->id, ['origin' => 'manual']);
+
+        // Resolver da conta A com a tag da A: SO o contato da A (a B tem tag homonima).
+        $res = app(\App\Whatsapp\Proactive\AudienceResolver::class)
+            ->resolve($this->a->id, 'tags', ['tag_ids' => [$tagA->id]]);
+        $this->assertSame([$contatoA->id], $res['eligiveis']->pluck('id')->all());
+
+        // Resolver da A com o ID da tag DA B: vazio (join valida a conta da tag).
+        $res = app(\App\Whatsapp\Proactive\AudienceResolver::class)
+            ->resolve($this->a->id, 'tags', ['tag_ids' => [$tagB->id]]);
+        $this->assertCount(0, $res['eligiveis']);
+
+        // Campanha da B invisivel na tela da conta A (contexto default).
+        \App\Models\ProactiveCampaign::create([
+            'account_id' => $this->b->id, 'name' => 'CAMPANHA-SECRETA-DA-B', 'message' => 'oi',
+            'audience_type' => 'contatos', 'audience_config' => ['contact_ids' => [$contatoB->id]], 'status' => 'draft',
+        ]);
+        app(AccountContext::class)->clear();
+        Livewire::test(\App\Livewire\Campanhas::class)->assertDontSee('CAMPANHA-SECRETA-DA-B');
+        Http::assertNothingSent();
+    }
+
     // ---- token de webhook por canal (retrocompat) --------------------------------------
 
     public function test_token_por_canal_autentica_e_o_secret_global_segue_valendo(): void

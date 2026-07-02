@@ -21,6 +21,7 @@
         ['fluxos', 'Fluxos', 'rectangle-stack', 0],
         ['conhecimento', 'Conhecimento', 'book-open', 0],
         ['revisao', 'Revisao', 'inbox', $pendencias],
+        ['campanhas', 'Campanhas', 'megaphone', 0],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
     ];
 @endphp
