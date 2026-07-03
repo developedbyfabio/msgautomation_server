@@ -136,7 +136,11 @@
             </div>
         @endunless
 
-        <div class="min-h-0 flex-1 overflow-hidden">
+        {{-- Prompt 18A: a regiao de conteudo ROLA (overflow-y-auto) — Perfil/Logs/Painel
+             exibem tudo. Conversas e Contatos se auto-contem (h-full + scroll interno):
+             preenchem exatamente esta altura, entao nao geram scroll duplo aqui. O <main>
+             segue overflow-hidden (caixa fixa 100dvh) — sem rolagem horizontal de pagina. --}}
+        <div class="min-h-0 flex-1 overflow-y-auto">
             {{ $slot }}
         </div>
     </main>
