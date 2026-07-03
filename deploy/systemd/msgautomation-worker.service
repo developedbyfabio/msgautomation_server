@@ -10,7 +10,7 @@ User=root
 WorkingDirectory=/srv/www/msgautomation
 # Processa a fila default (webhook -> ProcessIncomingWhatsappMessage -> persiste).
 # --max-time recicla o worker de hora em hora (memoria + pega codigo novo).
-ExecStart=/usr/bin/php /srv/www/msgautomation/artisan queue:work --queue=default --sleep=1 --tries=3 --max-time=3600
+ExecStart=/usr/bin/php /srv/www/msgautomation/artisan queue:work --queue=default --sleep=1 --tries=3 --timeout=60 --max-time=3600
 Restart=always
 RestartSec=2
 
