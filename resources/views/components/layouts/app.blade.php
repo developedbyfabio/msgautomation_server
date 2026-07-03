@@ -28,6 +28,8 @@
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
         ['perfil', 'Perfil', 'user-circle', 0],
     ];
+    // Breadcrumb "Menu > {aba}": item do menu que casa com a rota atual.
+    $navAtual = collect($nav)->first(fn ($item) => request()->routeIs($item[0]));
 @endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -35,82 +37,105 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'msgautomation' }}</title>
+    <script>
+        // Sidebar comeca RETRAIDA por padrao (pedido do Fabio). Depois da primeira visita,
+        // a preferencia do usuario persiste — o proprio Flux grava nesta chave a cada toggle.
+        if (localStorage.getItem('flux-sidebar-collapsed-desktop') === null) {
+            localStorage.setItem('flux-sidebar-collapsed-desktop', 'true');
+        }
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @fluxAppearance
 </head>
-<body class="h-screen flex flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased">
-    <header class="shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="flex items-center gap-4 px-4 h-12">
-            <span class="font-semibold tracking-tight">msgautomation</span>
-            <nav class="flex items-center gap-1 text-sm">
-                @foreach ($nav as [$route, $label, $icon, $badge])
-                    <a href="{{ route($route) }}"
-                       wire:navigate
-                       @class([
-                           'flex items-center gap-1.5 px-3 py-1.5 rounded-md transition',
-                           'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' => request()->routeIs($route),
-                           'hover:bg-zinc-100 dark:hover:bg-zinc-800' => ! request()->routeIs($route),
-                       ])>
-                        <flux:icon :icon="$icon" variant="micro" />
-                        <span>{{ $label }}</span>
-                        @if ($badge > 0)
-                            <span class="inline-flex min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">{{ $badge > 99 ? '99+' : $badge }}</span>
-                        @endif
-                    </a>
-                @endforeach
-            </nav>
-            <div class="ml-auto flex items-center gap-3 text-xs">
-                {{-- MT-1: seletor de conta ativa (sessao) — invisivel com 1 conta --}}
-                @auth
-                    @php $contasDoUsuario = auth()->user()->accounts()->orderBy('account_user.id')->get(['accounts.id', 'accounts.name']); @endphp
-                    @if ($contasDoUsuario->count() > 1)
-                        <form method="POST" action="{{ route('conta.ativa') }}">
-                            @csrf
-                            <select name="account_id" onchange="this.form.submit()" aria-label="Conta ativa"
-                                class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-                                @foreach ($contasDoUsuario as $contaOpt)
-                                    <option value="{{ $contaOpt->id }}" @selected((int) session('tenancy.account_id') === (int) $contaOpt->id)>{{ $contaOpt->name }}</option>
-                                @endforeach
-                            </select>
-                        </form>
-                        <span class="text-zinc-400">|</span>
-                    @endif
-                @endauth
-                <livewire:status-conexao />
-                <span class="text-zinc-400">|</span>
-                <span class="text-zinc-500">Robo:</span>
-                @if ($robo)
-                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                        <span class="size-1.5 rounded-full bg-emerald-500"></span> ON
-                    </span>
-                @else
-                    <span class="inline-flex items-center gap-1 rounded-full bg-zinc-200 px-2 py-0.5 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                        <span class="size-1.5 rounded-full bg-zinc-400"></span> OFF
-                    </span>
+<body class="h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased">
+    {{-- Sidebar Flux (free): colapsavel no desktop (icones-so quando retraida, tooltip no hover)
+         e overlay no mobile (abre pelo hamburguer do header, fecha no backdrop/navegacao). --}}
+    <flux:sidebar sticky collapsible class="border-e border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <flux:sidebar.header>
+            <flux:sidebar.brand href="/" name="msgautomation">
+                <flux:icon icon="chat-bubble-left-right" variant="mini" class="text-emerald-600 dark:text-emerald-400" />
+            </flux:sidebar.brand>
+            <flux:sidebar.collapse class="in-data-flux-sidebar-on-desktop:not-in-data-flux-sidebar-collapsed-desktop:-me-2" />
+        </flux:sidebar.header>
+
+        <flux:sidebar.nav>
+            @foreach ($nav as [$route, $label, $icon, $badge])
+                <flux:sidebar.item
+                    :icon="$icon"
+                    :href="route($route)"
+                    wire:navigate
+                    :badge="$badge > 0 ? ($badge > 99 ? '99+' : (string) $badge) : null"
+                    badge:color="amber"
+                    badge:variant="solid"
+                    :icon-dot="$badge > 0"
+                >{{ $label }}</flux:sidebar.item>
+            @endforeach
+        </flux:sidebar.nav>
+    </flux:sidebar>
+
+    {{-- Header slim: hamburguer (mobile), breadcrumb de contexto e o cluster de estado
+         (conta ativa, conexao, robo ON/OFF, sair) — mesmo conteudo do cabecalho antigo. --}}
+    <header data-flux-header class="[grid-area:header] z-10 flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900">
+        <flux:sidebar.toggle class="-ms-1 lg:hidden" icon="bars-2" />
+        <flux:breadcrumbs>
+            <flux:breadcrumbs.item>Menu</flux:breadcrumbs.item>
+            @if ($navAtual)
+                <flux:breadcrumbs.item>{{ $navAtual[1] }}</flux:breadcrumbs.item>
+            @endif
+        </flux:breadcrumbs>
+        <div class="ms-auto flex flex-wrap items-center gap-3 text-xs">
+            {{-- MT-1: seletor de conta ativa (sessao) — invisivel com 1 conta --}}
+            @auth
+                @php $contasDoUsuario = auth()->user()->accounts()->orderBy('account_user.id')->get(['accounts.id', 'accounts.name']); @endphp
+                @if ($contasDoUsuario->count() > 1)
+                    <form method="POST" action="{{ route('conta.ativa') }}">
+                        @csrf
+                        <select name="account_id" onchange="this.form.submit()" aria-label="Conta ativa"
+                            class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                            @foreach ($contasDoUsuario as $contaOpt)
+                                <option value="{{ $contaOpt->id }}" @selected((int) session('tenancy.account_id') === (int) $contaOpt->id)>{{ $contaOpt->name }}</option>
+                            @endforeach
+                        </select>
+                    </form>
+                    <span class="text-zinc-400">|</span>
                 @endif
-                <span class="text-zinc-400">|</span>
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" title="Sair">
-                        <flux:icon icon="arrow-right-start-on-rectangle" variant="micro" /> Sair
-                    </button>
-                </form>
-            </div>
+            @endauth
+            <livewire:status-conexao />
+            <span class="text-zinc-400">|</span>
+            <span class="text-zinc-500">Robo:</span>
+            @if ($robo)
+                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span> ON
+                </span>
+            @else
+                <span class="inline-flex items-center gap-1 rounded-full bg-zinc-200 px-2 py-0.5 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                    <span class="size-1.5 rounded-full bg-zinc-400"></span> OFF
+                </span>
+            @endif
+            <span class="text-zinc-400">|</span>
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" title="Sair">
+                    <flux:icon icon="arrow-right-start-on-rectangle" variant="micro" /> Sair
+                </button>
+            </form>
         </div>
     </header>
 
-    @unless ($robo)
-        {{-- Banner proeminente: robo OFF nao responde ninguem (kill switch). --}}
-        <div class="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            <div class="flex items-center gap-2">
-                <flux:icon icon="exclamation-triangle" variant="micro" class="shrink-0" />
-                <span><strong>Robo desligado</strong> — nao responde ninguem automaticamente. A auto-resposta so reage a mensagens <strong>recebidas</strong> de contatos aprovados (on); nunca as mensagens que voce mesmo envia. Para ligar: <a href="{{ route('configuracoes') }}" wire:navigate class="font-medium underline">Configuracoes</a>.</span>
+    <main data-flux-main class="[grid-area:main] flex min-h-0 flex-col overflow-hidden">
+        @unless ($robo)
+            {{-- Banner proeminente: robo OFF nao responde ninguem (kill switch). --}}
+            <div class="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                <div class="flex items-center gap-2">
+                    <flux:icon icon="exclamation-triangle" variant="micro" class="shrink-0" />
+                    <span><strong>Robo desligado</strong> — nao responde ninguem automaticamente. A auto-resposta so reage a mensagens <strong>recebidas</strong> de contatos aprovados (on); nunca as mensagens que voce mesmo envia. Para ligar: <a href="{{ route('configuracoes') }}" wire:navigate class="font-medium underline">Configuracoes</a>.</span>
+                </div>
             </div>
-        </div>
-    @endunless
+        @endunless
 
-    <main class="flex-1 min-h-0 overflow-hidden">
-        {{ $slot }}
+        <div class="min-h-0 flex-1 overflow-hidden">
+            {{ $slot }}
+        </div>
     </main>
 
     {{-- Toasts globais (Alpine ouve eventos 'toast' despachados pelos componentes Livewire). --}}
