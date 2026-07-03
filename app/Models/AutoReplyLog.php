@@ -21,6 +21,7 @@ class AutoReplyLog extends Model
         'response_text',
         'media_path',  // Prompt 04: anexo enviado (disco 'local', media/{conta}/...)
         'media_mime',
+        'media_name',  // Prompt 05: nome ORIGINAL do documento (path e uuid)
         'status',
         'motivo',
         'provider_message_id',

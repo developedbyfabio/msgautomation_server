@@ -45,6 +45,12 @@ interface ChannelProvider
      */
     public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData;
 
+    /**
+     * Prompt 05 — envia DOCUMENTO (PDF etc.). Mesma disciplina do sendImage;
+     * $fileName e o nome ORIGINAL exibido no WhatsApp do destinatario.
+     */
+    public function sendDocument(Channel $channel, string $to, string $filePath, string $mime, string $fileName, ?string $caption = null, ?string $replyTo = null): SentMessageData;
+
     /** Valida a origem do webhook pro canal resolvido (token / HMAC no CH-2). */
     public function verifyWebhook(Request $request, Channel $channel): bool;
 

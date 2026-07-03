@@ -19,12 +19,12 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * Prompt 04 — anexos parte A (imagens). Envio manual de imagem pelas conversas:
- * Evolution = sendMedia base64; Cloud = upload (/media -> media_id) + mensagem
- * referenciando o id; janela de 24h vale pra midia; storage privado POR CONTA
- * servido por rota autenticada/escopada. HTTP SEMPRE mockado (nunca envio real).
+ * Prompt 05 — anexos parte B (PDF/documentos). Mesma infra da parte A com tipo
+ * document: Evolution = sendMedia mediatype document; Cloud = upload -> media_id
+ * -> type=document com FILENAME original; janela de 24h vale; isolamento por
+ * conta. HTTP SEMPRE mockado (nunca envio real).
  */
-class AnexoImagemTest extends TestCase
+class AnexoDocumentoTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -59,61 +59,56 @@ class AnexoImagemTest extends TestCase
         return [$account, $canal];
     }
 
-    // ---- Evolution: caminho proprio (sendMedia base64) --------------------------------
-
-    public function test_envio_pela_evolution_usa_sendMedia_persiste_e_aparece_na_conversa(): void
+    private function pdf(string $nome = 'orcamento.pdf', int $kb = 100): UploadedFile
     {
-        Http::fake(['*' => Http::response(['key' => ['id' => 'PMID-IMG']], 201)]);
+        return UploadedFile::fake()->create($nome, $kb, 'application/pdf');
+    }
+
+    // ---- Evolution ------------------------------------------------------------------
+
+    public function test_pdf_pela_evolution_usa_mediatype_document_persiste_e_aparece_na_conversa(): void
+    {
+        Http::fake(['*' => Http::response(['key' => ['id' => 'PMID-DOC']], 201)]);
         $this->accountEvolution();
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', self::JID)
-            ->set('body', 'olha a foto 📷')
-            ->set('anexo', UploadedFile::fake()->image('foto.png', 40, 40))
+            ->set('body', 'segue o orçamento')
+            ->set('anexo', $this->pdf())
             ->call('sendManual')
             ->assertSet('anexo', null)
             ->assertSet('body', '');
 
         Http::assertSentCount(1);
         Http::assertSent(fn ($r) => str_contains($r->url(), '/message/sendMedia/fabio-pessoal')
-            && $r['mediatype'] === 'image'
-            && $r['mimetype'] === 'image/png'
-            && $r['caption'] === 'olha a foto 📷'
-            && $r['media'] !== '' && base64_decode($r['media'], true) !== false);
+            && $r['mediatype'] === 'document'
+            && $r['mimetype'] === 'application/pdf'
+            && $r['fileName'] === 'orcamento.pdf' // nome ORIGINAL, nao o uuid do disco
+            && $r['caption'] === 'segue o orçamento');
 
         $log = AutoReplyLog::query()->firstOrFail();
         $this->assertSame('sent', $log->status);
-        $this->assertSame('manual', $log->mode);
-        $this->assertSame('image/png', $log->media_mime);
-        $this->assertNotNull($log->media_path);
+        $this->assertSame('application/pdf', $log->media_mime);
+        $this->assertSame('orcamento.pdf', $log->media_name);
         Storage::disk('local')->assertExists($log->media_path);
-        $this->assertStringStartsWith('media/' . $log->account_id . '/', $log->media_path);
 
-        // Aparece na thread (bolha com a imagem via rota escopada).
+        // Aparece na thread como documento (nome do arquivo no card).
         Livewire::test(Conversas::class)
             ->set('selectedJid', self::JID)
+            ->assertSee('orcamento.pdf')
             ->assertSee(route('media.show', $log->id));
     }
 
-    // ---- validacao ---------------------------------------------------------------------
+    // ---- validacao -------------------------------------------------------------------
 
-    public function test_tipo_invalido_e_tamanho_acima_do_limite_sao_recusados(): void
+    public function test_documento_acima_de_10mb_e_recusado(): void
     {
         Http::fake();
         $this->accountEvolution();
 
-        // Tipo invalido (executavel) — recusado com mensagem clara, anexo descartado.
-        // (PDF deixou de ser invalido na parte B — virou documento aceito.)
         Livewire::test(Conversas::class)
             ->set('selectedJid', self::JID)
-            ->set('anexo', UploadedFile::fake()->create('programa.exe', 100, 'application/x-msdownload'))
-            ->assertHasErrors('anexo')
-            ->assertSet('anexo', null);
-
-        // Acima de 5 MB — recusado.
-        Livewire::test(Conversas::class)
-            ->set('selectedJid', self::JID)
-            ->set('anexo', UploadedFile::fake()->image('grande.jpg', 40, 40)->size(6000))
+            ->set('anexo', $this->pdf('gigante.pdf', 11000))
             ->assertHasErrors('anexo')
             ->assertSet('anexo', null);
 
@@ -121,9 +116,9 @@ class AnexoImagemTest extends TestCase
         $this->assertSame(0, AutoReplyLog::withoutAccountScope()->count());
     }
 
-    // ---- Cloud: duas etapas (upload -> media_id -> mensagem) ---------------------------
+    // ---- Cloud: duas etapas + filename ------------------------------------------------
 
-    public function test_cloud_faz_upload_e_envia_referenciando_media_id(): void
+    public function test_cloud_faz_upload_e_envia_type_document_com_filename(): void
     {
         [$account, $canal] = $this->accountCloud();
         $contato = Contact::withoutAccountScope()->create([
@@ -132,56 +127,54 @@ class AnexoImagemTest extends TestCase
         ContactChannelWindow::touchWindow($account->id, (int) $contato->id, (int) $canal->id); // janela ABERTA
 
         Http::fake([
-            '*/' . self::PNID . '/media' => Http::response(['id' => 'MEDIA-42'], 200),
-            '*/' . self::PNID . '/messages' => Http::response(['messages' => [['id' => 'wamid.IMG1']]], 200),
+            '*/' . self::PNID . '/media' => Http::response(['id' => 'MEDIA-DOC-7'], 200),
+            '*/' . self::PNID . '/messages' => Http::response(['messages' => [['id' => 'wamid.DOC1']]], 200),
         ]);
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', self::JID)
-            ->set('body', 'legenda cloud')
-            ->set('anexo', UploadedFile::fake()->image('foto.jpg', 40, 40))
+            ->set('body', 'contrato em anexo')
+            ->set('anexo', $this->pdf('contrato.pdf'))
             ->call('sendManual');
 
         Http::assertSentCount(2);
-        // Etapa 1: upload multipart com messaging_product.
         Http::assertSent(fn ($r) => str_ends_with($r->url(), '/' . self::PNID . '/media')
             && $r->isMultipart());
-        // Etapa 2: mensagem type=image referenciando o media_id + caption.
         Http::assertSent(fn ($r) => str_ends_with($r->url(), '/' . self::PNID . '/messages')
-            && ($r['type'] ?? null) === 'image'
-            && data_get($r, 'image.id') === 'MEDIA-42'
-            && data_get($r, 'image.caption') === 'legenda cloud');
+            && ($r['type'] ?? null) === 'document'
+            && data_get($r, 'document.id') === 'MEDIA-DOC-7'
+            && data_get($r, 'document.filename') === 'contrato.pdf'
+            && data_get($r, 'document.caption') === 'contrato em anexo');
 
         $log = AutoReplyLog::withoutAccountScope()->firstOrFail();
         $this->assertSame('sent', $log->status);
-        $this->assertSame('wamid.IMG1', $log->provider_message_id);
-        $this->assertNotNull($log->media_path);
+        $this->assertSame('wamid.DOC1', $log->provider_message_id);
+        $this->assertSame('contrato.pdf', $log->media_name);
     }
 
-    public function test_cloud_fora_da_janela_de_24h_bloqueia_imagem_como_o_texto(): void
+    public function test_cloud_fora_da_janela_de_24h_bloqueia_documento(): void
     {
         [$account, $canal] = $this->accountCloud();
         $contato = Contact::withoutAccountScope()->create([
             'account_id' => $account->id, 'remote_jid' => self::JID, 'auto_reply_mode' => 'on',
         ]);
-        // Ultimo inbound ha 25h — janela FECHADA.
         ContactChannelWindow::touchWindow($account->id, (int) $contato->id, (int) $canal->id, now()->subHours(25));
 
         Http::fake();
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', self::JID)
-            ->set('anexo', UploadedFile::fake()->image('foto.jpg', 40, 40))
+            ->set('anexo', $this->pdf())
             ->call('sendManual')
             ->assertSet('sendStatus', 'Bloqueado por freio: janela_24h');
 
-        Http::assertNothingSent(); // nem upload, nem mensagem — nada de free-form fora da janela
+        Http::assertNothingSent();
         $this->assertSame('blocked', AutoReplyLog::withoutAccountScope()->firstOrFail()->status);
     }
 
     // ---- isolamento ---------------------------------------------------------------------
 
-    public function test_conta_a_nao_acessa_midia_da_conta_b(): void
+    public function test_conta_a_nao_acessa_documento_da_conta_b(): void
     {
         config(['tenancy.single_account_fallback' => false]);
 
@@ -190,19 +183,14 @@ class AnexoImagemTest extends TestCase
         $userA = User::create(['name' => 'A', 'email' => 'a@teste.local', 'password' => Hash::make('senha-forte-123')]);
         $userA->accounts()->attach($a->id, ['role' => 'owner']);
 
-        Storage::disk('local')->put('media/' . $b->id . '/5500/segredo.png', 'PNGDATA');
+        Storage::disk('local')->put('media/' . $b->id . '/5500/doc.pdf', '%PDF-1.4 conteudo');
         $logB = AutoReplyLog::withoutAccountScope()->create([
             'account_id' => $b->id, 'remote_jid' => '5500@s.whatsapp.net', 'mode' => 'manual',
-            'response_text' => '', 'media_path' => 'media/' . $b->id . '/5500/segredo.png',
-            'media_mime' => 'image/png', 'status' => 'sent', 'sent_at' => now(),
+            'response_text' => '', 'media_path' => 'media/' . $b->id . '/5500/doc.pdf',
+            'media_mime' => 'application/pdf', 'media_name' => 'confidencial.pdf',
+            'status' => 'sent', 'sent_at' => now(),
         ]);
 
-        // Usuario da conta A: midia da B = 404 (escopo por conta no binding).
         $this->actingAs($userA)->get('/media/' . $logB->id)->assertNotFound();
-
-        // Dona da midia (conta B) enxerga normalmente.
-        $userB = User::create(['name' => 'B', 'email' => 'b@teste.local', 'password' => Hash::make('senha-forte-123')]);
-        $userB->accounts()->attach($b->id, ['role' => 'owner']);
-        $this->actingAs($userB)->get('/media/' . $logB->id)->assertOk();
     }
 }

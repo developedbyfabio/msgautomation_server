@@ -40,7 +40,7 @@ class Sender
         bool $fromMe = false,
         bool $flow = false,
         ?int $campaignId = null,
-        ?array $media = null, // Prompt 04: ['path' => relativo ao disco local, 'mime' => ...] — imagem
+        ?array $media = null, // Prompts 04/05: ['kind' => image|document, 'path' => relativo ao disco local, 'mime', 'name' => nome original]
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
@@ -131,19 +131,20 @@ class Sender
         $replyTo = $incomingMessageId !== null
             ? \App\Models\IncomingMessage::withoutAccountScope()->whereKey($incomingMessageId)->value('evolution_message_id')
             : null;
-        //    Prompt 04: com anexo, o transporte e sendImage (caption = texto
-        //    resolvido); MESMOS freios/janela/log acima — anexo nao fura teto.
+        //    Prompts 04/05: com anexo, o transporte e sendImage/sendDocument
+        //    (caption = texto resolvido); MESMOS freios/janela/log — anexo nao
+        //    fura teto.
         try {
-            $sent = $media !== null
-                ? $this->providers->for($channel)->sendImage(
-                    $channel,
-                    $jid,
-                    \Illuminate\Support\Facades\Storage::disk('local')->path($media['path']),
-                    (string) $media['mime'],
-                    $textoEnvio !== '' ? $textoEnvio : null,
-                    $replyTo,
-                )
-                : $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
+            if ($media !== null) {
+                $provider = $this->providers->for($channel);
+                $absoluto = \Illuminate\Support\Facades\Storage::disk('local')->path($media['path']);
+                $caption = $textoEnvio !== '' ? $textoEnvio : null;
+                $sent = ($media['kind'] ?? 'image') === 'document'
+                    ? $provider->sendDocument($channel, $jid, $absoluto, (string) $media['mime'], (string) ($media['name'] ?? basename($absoluto)), $caption, $replyTo)
+                    : $provider->sendImage($channel, $jid, $absoluto, (string) $media['mime'], $caption, $replyTo);
+            } else {
+                $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
+            }
         } catch (WhatsappSendException) {
             $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
 
@@ -176,6 +177,7 @@ class Sender
         return [
             'media_path' => $media['path'] ?? null,  // Prompt 04
             'media_mime' => $media['mime'] ?? null,
+            'media_name' => $media['name'] ?? null,  // Prompt 05
             'account_id' => $accountId,
             'channel_id' => $channel->id,
             'incoming_message_id' => $incomingMessageId,

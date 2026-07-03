@@ -60,7 +60,8 @@ Route::middleware('auth')->group(function () {
         $log = \App\Models\AutoReplyLog::query()->findOrFail($logId);
         abort_unless($log->media_path !== null, 404);
 
-        return \Illuminate\Support\Facades\Storage::disk('local')->response($log->media_path);
+        // Prompt 05: documento baixa/abre com o nome ORIGINAL (path no disco e uuid).
+        return \Illuminate\Support\Facades\Storage::disk('local')->response($log->media_path, $log->media_name);
     })->whereNumber('logId')->name('media.show');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');

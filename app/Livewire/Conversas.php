@@ -22,8 +22,8 @@ class Conversas extends Component
     public ?string $selectedJid = null;
     public string $body = '';
 
-    /** Prompt 04 — imagem anexada (upload temporario do Livewire; preview antes de enviar). */
-    public $foto = null;
+    /** Prompts 04/05 — anexo (imagem ou documento; upload temporario do Livewire; preview antes de enviar). */
+    public $anexo = null;
     public ?string $sendStatus = null;
     public ?string $confirmingMuteJid = null;
     public string $search = '';
@@ -198,46 +198,69 @@ class Conversas extends Component
         $this->confirmingMuteJid = null;
     }
 
-    // ---- Prompt 04: anexo de imagem -----------------------------------------
+    // ---- Prompts 04/05: anexos (imagem e documento) -------------------------
 
-    /** Limites do canal mais restritivo (Meta: imagem jpeg/png ate 5 MB; webp aceito na Evolution). */
-    private const REGRAS_FOTO = ['foto' => 'image|mimes:jpg,jpeg,png,webp|max:5120'];
+    /** Mimes de documento aceitos (obrigatorio: PDF; docx/xlsx saem de graca na mesma mecanica). */
+    private const MIMES_DOCUMENTO = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
 
-    private const MENSAGENS_FOTO = [
-        'foto.image' => 'O arquivo escolhido nao e uma imagem.',
-        'foto.mimes' => 'Tipo nao aceito — use jpg, jpeg, png ou webp.',
-        'foto.max' => 'Imagem acima de 5 MB (limite do canal).',
+    /** 'image' | 'document' (pelo mime real do upload). */
+    private function anexoKind(): string
+    {
+        return str_starts_with((string) ($this->anexo?->getMimeType() ?? ''), 'image/') ? 'image' : 'document';
+    }
+
+    /**
+     * Regras por tipo: imagem jpeg/png/webp ate 5 MB (limite de imagem da Meta);
+     * documento PDF/docx/xlsx ate 10 MB (folga sob os limites dos canais e do
+     * upload do Livewire — o teto da Meta pra documento e bem maior).
+     */
+    private function regrasAnexo(): array
+    {
+        return $this->anexoKind() === 'image'
+            ? ['anexo' => 'image|mimes:jpg,jpeg,png,webp|max:5120']
+            : ['anexo' => 'file|mimetypes:' . implode(',', self::MIMES_DOCUMENTO) . '|max:10240'];
+    }
+
+    private const MENSAGENS_ANEXO = [
+        'anexo.image' => 'O arquivo escolhido nao e uma imagem valida.',
+        'anexo.mimes' => 'Imagem em tipo nao aceito — use jpg, jpeg, png ou webp.',
+        'anexo.mimetypes' => 'Documento em tipo nao aceito — use PDF (ou docx/xlsx).',
+        'anexo.max' => 'Arquivo acima do limite (5 MB pra imagem, 10 MB pra documento).',
     ];
 
     /** Valida na hora do anexo: tipo/tamanho invalido e recusado ANTES do preview. */
-    public function updatedFoto(): void
+    public function updatedAnexo(): void
     {
-        $this->resetErrorBag('foto');
+        $this->resetErrorBag('anexo');
         try {
-            $this->validate(self::REGRAS_FOTO, self::MENSAGENS_FOTO);
+            $this->validate($this->regrasAnexo(), self::MENSAGENS_ANEXO);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            $this->foto = null;
+            $this->anexo = null;
             throw $e;
         }
     }
 
-    public function cancelarFoto(): void
+    public function cancelarAnexo(): void
     {
-        $this->foto = null;
-        $this->resetErrorBag('foto');
+        $this->anexo = null;
+        $this->resetErrorBag('anexo');
     }
 
     /**
-     * Envio manual de IMAGEM: mesma disciplina do texto (Sender modo manual —
-     * respeita tetos, ignora kill switch, janela de 24h no cloud). O texto
-     * digitado vira LEGENDA. Midia guardada no disco privado, por conta.
+     * Envio manual de ANEXO (imagem/documento): mesma disciplina do texto
+     * (Sender modo manual — respeita tetos, ignora kill switch, janela de 24h
+     * no cloud). O texto digitado vira LEGENDA. Midia no disco privado, por conta.
      */
-    private function sendFoto(Sender $sender): void
+    private function sendAnexo(Sender $sender): void
     {
-        if (! $this->foto || ! $this->selectedJid) {
+        if (! $this->anexo || ! $this->selectedJid) {
             return;
         }
-        $this->validate(self::REGRAS_FOTO, self::MENSAGENS_FOTO);
+        $this->validate($this->regrasAnexo(), self::MENSAGENS_ANEXO);
 
         $channel = $this->channel();
         if (! $channel) {
@@ -246,34 +269,38 @@ class Conversas extends Component
             return;
         }
 
+        $kind = $this->anexoKind();
+
         // Path POR CONTA (isolamento): media/{account}/{numero}/{uuid}.{ext}
         $dir = 'media/' . $this->accountId() . '/' . $this->numberFromJid($this->selectedJid);
-        $nome = (string) Str::uuid() . '.' . strtolower($this->foto->getClientOriginalExtension());
-        $path = $this->foto->storeAs($dir, $nome, 'local');
+        $nome = (string) Str::uuid() . '.' . strtolower($this->anexo->getClientOriginalExtension());
+        $path = $this->anexo->storeAs($dir, $nome, 'local');
 
         $log = $sender->send('manual', $channel, $this->selectedJid, trim($this->body), media: [
+            'kind' => $kind,
             'path' => $path,
-            'mime' => (string) $this->foto->getMimeType(),
+            'mime' => (string) $this->anexo->getMimeType(),
+            'name' => (string) $this->anexo->getClientOriginalName(),
         ]);
 
-        $this->foto = null;
+        $this->anexo = null;
         if ($log->status === 'sent') {
             $this->body = '';
             $this->sendStatus = null;
-            $this->dispatch('toast', message: 'Imagem enviada.');
+            $this->dispatch('toast', message: $kind === 'image' ? 'Imagem enviada.' : 'Documento enviado.');
         } else {
             $this->sendStatus = $log->status === 'blocked'
                 ? 'Bloqueado por freio: ' . $log->motivo
-                : 'Falha no envio da imagem.';
+                : 'Falha no envio do anexo.';
         }
     }
 
     /** Envio MANUAL (R1): respeita tetos protetivos, ignora kill switch. Envia de verdade. */
     public function sendManual(Sender $sender): void
     {
-        // Prompt 04: com anexo pendente, o Enviar manda a IMAGEM (texto = legenda).
-        if ($this->foto) {
-            $this->sendFoto($sender);
+        // Prompts 04/05: com anexo pendente, o Enviar manda o ANEXO (texto = legenda).
+        if ($this->anexo) {
+            $this->sendAnexo($sender);
 
             return;
         }
@@ -447,8 +474,10 @@ class Conversas extends Component
                 'at' => $l->sent_at ?? $l->created_at,
                 'preview' => MessagePreview::plain($l->response_text),
                 'kind' => $l->mode === 'auto' ? 'out_bot' : 'out_manual',
-                // Prompt 04: imagem enviada renderiza na bolha (rota autenticada+escopada).
+                // Prompts 04/05: anexo enviado renderiza na bolha (rota autenticada+escopada).
                 'media' => $l->media_path ? route('media.show', $l->id) : null,
+                'media_kind' => str_starts_with((string) $l->media_mime, 'image/') ? 'image' : 'document',
+                'media_name' => $l->media_name,
             ];
         }
 

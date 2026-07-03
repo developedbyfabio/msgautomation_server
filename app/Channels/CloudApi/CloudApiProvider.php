@@ -215,6 +215,28 @@ class CloudApiProvider implements ChannelProvider
      */
     public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData
     {
+        $node = ['id' => $this->uploadMedia($channel, $filePath, $mime, basename($filePath))];
+        if ($caption !== null && $caption !== '') {
+            $node['caption'] = $caption;
+        }
+
+        return $this->sendMediaMessage($channel, $to, 'image', $node, $replyTo);
+    }
+
+    /** Prompt 05 — documento: upload -> media_id -> type=document com filename (nome real no WhatsApp). */
+    public function sendDocument(Channel $channel, string $to, string $filePath, string $mime, string $fileName, ?string $caption = null, ?string $replyTo = null): SentMessageData
+    {
+        $node = ['id' => $this->uploadMedia($channel, $filePath, $mime, $fileName), 'filename' => $fileName];
+        if ($caption !== null && $caption !== '') {
+            $node['caption'] = $caption;
+        }
+
+        return $this->sendMediaMessage($channel, $to, 'document', $node, $replyTo);
+    }
+
+    /** Etapa 1 da midia na Meta: upload multipart pro /{phone_number_id}/media -> media_id. */
+    private function uploadMedia(Channel $channel, string $filePath, string $mime, string $fileName): string
+    {
         $cred = $this->credentialsFor($channel);
         if ($cred['access_token'] === '' || $cred['phone_number_id'] === '') {
             throw new WhatsappSendException('Cloud API: canal sem credenciais (access_token/phone_number_id).');
@@ -222,15 +244,14 @@ class CloudApiProvider implements ChannelProvider
 
         $conteudo = @file_get_contents($filePath);
         if ($conteudo === false) {
-            throw new WhatsappSendException('Cloud API sendImage: arquivo de midia ilegivel.');
+            throw new WhatsappSendException('Cloud API: arquivo de midia ilegivel.');
         }
 
-        // Etapa 1 — upload da midia.
         $upload = Http::baseUrl($this->graphBase())
             ->withToken($cred['access_token'])
             ->acceptJson()
-            ->timeout(40)
-            ->attach('file', $conteudo, basename($filePath), ['Content-Type' => $mime])
+            ->timeout(60)
+            ->attach('file', $conteudo, $fileName, ['Content-Type' => $mime])
             ->post('/' . $this->graphVersion() . '/' . $cred['phone_number_id'] . '/media', [
                 'messaging_product' => 'whatsapp',
             ]);
@@ -240,25 +261,26 @@ class CloudApiProvider implements ChannelProvider
                 . ', code Meta: ' . (data_get($upload->json(), 'error.code') ?? '?') . ')';
             Log::warning('Cloud API: upload de midia falhou.', ['channel' => $channel->id, 'motivo' => $motivo]);
 
-            throw new WhatsappSendException("Cloud API sendImage falhou: {$motivo}.");
+            throw new WhatsappSendException("Cloud API upload falhou: {$motivo}.");
         }
 
-        $mediaId = (string) data_get($upload->json(), 'id');
+        return (string) data_get($upload->json(), 'id');
+    }
 
-        // Etapa 2 — mensagem referenciando o media_id.
+    /** Etapa 2 da midia na Meta: mensagem type=image|document referenciando o media_id. */
+    private function sendMediaMessage(Channel $channel, string $to, string $type, array $node, ?string $replyTo): SentMessageData
+    {
+        $cred = $this->credentialsFor($channel);
+
         $numero = str_contains($to, '@') ? Str::before($to, '@') : $to;
         $numero = BrWaId::paraEnvio($numero);
 
-        $image = ['id' => $mediaId];
-        if ($caption !== null && $caption !== '') {
-            $image['caption'] = $caption;
-        }
         $body = [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $numero,
-            'type' => 'image',
-            'image' => $image,
+            'type' => $type,
+            $type => $node,
         ];
         if ($replyTo !== null && $replyTo !== '') {
             $body['context'] = ['message_id' => $replyTo];
@@ -276,9 +298,9 @@ class CloudApiProvider implements ChannelProvider
                 $resp->status() === 429 => 'limite de requisicoes da Meta',
                 default => 'erro ' . $resp->status() . ' (code Meta: ' . (data_get($resp->json(), 'error.code') ?? '?') . ')',
             };
-            Log::warning('Cloud API: envio de imagem falhou.', ['channel' => $channel->id, 'motivo' => $motivo]);
+            Log::warning("Cloud API: envio de {$type} falhou.", ['channel' => $channel->id, 'motivo' => $motivo]);
 
-            throw new WhatsappSendException("Cloud API sendImage falhou: {$motivo}.");
+            throw new WhatsappSendException("Cloud API send{$type} falhou: {$motivo}.");
         }
 
         return new SentMessageData(

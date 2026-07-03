@@ -10,6 +10,8 @@ User=root
 WorkingDirectory=/srv/www/msgautomation
 # Porta canonica 8080 (o webhook da Evolution aponta pra host.docker.internal:8080).
 # Bind 0.0.0.0 para o container alcancar via gateway. UI esta atras de login.
+# Prompt 05 (anexos): em producao os limites de upload (25M/30M) vivem num
+# drop-in em msgautomation-serve.service.d/uploads.conf (php.ini da CLI e 2M).
 ExecStart=/usr/bin/php /srv/www/msgautomation/artisan serve --host=0.0.0.0 --port=8080
 Restart=always
 RestartSec=2

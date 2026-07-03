@@ -120,29 +120,41 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
      */
     public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData
     {
+        return $this->sendMedia($channel, $to, 'image', $filePath, $mime, basename($filePath), $caption);
+    }
+
+    /** Prompt 05 — documento (PDF etc.): mesmo sendMedia, mediatype 'document' + nome original. */
+    public function sendDocument(Channel $channel, string $to, string $filePath, string $mime, string $fileName, ?string $caption = null, ?string $replyTo = null): SentMessageData
+    {
+        return $this->sendMedia($channel, $to, 'document', $filePath, $mime, $fileName, $caption);
+    }
+
+    /** Nucleo comum de midia da Evolution v2.3.7 (base64 no corpo). */
+    private function sendMedia(Channel $channel, string $to, string $mediatype, string $filePath, string $mime, string $fileName, ?string $caption): SentMessageData
+    {
         $c = $this->credentialsFor($channel);
         $number = str_contains($to, '@') ? Str::before($to, '@') : $to;
 
         $conteudo = @file_get_contents($filePath);
         if ($conteudo === false) {
-            throw new WhatsappSendException('Evolution sendImage: arquivo de midia ilegivel.');
+            throw new WhatsappSendException("Evolution sendMedia ({$mediatype}): arquivo de midia ilegivel.");
         }
 
         $resp = Http::baseUrl(rtrim($c['base_url'], '/'))
             ->withHeaders(['apikey' => $c['apikey']])
             ->acceptJson()
-            ->timeout(40)
+            ->timeout(60)
             ->post("/message/sendMedia/{$c['instance']}", [
                 'number' => $number,
-                'mediatype' => 'image',
+                'mediatype' => $mediatype,
                 'mimetype' => $mime,
                 'caption' => (string) $caption,
                 'media' => base64_encode($conteudo),
-                'fileName' => basename($filePath),
+                'fileName' => $fileName,
             ]);
 
         if ($resp->failed()) {
-            throw new WhatsappSendException("Evolution sendImage falhou (HTTP {$resp->status()}).");
+            throw new WhatsappSendException("Evolution sendMedia ({$mediatype}) falhou (HTTP {$resp->status()}).");
         }
 
         $json = $resp->json() ?? [];
