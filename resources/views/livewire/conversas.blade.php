@@ -358,7 +358,9 @@
                                 </template>
                             </div>
                         </div>
-                        <textarea x-ref="caixa" wire:model="body" rows="1" placeholder="Mensagem manual..." enterkeyhint="send"
+                        {{-- Prompt 10: hint removido; o aviso de seguranca (manual envia DE VERDADE,
+                             mesmo com o robo desligado) sobrevive discreto no placeholder. --}}
+                        <textarea x-ref="caixa" wire:model="body" rows="1" placeholder="Mensagem manual (envia de verdade)..." enterkeyhint="send"
                             @input="resize()"
                             @keydown.enter="$event.preventDefault(); ($event.ctrlKey || $event.shiftKey) ? inserir('\n') : enviar()"
                             class="max-h-44 flex-1 resize-none overflow-y-auto rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"></textarea>
@@ -369,7 +371,6 @@
                             Enviar
                         </button>
                     </form>
-                    <p class="mt-1 text-[11px] text-zinc-400">Enter envia · Ctrl+Enter ou Shift+Enter quebra linha · Envio manual envia de verdade (respeita tetos, ignora o kill switch).</p>
                 @endif
             </div>
         @endif
