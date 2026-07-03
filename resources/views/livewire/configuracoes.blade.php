@@ -70,6 +70,36 @@
             </div>
         </div>
 
+        {{-- Prompt 14 — auto-download de midia recebida (por conta; instantaneo) --}}
+        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-1 font-semibold">
+                        <flux:icon icon="arrow-down-tray" variant="micro" class="text-zinc-500" />
+                        Baixar midia recebida automaticamente
+                        <x-info-tip text="Quando LIGADO, imagens e audios recebidos sao baixados e guardados pra abrir/ouvir na conversa. Desligado, fica so o rotulo (e a miniatura da imagem, quando houver). Nao afeta o robo nem o envio." />
+                    </div>
+                    <p class="mt-1 max-w-md text-sm text-zinc-500">
+                        Vale pra esta conta. O download roda em segundo plano (nao atrasa a resposta do robo).
+                    </p>
+                </div>
+                <button type="button" wire:click="toggleMediaAutodownload"
+                    @class([
+                        'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition',
+                        'bg-emerald-500' => $media_autodownload,
+                        'bg-zinc-300 dark:bg-zinc-700' => ! $media_autodownload,
+                    ])
+                    role="switch" aria-checked="{{ $media_autodownload ? 'true' : 'false' }}">
+                    <span @class([
+                        'inline-block size-5 transform rounded-full bg-white shadow transition',
+                        'translate-x-6' => $media_autodownload,
+                        'translate-x-1' => ! $media_autodownload,
+                    ])></span>
+                </button>
+            </div>
+            <div class="mt-3 text-sm font-medium">Estado: {{ $media_autodownload ? 'LIGADO' : 'desligado' }}</div>
+        </div>
+
         {{-- IA (Camada 3) — kill switch PROPRIO, separado do robo --}}
         <div @class([
             'rounded-xl border p-5',

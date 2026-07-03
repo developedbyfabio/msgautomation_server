@@ -76,7 +76,7 @@
         'min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950 lg:flex',
         'hidden' => ! $selectedJid,
         'flex' => (bool) $selectedJid,
-    ])>
+    ]) x-data="{ lightboxSrc: null }">
         @if (! $selectedJid)
             <div class="flex h-full flex-col items-center justify-center gap-2 text-zinc-400">
                 <flux:icon icon="chat-bubble-left-right" class="size-10" />
@@ -236,10 +236,13 @@
                                      por URL tambem (?thumb=1) — sem base64 inline no HTML do poll. --}}
                                 @php $imgSrc = $msg['thumb_url'] ?? $msg['full_url'] ?? null; @endphp
                                 @if ($msg['in_kind'] === 'image' && $imgSrc)
-                                    <a href="{{ $msg['full_url'] ?? $imgSrc }}" target="_blank" rel="noopener">
+                                    {{-- Prompt 14: clicar abre em MODAL/lightbox (nao nova aba). A imagem
+                                         cheia so carrega ao abrir (o :src do overlay so recebe a URL no clique). --}}
+                                    <button type="button" @click="lightboxSrc = '{{ $msg['full_url'] ?? $imgSrc }}'"
+                                        class="block cursor-zoom-in" aria-label="Ampliar imagem">
                                         <img src="{{ $imgSrc }}" alt="Imagem recebida" loading="lazy"
                                             class="mb-1 max-h-64 max-w-full rounded-lg object-contain" />
-                                    </a>
+                                    </button>
                                     @if (empty($msg['full_url']))
                                         <div class="mb-0.5 flex items-center gap-1 text-[10px] opacity-70">
                                             <flux:icon icon="photo" variant="micro" class="size-3 shrink-0" />
@@ -455,6 +458,23 @@
                 @endif
             </div>
         @endif
+
+        {{-- Prompt 14 — lightbox de imagem (Alpine puro; Flux modal e Pro). Abre por
+             cima da conversa (overlay), fecha no X, no backdrop e no ESC. A imagem cheia
+             so e buscada ao abrir (:src recebe a URL no clique). Overlay = nao mexe no
+             scroll interno nem no layout de altura fixa (prompt 09). --}}
+        <div x-cloak x-show="lightboxSrc" x-transition.opacity
+            @keydown.escape.window="lightboxSrc = null"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            @click.self="lightboxSrc = null">
+            <button type="button" @click="lightboxSrc = null"
+                class="absolute right-3 top-3 inline-flex size-10 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+                aria-label="Fechar">
+                <flux:icon icon="x-mark" variant="mini" />
+            </button>
+            <img :src="lightboxSrc" alt="Imagem em tamanho grande"
+                class="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl" @click.stop />
+        </div>
     </section>
 
     {{-- PAINEL DE INFO DO CONTATO (S4) — drawer lateral --}}

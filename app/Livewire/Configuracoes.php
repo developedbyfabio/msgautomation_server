@@ -23,6 +23,9 @@ class Configuracoes extends Component
     public bool $skip_groups = true;
     public bool $warmup_enabled = false;
 
+    // Prompt 14 — auto-download de midia recebida (por conta; default do .env quando nunca tocado).
+    public bool $media_autodownload = true;
+
     // S2 — toggles liga/desliga por freio (desligado = nao bloqueia).
     public bool $window_enabled = true;
     public bool $min_interval_enabled = true;
@@ -82,6 +85,8 @@ class Configuracoes extends Component
         $this->delay_min_seconds = (int) $s->delay_min_seconds;
         $this->delay_max_seconds = (int) $s->delay_max_seconds;
         $this->skip_groups = (bool) $s->skip_groups;
+        // Prompt 14: mostra o estado EFETIVO (escolha da tela, ou default do .env).
+        $this->media_autodownload = $s->mediaAutodownloadEnabled();
         $this->warmup_enabled = (bool) $s->warmup_enabled;
         $this->window_enabled = (bool) $s->window_enabled;
         $this->min_interval_enabled = (bool) $s->min_interval_enabled;
@@ -134,6 +139,19 @@ class Configuracoes extends Component
     public function cancelEnable(): void
     {
         $this->confirmingEnable = false;
+    }
+
+    /**
+     * Prompt 14 — liga/desliga o auto-download de midia recebida (INSTANTANEO, sem
+     * modal). Grava a escolha EXPLICITA por conta (passa a mandar sobre o .env).
+     */
+    public function toggleMediaAutodownload(): void
+    {
+        $this->media_autodownload = ! $this->media_autodownload;
+        $this->settings()->update(['media_autodownload' => $this->media_autodownload]);
+        $this->dispatch('toast', message: $this->media_autodownload
+            ? 'Auto-download de midia LIGADO.'
+            : 'Auto-download de midia desligado.');
     }
 
     /**

@@ -3,6 +3,10 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Alpine: esconde elementos com x-cloak ate o Alpine inicializar (evita flash do
+   overlay/lightbox e do popup de emoji no carregamento da pagina). */
+[x-cloak] { display: none !important; }
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../../app/Livewire/**/*.php';

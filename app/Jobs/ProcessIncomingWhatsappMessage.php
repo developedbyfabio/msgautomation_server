@@ -113,10 +113,10 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        // Prompt 13 — midia recebida: baixa/armazena em JOB SEPARADO (best-effort,
-        // nao-bloqueante). O reativo abaixo NUNCA espera nem depende disto. Gated por
-        // config (OFF nos testes) pra nao disparar HTTP no inbound da suite.
-        if (config('services.incoming_media.download', true) && $message->mediaCategory() !== null) {
+        // Prompt 13/14 — midia recebida: baixa/armazena em JOB SEPARADO (best-effort,
+        // nao-bloqueante). O reativo abaixo NUNCA espera nem depende disto. Gate POR
+        // CONTA (Prompt 14): a opcao da tela manda; sem opcao, cai no default do .env.
+        if ($message->mediaCategory() !== null && $this->settingsDe($account)->mediaAutodownloadEnabled()) {
             DownloadIncomingMedia::dispatch((int) $message->id, (int) $account->id, (int) $channel->id);
         }
 

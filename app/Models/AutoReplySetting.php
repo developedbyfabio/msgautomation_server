@@ -23,6 +23,7 @@ class AutoReplySetting extends Model
         'delay_min_seconds',
         'delay_max_seconds',
         'skip_groups',
+        'media_autodownload', // Prompt 14: baixar midia recebida (null = default do .env)
         'warmup_enabled',
         'window_enabled',
         'min_interval_enabled',
@@ -53,6 +54,7 @@ class AutoReplySetting extends Model
         return [
             'enabled' => 'boolean',
             'skip_groups' => 'boolean',
+            'media_autodownload' => 'boolean',
             'warmup_enabled' => 'boolean',
             'window_enabled' => 'boolean',
             'min_interval_enabled' => 'boolean',
@@ -87,6 +89,16 @@ class AutoReplySetting extends Model
         $t = $this->ai_approval_topics;
 
         return is_array($t) ? array_values($t) : self::AI_APPROVAL_TOPICS;
+    }
+
+    /**
+     * Prompt 14 — auto-download de midia recebida EFETIVO: a escolha da tela
+     * (coluna, se setada) MANDA; null = cai no default do .env
+     * (services.incoming_media.download). Precedencia: tela > .env.
+     */
+    public function mediaAutodownloadEnabled(): bool
+    {
+        return $this->media_autodownload ?? (bool) config('services.incoming_media.download', true);
     }
 
     public function account(): BelongsTo

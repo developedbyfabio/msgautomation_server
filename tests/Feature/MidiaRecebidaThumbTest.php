@@ -66,7 +66,7 @@ class MidiaRecebidaThumbTest extends TestCase
             ->assertSee('olha essa foto'); // legenda preservada
     }
 
-    public function test_imagem_cheia_baixada_vira_link_para_a_rota(): void
+    public function test_imagem_cheia_baixada_abre_no_lightbox(): void
     {
         $a = Account::create(['name' => 'A']);
         $c = Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
@@ -80,8 +80,9 @@ class MidiaRecebidaThumbTest extends TestCase
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', $jid)
-            // abre a imagem cheia (sem ?thumb) — o indicador "Previa" some.
-            ->assertSeeHtml('href="' . route('media.incoming', $msg->id) . '"')
+            // Prompt 14: clicar abre no lightbox com a imagem CHEIA (sem ?thumb), nao em nova aba.
+            ->assertSeeHtml("lightboxSrc = '" . route('media.incoming', $msg->id) . "'")
+            ->assertDontSeeHtml('target="_blank"')
             ->assertDontSee('Previa (imagem completa em breve)');
     }
 
