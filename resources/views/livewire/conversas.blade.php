@@ -226,9 +226,53 @@
                 @if ($isGroup)
                     <div class="text-center text-xs text-zinc-400">Envio manual desabilitado para grupos.</div>
                 @else
-                    <form wire:submit="sendManual" class="flex items-end gap-2">
-                        <textarea wire:model="body" rows="1" placeholder="Mensagem manual..."
-                            class="max-h-32 flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                    {{-- Prompt 03 — composer: Enter ENVIA; Ctrl/Shift+Enter quebra linha;
+                         textarea auto-crescente (ate ~8 linhas, depois scroll); emojis
+                         (utf8mb4 ponta a ponta + seletor simples). So muda COMO dispara —
+                         o sendManual (R1) e identico. --}}
+                    <form wire:submit="sendManual" class="flex items-end gap-2"
+                        x-data="{
+                            emojisAbertos: false,
+                            emojis: ['😀','😂','😉','😍','🥰','😅','🙃','😎','🤝','🙏','👍','👎','👏','💪','🎉','❤️','🔥','✅','❌','⚠️','⏰','📞','📄','💰'],
+                            resize() {
+                                const el = $refs.caixa;
+                                el.style.height = 'auto';
+                                el.style.height = Math.min(el.scrollHeight, 176) + 'px';
+                            },
+                            sincronizar() {
+                                $refs.caixa.dispatchEvent(new Event('input', { bubbles: true }));
+                                this.resize();
+                            },
+                            inserir(texto) {
+                                const el = $refs.caixa;
+                                const [i, f] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+                                el.value = el.value.slice(0, i) + texto + el.value.slice(f);
+                                el.selectionStart = el.selectionEnd = i + texto.length;
+                                this.sincronizar();
+                                el.focus();
+                            },
+                            enviar() {
+                                $wire.sendManual().then(() => $nextTick(() => this.resize()));
+                            },
+                        }">
+                        <div class="relative">
+                            <button type="button" @click="emojisAbertos = !emojisAbertos"
+                                class="inline-flex size-9 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
+                                aria-label="Inserir emoji" title="Inserir emoji">
+                                <flux:icon icon="face-smile" variant="mini" />
+                            </button>
+                            <div x-show="emojisAbertos" x-cloak @click.outside="emojisAbertos = false" x-transition
+                                class="absolute bottom-11 left-0 z-30 grid w-56 grid-cols-8 gap-0.5 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                                <template x-for="e in emojis" :key="e">
+                                    <button type="button" class="rounded p-1 text-lg leading-none hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                                        x-text="e" @click="inserir(e); emojisAbertos = false"></button>
+                                </template>
+                            </div>
+                        </div>
+                        <textarea x-ref="caixa" wire:model="body" rows="1" placeholder="Mensagem manual..." enterkeyhint="send"
+                            @input="resize()"
+                            @keydown.enter="$event.preventDefault(); ($event.ctrlKey || $event.shiftKey) ? inserir('\n') : enviar()"
+                            class="max-h-44 flex-1 resize-none overflow-y-auto rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"></textarea>
                         <button type="submit" wire:loading.attr="disabled" wire:target="sendManual"
                             class="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
                             <flux:icon icon="paper-airplane" variant="micro" wire:loading.remove wire:target="sendManual" />
@@ -236,7 +280,7 @@
                             Enviar
                         </button>
                     </form>
-                    <p class="mt-1 text-[11px] text-zinc-400">Envio manual envia de verdade (respeita tetos, ignora o kill switch).</p>
+                    <p class="mt-1 text-[11px] text-zinc-400">Enter envia · Ctrl+Enter ou Shift+Enter quebra linha · Envio manual envia de verdade (respeita tetos, ignora o kill switch).</p>
                 @endif
             </div>
         @endif
