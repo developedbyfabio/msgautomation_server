@@ -4,6 +4,13 @@
         <p class="text-sm text-zinc-500">Seus dados de acesso. Ações sensíveis pedem a senha atual.</p>
     </div>
 
+    {{-- Prompt 29: aviso quando o super-admin e mandado pra ca por falta de 2FA. --}}
+    @if (session('aviso'))
+        <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            {{ session('aviso') }}
+        </div>
+    @endif
+
     {{-- Dados + e-mail --}}
     <section class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <h2 class="mb-1 text-sm font-semibold">Dados da conta</h2>

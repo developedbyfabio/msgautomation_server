@@ -95,7 +95,8 @@ Route::middleware('auth')->group(function () {
 
     // Prompt 22 — administracao de tenants (super-admin da plataforma). UNICO ponto
     // cross-tenant; fora do gate de conexao (nao depende de canal/WhatsApp do tenant).
-    Route::middleware('platform.admin')->group(function () {
+    // Prompt 29: super-admin + 2FA obrigatorio (require.2fa.admin) na area de admin.
+    Route::middleware(['platform.admin', 'require.2fa.admin'])->group(function () {
         Route::get('/admin/tenants', \App\Livewire\Admin\Tenants::class)->name('admin.tenants');
     });
 

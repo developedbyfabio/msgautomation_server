@@ -45,10 +45,13 @@ class AdminTenantsTest extends TestCase
         $admin = $this->usuario($conta, admin: true, email: 'admin@plataforma.local');
         $comum = $this->usuario($conta, admin: false, email: 'comum@cliente.local');
 
+        // Prompt 29: super-admin precisa de 2FA pra acessar /admin/* — habilita.
+        $admin->forceFill(['two_factor_secret' => encrypt('ADMIN2FA'), 'two_factor_confirmed_at' => now()])->save();
+
         // Deslogado PRIMEIRO (actingAs persiste a auth no resto do teste).
         $this->get('/admin/tenants')->assertRedirect(route('login'));      // deslogado
         $this->actingAs($comum)->get('/admin/tenants')->assertForbidden(); // 403 (logado, nao-admin)
-        $this->actingAs($admin)->get('/admin/tenants')->assertOk();        // super-admin
+        $this->actingAs($admin)->get('/admin/tenants')->assertOk();        // super-admin COM 2FA
     }
 
     // ---- 2. criar tenant -------------------------------------------------------
