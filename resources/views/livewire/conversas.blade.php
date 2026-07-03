@@ -1,6 +1,11 @@
 <div class="flex h-full" wire:poll.5s>
-    {{-- LISTA DE CONVERSAS --}}
-    <aside class="flex w-80 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+    {{-- LISTA DE CONVERSAS — mobile: tela cheia e some quando ha conversa aberta;
+         desktop (lg+): coluna fixa de 320px SEMPRE visivel (comportamento aprovado, intacto). --}}
+    <aside @class([
+        'w-full flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:flex lg:w-80 lg:shrink-0',
+        'hidden' => $selectedJid,
+        'flex' => ! $selectedJid,
+    ])>
         <div class="shrink-0 border-b border-zinc-100 p-2.5 dark:border-zinc-800">
             <div class="relative">
                 <span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-zinc-400">
@@ -65,8 +70,13 @@
         </div>
     </aside>
 
-    {{-- THREAD --}}
-    <section class="flex min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
+    {{-- THREAD — mobile: tela cheia quando ha conversa aberta, some quando nao ha;
+         desktop (lg+): coluna da direita SEMPRE visivel (com placeholder), como hoje. --}}
+    <section @class([
+        'min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950 lg:flex',
+        'hidden' => ! $selectedJid,
+        'flex' => (bool) $selectedJid,
+    ])>
         @if (! $selectedJid)
             <div class="flex h-full flex-col items-center justify-center gap-2 text-zinc-400">
                 <flux:icon icon="chat-bubble-left-right" class="size-10" />
@@ -75,6 +85,12 @@
         @else
             @php $modoAtual = $selectedContact?->auto_reply_mode ?? 'default'; @endphp
             <div class="flex shrink-0 items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                {{-- Prompt 08 — voltar pra lista (so mobile; no desktop a lista nunca some). --}}
+                <button type="button" wire:click="voltarParaLista"
+                    class="-ms-2 inline-flex size-9 shrink-0 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 lg:hidden"
+                    aria-label="Voltar pra lista de conversas">
+                    <flux:icon icon="arrow-left" variant="mini" />
+                </button>
                 {{-- Nome/numero clicavel -> abre painel de info (S4). --}}
                 <button type="button" wire:click="openContactPanel" @disabled($isGroup)
                     class="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left transition enabled:hover:bg-zinc-100 disabled:cursor-default dark:enabled:hover:bg-zinc-800">
@@ -106,7 +122,9 @@
                                 default => ['bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300', 'segue a politica (default)'],
                             };
                         @endphp
-                        <flux:tooltip content="Estado atual da auto-resposta deste contato. on = robo responde (sob allowlist); off = nunca; default = segue a politica de Configuracoes.">
+                        {{-- Prompt 08: badge textual some no mobile (nao cabe; o estado ja aparece
+                             na cor dos botoes Aprovar/Silenciar). Desktop igual a hoje. --}}
+                        <flux:tooltip content="Estado atual da auto-resposta deste contato. on = robo responde (sob allowlist); off = nunca; default = segue a politica de Configuracoes." class="max-lg:hidden">
                             <span class="rounded-full px-2 py-0.5 font-medium {{ $badgeCls }}">auto: {{ $badgeTxt }}</span>
                         </flux:tooltip>
 

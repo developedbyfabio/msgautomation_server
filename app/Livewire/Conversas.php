@@ -49,6 +49,15 @@ class Conversas extends Component
         $this->showContactPanel = false;
     }
 
+    /** Prompt 08 — botao voltar do MOBILE: limpa a selecao pra lista voltar em tela cheia.
+     *  So estado de apresentacao; no desktop o botao nem existe (lg:hidden). */
+    public function voltarParaLista(): void
+    {
+        $this->selectedJid = null;
+        $this->sendStatus = null;
+        $this->showContactPanel = false;
+    }
+
     /** S4 — atualiza o nome do grupo sob demanda (re-busca na Evolution agora). */
     public function atualizarNomeGrupo(\App\Whatsapp\Groups\GroupNameResolver $resolver): void
     {

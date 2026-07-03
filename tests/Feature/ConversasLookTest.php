@@ -103,4 +103,22 @@ class ConversasLookTest extends TestCase
 
         Livewire::test(Conversas::class)->assertSee('10:00');
     }
+
+    /** Prompt 08 — mobile mostra UMA coluna por vez; o botao voltar limpa a selecao
+     *  (a visibilidade lista/thread e so classe responsiva em cima de $selectedJid). */
+    public function test_voltar_para_lista_limpa_a_selecao(): void
+    {
+        [$a, $c] = $this->scaffold();
+        $jid = '5541999990000@s.whatsapp.net';
+        Contact::create(['account_id' => $a->id, 'remote_jid' => $jid, 'push_name' => 'Joao']);
+        $this->msg($a, $c, $jid, 'oi', Carbon::create(2026, 6, 29, 13, 0, 0, 'UTC'), 'V1');
+
+        Livewire::test(Conversas::class)
+            ->call('select', $jid)
+            ->assertSet('selectedJid', $jid)
+            ->assertSeeHtml('voltarParaLista') // botao voltar presente na thread (lg:hidden no desktop)
+            ->call('voltarParaLista')
+            ->assertSet('selectedJid', null)
+            ->assertSee('Selecione uma conversa.');
+    }
 }
