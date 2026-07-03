@@ -24,6 +24,7 @@
         ['conhecimento', 'Conhecimento', 'book-open', 0],
         ['revisao', 'Revisao', 'inbox', $pendencias],
         ['campanhas', 'Campanhas', 'megaphone', 0],
+        ['logs', 'Logs', 'document-text', 0],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
         ['perfil', 'Perfil', 'user-circle', 0],
     ];

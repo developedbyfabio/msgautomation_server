@@ -51,6 +51,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/senhas', Senhas::class)->name('senhas');
     // Prompt 01 — perfil do usuario logado (email/senha/2FA); fora do gate de conexao.
     Route::get('/perfil', \App\Livewire\Perfil::class)->name('perfil');
+    // Prompt 02 — logs/eventos da conta (somente leitura; util mesmo desconectado).
+    Route::get('/logs', \App\Livewire\Logs::class)->name('logs');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
     // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.

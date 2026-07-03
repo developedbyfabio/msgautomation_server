@@ -48,6 +48,7 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         // adapta o payload da Meta). Sem hint (rota Evolution/legado/testes), o
         // alias WhatsappGateway segue identico — o canal vivo nao muda.
         $normalizador = $gateway;
+        $canalHint = null;
         if ($this->channelId !== null) {
             $canalHint = Channel::withoutAccountScope()->find($this->channelId);
             if ($canalHint !== null) {
@@ -56,8 +57,16 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         }
         $data = $normalizador->normalizeIncoming($this->payload);
 
-        // Evento que nao e mensagem (ou sem id) — nada a registrar.
+        // Evento que nao e mensagem (ou sem id) — nada a registrar. EXCECAO
+        // (Prompt 02): status FAILED da Meta agora e PERSISTIDO — foi o buraco
+        // do 130497 (a Meta aceita o envio com wamid e descarta assincrono; o
+        // "sent" do nosso log mentia). Statuses sent/delivered/read seguem
+        // ignorados (D5).
         if ($data === null) {
+            if ($canalHint?->provider === 'cloud_api') {
+                $this->registrarFalhasDeStatus($canalHint, $this->payload);
+            }
+
             return;
         }
 
@@ -126,6 +135,60 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         }
 
         $this->avaliarAutoResposta($account, $channel, $message, $data, $matcher, $guard);
+    }
+
+    /**
+     * Prompt 02 — statuses[] FAILED da Meta (assincronos, pos-aceite): marca o
+     * envio correspondente como FALHO (por wamid) e grava evento com code/title
+     * legiveis pro /logs. Idempotente por ref (re-entrega nao duplica). O 200
+     * rapido do webhook nao muda (isto roda no worker).
+     */
+    private function registrarFalhasDeStatus(Channel $canal, array $payload): void
+    {
+        foreach ((array) data_get($payload, 'entry', []) as $entry) {
+            foreach ((array) data_get($entry, 'changes', []) as $change) {
+                foreach ((array) data_get($change, 'value.statuses', []) as $status) {
+                    if (($status['status'] ?? '') !== 'failed') {
+                        continue;
+                    }
+
+                    $wamid = (string) ($status['id'] ?? '');
+                    $erro = (array) data_get($status, 'errors.0', []);
+                    $code = (string) ($erro['code'] ?? '?');
+                    $titulo = (string) ($erro['title'] ?? ($erro['message'] ?? 'falha sem descricao'));
+                    $recipient = (string) ($status['recipient_id'] ?? '?');
+                    $quando = is_numeric($status['timestamp'] ?? null)
+                        ? \Illuminate\Support\Carbon::createFromTimestampUTC((int) $status['timestamp'])
+                        : now();
+
+                    if ($wamid !== '') {
+                        \App\Models\AutoReplyLog::withoutAccountScope()
+                            ->where('provider_message_id', $wamid)
+                            ->where('status', 'sent')
+                            ->update(['status' => 'failed', 'motivo' => 'meta_' . $code]);
+                    }
+
+                    try {
+                        \App\Models\SystemEvent::withoutAccountScope()->firstOrCreate(
+                            ['ref' => 'status-failed:' . ($wamid !== '' ? $wamid : md5(json_encode($status)))],
+                            [
+                                'account_id' => $canal->account_id,
+                                'channel_id' => $canal->id,
+                                'type' => 'envio_falhou',
+                                'level' => 'error',
+                                'title' => "Meta recusou o envio ({$code}): " . mb_substr($titulo, 0, 130),
+                                'detail' => ['code' => $code, 'title' => $titulo, 'recipient_id' => $recipient, 'wamid' => $wamid],
+                                'occurred_at' => $quando,
+                            ],
+                        );
+                    } catch (\Throwable) {
+                        // corrida entre re-entregas: o unique(ref) segura; segue.
+                    }
+
+                    Log::info('Cloud API: status FAILED persistido.', ['code' => $code, 'channel' => $canal->id]);
+                }
+            }
+        }
     }
 
     /**

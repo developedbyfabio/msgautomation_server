@@ -65,5 +65,40 @@ class AppServiceProvider extends ServiceProvider
             /** @var Carbon $this */
             return $this->copy()->setTimezone(config('app.display_timezone'));
         });
+
+        // Prompt 02 — /logs: eventos de CANAL (mudanca de status) e ERROS do
+        // sistema (warning+) viram linhas em system_events. Best-effort com
+        // anti-loop: gravar evento NUNCA pode derrubar (nem re-disparar) o log.
+        \App\Models\Channel::updated(function (\App\Models\Channel $canal) {
+            if (! $canal->wasChanged('status')) {
+                return;
+            }
+            try {
+                \App\Models\SystemEvent::withoutAccountScope()->create([
+                    'account_id' => $canal->account_id,
+                    'channel_id' => $canal->id,
+                    'type' => 'canal',
+                    'level' => $canal->status === 'connected' ? 'info' : 'warning',
+                    'title' => "Canal {$canal->instance} ({$canal->provider}): " . ($canal->getOriginal('status') ?: '?') . " -> {$canal->status}",
+                    'occurred_at' => now(),
+                ]);
+            } catch (\Throwable) {
+                // best-effort
+            }
+        });
+
+        \Illuminate\Support\Facades\Log::listen(function (\Illuminate\Log\Events\MessageLogged $e) {
+            static $gravando = false;
+            if ($gravando || ! in_array($e->level, ['warning', 'error', 'critical', 'alert', 'emergency'], true)) {
+                return;
+            }
+            $gravando = true;
+            try {
+                // So a mensagem (contexto DESCARTADO — pode conter dado sensivel).
+                \App\Models\SystemEvent::global($e->level === 'warning' ? 'warning' : 'error', $e->message);
+            } finally {
+                $gravando = false;
+            }
+        });
     }
 }
