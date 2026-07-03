@@ -17,6 +17,12 @@ use Illuminate\Support\Facades\Route;
 // S2 — login single-user. A UI estava aberta na LAN (0.0.0.0:8080) sem auth.
 Route::middleware('guest')->group(function () {
     Route::get('/login', Login::class)->name('login');
+
+    // Prompt 01 — 2FA: tela do desafio. O POST e do Fortify (two-factor.login.store,
+    // throttle 'two-factor'). Sem desafio pendente na sessao, volta pro login.
+    Route::get('/two-factor-challenge', fn () => session()->has('login.id')
+        ? view('auth.two-factor-challenge')
+        : redirect()->route('login'))->name('two-factor.login');
 });
 
 // MT-1: troca da conta ATIVA (sessao). So contas do VINCULO do usuario (403 fora).
@@ -43,6 +49,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/conexao', Conexao::class)->name('conexao');
     // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).
     Route::get('/senhas', Senhas::class)->name('senhas');
+    // Prompt 01 — perfil do usuario logado (email/senha/2FA); fora do gate de conexao.
+    Route::get('/perfil', \App\Livewire\Perfil::class)->name('perfil');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
     // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.

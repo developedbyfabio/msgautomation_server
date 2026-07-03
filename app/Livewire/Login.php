@@ -38,6 +38,23 @@ class Login extends Component
             ]);
         }
 
+        // Prompt 01 — 2FA: com credenciais VALIDAS e 2FA confirmado, NAO loga
+        // ainda: guarda o desafio na sessao (as MESMAS chaves que o pipeline do
+        // Fortify usa) e cai no /two-factor-challenge. O POST do desafio e do
+        // Fortify (valida codigo/recovery com throttle proprio e so entao loga).
+        $user = \App\Models\User::query()->where('email', $this->email)->first();
+        if ($user
+            && \Illuminate\Support\Facades\Hash::check($this->password, $user->password)
+            && $user->hasEnabledTwoFactorAuthentication()) {
+            RateLimiter::clear($key);
+            session()->put([
+                'login.id' => $user->getKey(),
+                'login.remember' => $this->remember,
+            ]);
+
+            return $this->redirectRoute('two-factor.login', navigate: false);
+        }
+
         if (! Auth::attempt(['email' => $this->email, 'password' => $this->password], $this->remember)) {
             RateLimiter::hit($key, 60);
             throw ValidationException::withMessages([

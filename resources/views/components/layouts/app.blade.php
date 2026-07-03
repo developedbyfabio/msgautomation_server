@@ -25,6 +25,7 @@
         ['revisao', 'Revisao', 'inbox', $pendencias],
         ['campanhas', 'Campanhas', 'megaphone', 0],
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
+        ['perfil', 'Perfil', 'user-circle', 0],
     ];
 @endphp
 <!DOCTYPE html>
