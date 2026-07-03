@@ -312,7 +312,28 @@
                     <form wire:submit="sendManual" class="flex items-end gap-2"
                         x-data="{
                             emojisAbertos: false,
-                            emojis: ['😀','😂','😉','😍','🥰','😅','🙃','😎','🤝','🙏','👍','👎','👏','💪','🎉','❤️','🔥','✅','❌','⚠️','⏰','📞','📄','💰'],
+                            {{-- Prompt 11: dataset completo em resources/js/app.js (window.emojiCategorias),
+                                 fora do payload do Livewire. Emoji = trecho antes do 1o espaco do item. --}}
+                            abaAtiva: 0,
+                            buscaEmoji: '',
+                            categorias: window.emojiCategorias ?? [],
+                            get emojisVisiveis() {
+                                const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                                const q = norm(this.buscaEmoji.trim());
+                                if (q === '') {
+                                    return (this.categorias[this.abaAtiva]?.itens ?? []).map(i => i.slice(0, i.indexOf(' ')));
+                                }
+                                const achados = [];
+                                for (const cat of this.categorias) {
+                                    for (const i of cat.itens) {
+                                        if (norm(i).includes(q)) {
+                                            achados.push(i.slice(0, i.indexOf(' ')));
+                                            if (achados.length >= 96) return achados;
+                                        }
+                                    }
+                                }
+                                return achados;
+                            },
                             resize() {
                                 const el = $refs.caixa;
                                 el.style.height = 'auto';
@@ -350,26 +371,55 @@
                                 aria-label="Inserir emoji" title="Inserir emoji">
                                 <flux:icon icon="face-smile" variant="mini" />
                             </button>
+                            {{-- Prompt 11: seletor completo com abas por categoria + busca.
+                                 Emojis Unicode puros (SO renderiza no estilo nativo: Apple/Noto).
+                                 Fica aberto ao escolher (pra pegar varios); fecha ao clicar fora.
+                                 Largura travada pra caber no mobile sem rolagem horizontal. --}}
                             <div x-show="emojisAbertos" x-cloak @click.outside="emojisAbertos = false" x-transition
-                                class="absolute bottom-11 left-0 z-30 grid w-56 grid-cols-8 gap-0.5 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
-                                <template x-for="e in emojis" :key="e">
-                                    <button type="button" class="rounded p-1 text-lg leading-none hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                                        x-text="e" @click="inserir(e); emojisAbertos = false"></button>
-                                </template>
+                                class="absolute bottom-11 left-0 z-30 flex w-80 max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                                {{-- Busca --}}
+                                <div class="border-b border-zinc-100 p-2 dark:border-zinc-700">
+                                    <input type="text" x-model="buscaEmoji" placeholder="Buscar emoji..."
+                                        @keydown.enter.prevent @keydown.stop
+                                        class="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm focus:border-emerald-400 focus:outline-none dark:border-zinc-600 dark:bg-zinc-900">
+                                </div>
+                                {{-- Grade de emojis (unica barra de rolagem: vertical) --}}
+                                <div class="grid h-52 grid-cols-8 content-start gap-0.5 overflow-y-auto overscroll-contain p-2">
+                                    <template x-for="e in emojisVisiveis" :key="e">
+                                        <button type="button" class="rounded p-1 text-xl leading-none hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                                            x-text="e" @click="inserir(e)"></button>
+                                    </template>
+                                    <p x-show="emojisVisiveis.length === 0" class="col-span-8 px-2 py-6 text-center text-xs text-zinc-400">
+                                        Nenhum emoji encontrado.
+                                    </p>
+                                </div>
+                                {{-- Abas de categoria --}}
+                                <div class="flex items-center justify-between gap-0.5 border-t border-zinc-100 p-1 dark:border-zinc-700">
+                                    <template x-for="(cat, idx) in categorias" :key="idx">
+                                        <button type="button" x-text="cat.icone"
+                                            @click="abaAtiva = idx; buscaEmoji = ''"
+                                            :title="cat.nome" :aria-label="cat.nome"
+                                            class="rounded-lg p-1 text-lg leading-none transition"
+                                            :class="(abaAtiva === idx && buscaEmoji === '') ? 'bg-emerald-100 dark:bg-emerald-900' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'"></button>
+                                    </template>
+                                </div>
                             </div>
                         </div>
-                        {{-- Prompt 10: hint removido; o aviso de seguranca (manual envia DE VERDADE,
-                             mesmo com o robo desligado) sobrevive discreto no placeholder. --}}
-                        <textarea x-ref="caixa" wire:model="body" rows="1" placeholder="Mensagem manual (envia de verdade)..." enterkeyhint="send"
+                        {{-- Prompt 11 (Parte A): placeholder curto "Digitar...". O aviso de
+                             seguranca (manual envia DE VERDADE, ignora o kill switch) migrou pro
+                             tooltip do botao Enviar, pra nao poluir a caixa. --}}
+                        <textarea x-ref="caixa" wire:model="body" rows="1" placeholder="Digitar..." enterkeyhint="send"
                             @input="resize()"
                             @keydown.enter="$event.preventDefault(); ($event.ctrlKey || $event.shiftKey) ? inserir('\n') : enviar()"
                             class="max-h-44 flex-1 resize-none overflow-y-auto rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-sm focus:outline-none dark:border-zinc-700 dark:bg-zinc-800"></textarea>
-                        <button type="submit" wire:loading.attr="disabled" wire:target="sendManual"
-                            class="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
-                            <flux:icon icon="paper-airplane" variant="micro" wire:loading.remove wire:target="sendManual" />
-                            <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="sendManual" />
-                            Enviar
-                        </button>
+                        <flux:tooltip content="Envio manual: envia de verdade (respeita os tetos, mas ignora o kill switch — manda mesmo com o robo desligado).">
+                            <button type="submit" wire:loading.attr="disabled" wire:target="sendManual"
+                                class="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+                                <flux:icon icon="paper-airplane" variant="micro" wire:loading.remove wire:target="sendManual" />
+                                <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="sendManual" />
+                                Enviar
+                            </button>
+                        </flux:tooltip>
                     </form>
                 @endif
             </div>
