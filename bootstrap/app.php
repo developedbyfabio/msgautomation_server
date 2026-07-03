@@ -26,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'webhook.secret' => VerifyWebhookSecret::class,
             'whatsapp.connected' => EnsureWhatsappConnected::class,
+            'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class, // Prompt 22
         ]);
 
         // MT-0 — contexto de conta em todo request web (fase 1: conta unica;

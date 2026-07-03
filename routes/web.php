@@ -93,6 +93,12 @@ Route::middleware('auth')->group(function () {
     // Variaveis (V-1): placeholders configuraveis; config, editavel offline.
     Route::get('/variaveis', \App\Livewire\Variaveis::class)->name('variaveis');
 
+    // Prompt 22 — administracao de tenants (super-admin da plataforma). UNICO ponto
+    // cross-tenant; fora do gate de conexao (nao depende de canal/WhatsApp do tenant).
+    Route::middleware('platform.admin')->group(function () {
+        Route::get('/admin/tenants', \App\Livewire\Admin\Tenants::class)->name('admin.tenants');
+    });
+
     Route::middleware('whatsapp.connected')->group(function () {
         // M-1: painel do dono (leitura pura dos logs; primeiro item do menu).
         Route::get('/painel', \App\Livewire\Painel::class)->name('painel');

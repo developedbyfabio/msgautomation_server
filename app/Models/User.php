@@ -28,6 +28,9 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // Prompt 22 — super-admin da plataforma. Fora do #[Fillable] de proposito
+            // (nao mass-assignable): so vira true via seed/tinker, nunca por form.
+            'is_platform_admin' => 'boolean',
         ];
     }
 

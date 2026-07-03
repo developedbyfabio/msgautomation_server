@@ -73,6 +73,10 @@
                     :icon-dot="$badge > 0"
                 >{{ $label }}</flux:sidebar.item>
             @endforeach
+            {{-- Prompt 22: administracao de tenants — SO pro super-admin da plataforma. --}}
+            @if (auth()->user()?->is_platform_admin)
+                <flux:sidebar.item icon="building-office-2" :href="route('admin.tenants')" wire:navigate>Tenants</flux:sidebar.item>
+            @endif
         </flux:sidebar.nav>
     </flux:sidebar>
 
