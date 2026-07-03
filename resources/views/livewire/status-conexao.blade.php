@@ -4,6 +4,7 @@
             'open' => ['bg-emerald-500', 'conectado'],
             'connecting' => ['bg-amber-500', 'conectando'],
             'verificando' => ['bg-zinc-300 dark:bg-zinc-600', 'verificando'],
+            'sem_canal' => ['bg-zinc-400', 'sem canal'],
             default => ['bg-red-500', 'desconectado'],
         };
     @endphp
@@ -13,7 +14,13 @@
         <span class="text-zinc-500">{{ $rotulo }}</span>
     </span>
 
-    @if (! in_array($state, ['open', 'verificando'], true))
+    @if ($state === 'sem_canal')
+        {{-- Prompt 27: conta sem canal -> leva pro self-service de conexao (nunca QR alheio). --}}
+        <a href="{{ route('conexao') }}" wire:navigate
+            class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+            <flux:icon icon="qr-code" variant="micro" /> Conectar
+        </a>
+    @elseif (! in_array($state, ['open', 'verificando'], true))
         <button type="button" wire:click="abrirQr"
             class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
             <flux:icon icon="qr-code" variant="micro" />

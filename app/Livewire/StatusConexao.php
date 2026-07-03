@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Channel;
 use App\Channels\Evolution\EvolutionProvider;
+use App\Tenancy\AccountContext;
 use Livewire\Component;
 
 /**
@@ -25,17 +26,33 @@ class StatusConexao extends Component
     public bool $confirmingDisconnect = false;
     public int $blips = 0;
 
-    /** MT-2: o canal DA CONTA do contexto. */
+    private function accountId(): int
+    {
+        return app(AccountContext::class)->id();
+    }
+
+    /** MT-2/Prompt 27: o canal DA CONTA ativa (escopado; null se a conta nao tem canal —
+     *  NUNCA cai no canal global do .env). */
     private function canal(): ?Channel
     {
-        return Channel::query()->oldest('id')->first();
+        return Channel::defaultFor($this->accountId());
     }
 
     public function refresh(EvolutionProvider $provider): void
     {
+        // Prompt 27: conta SEM canal -> estado "sem canal", sem tocar provider->api()
+        // (evita o fallback do .env = instancia de outra conta).
+        $canal = $this->canal();
+        if ($canal === null) {
+            $this->blips = 0;
+            $this->state = 'sem_canal';
+
+            return;
+        }
+
         $estado = 'desconhecido';
         try {
-            $resp = $provider->api($this->canal())->connectionState();
+            $resp = $provider->api($canal)->connectionState();
             if ($resp->successful()) {
                 $estado = (string) (data_get($resp->json(), 'instance.state') ?? data_get($resp->json(), 'state') ?? 'desconhecido');
             }
@@ -93,8 +110,16 @@ class StatusConexao extends Component
     {
         $this->confirmingDisconnect = false;
 
+        // Prompt 27: sem canal, NAO desconecta nada (nunca a instancia global do .env).
+        $canal = $this->canal();
+        if ($canal === null) {
+            $this->state = 'sem_canal';
+
+            return null;
+        }
+
         try {
-            $resp = $provider->api($this->canal())->logout();
+            $resp = $provider->api($canal)->logout();
             if (! $resp->successful()) {
                 $this->dispatch('toast', message: 'Falha ao desconectar (HTTP ' . $resp->status() . ').', type: 'error');
 
@@ -113,8 +138,16 @@ class StatusConexao extends Component
         return $this->redirectRoute('conexao', navigate: true);
     }
 
-    public function abrirQr(EvolutionProvider $provider): void
+    public function abrirQr(EvolutionProvider $provider)
     {
+        // Prompt 27: sem canal, nao mostra QR de outra instancia — leva pra /conexao
+        // (onde o self-service cria a instancia da conta).
+        if ($this->canal() === null) {
+            $this->state = 'sem_canal';
+
+            return $this->redirectRoute('conexao', navigate: true);
+        }
+
         $this->showQr = true;
         $this->qr = null;
         $this->qrError = null;
