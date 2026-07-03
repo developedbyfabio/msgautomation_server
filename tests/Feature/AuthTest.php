@@ -21,7 +21,13 @@ class AuthTest extends TestCase
     {
         // MT-0: as telas operam na conta do CONTEXTO — como em producao, a conta
         // existe antes da UI (seeder). O teste de auth reflete esse estado.
-        \App\Models\Account::firstOrCreate(['name' => 'T']);
+        $account = \App\Models\Account::firstOrCreate(['name' => 'T']);
+        // Prompt 27 (Fatia 2): conta ONBOARDED (com canal conectado) — o gate
+        // whatsapp.connected agora manda conta SEM canal pra /conexao.
+        \App\Models\Channel::withoutAccountScope()->firstOrCreate(
+            ['account_id' => $account->id],
+            ['instance' => 'conta-' . $account->id . '-t', 'provider' => 'evolution', 'webhook_token' => 'tok-t', 'status' => 'connected'],
+        );
 
         return User::create([
             'name' => 'Operador',

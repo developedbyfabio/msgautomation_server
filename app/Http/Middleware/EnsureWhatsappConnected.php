@@ -8,26 +8,29 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * S3 — gate de conexao. Quando o canal esta DEFINITIVAMENTE desconectado
- * (channels.status = 'disconnected', sincronizado pelo StatusConexao/Conexao),
- * a UI principal cai na tela de QR (/conexao). Estados transitorios
- * (connecting/desconhecido/sem canal) passam — nao chutamos o usuario por um
- * blip de rede. /conexao nunca passa por aqui (ela mesma redireciona ao abrir).
+ * S3 — gate de conexao. A UI principal exige um canal conectado; senao cai na
+ * /conexao. Casos que caem pra /conexao:
+ *  - Prompt 27 (Fatia 2): conta SEM canal -> conectar o proprio WhatsApp (o tenant
+ *    novo nao ve mais status/canal de outra conta; e levado ao self-service);
+ *  - canal DEFINITIVAMENTE desconectado (channels.status = 'disconnected').
+ * Estados transitorios (connecting/verificando) passam — nao chutamos por blip.
+ * A /conexao NAO usa este middleware (fica fora do grupo) — sem loop de redirect.
  */
 class EnsureWhatsappConnected
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // MT-2: o gate olha o canal DA CONTA do contexto (setado pelo
-        // SetAccountContext). Sem contexto/canal (bootstrap): deixa passar —
-        // a pagina decide (e queries de dominio falham alto se for o caso).
+        // Sem contexto de conta (bootstrap): nao barra — as queries de dominio
+        // decidem/falham alto se for o caso.
         try {
-            $status = Channel::query()->oldest('id')->value('status');
+            $accountId = app(\App\Tenancy\AccountContext::class)->id();
         } catch (\App\Tenancy\MissingAccountContextException) {
-            $status = null;
+            return $next($request);
         }
 
-        if ($status === 'disconnected') {
+        // Canal DA CONTA (escopado; null = conta sem canal).
+        $canal = Channel::defaultFor($accountId);
+        if ($canal === null || $canal->status === 'disconnected') {
             return redirect()->route('conexao');
         }
 

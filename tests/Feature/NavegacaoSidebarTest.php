@@ -39,7 +39,13 @@ class NavegacaoSidebarTest extends TestCase
     private function operador(): User
     {
         // MT-0: como em producao, a conta existe antes da UI (seeder).
-        Account::firstOrCreate(['name' => 'T']);
+        $account = Account::firstOrCreate(['name' => 'T']);
+        // Prompt 27 (Fatia 2): conta ONBOARDED (canal conectado) — o gate manda
+        // conta SEM canal pra /conexao.
+        \App\Models\Channel::withoutAccountScope()->firstOrCreate(
+            ['account_id' => $account->id],
+            ['instance' => 'conta-' . $account->id . '-t', 'provider' => 'evolution', 'webhook_token' => 'tok-t', 'status' => 'connected'],
+        );
 
         return User::create([
             'name' => 'Operador',
