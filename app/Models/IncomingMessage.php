@@ -29,7 +29,13 @@ class IncomingMessage extends Model
     ];
 
     /**
-     * Prompt 13 — categoria de midia baixavel: 'image' | 'audio' | null.
+     * Prompt 16 — tipos de REACAO (curtir/coracao/emoji), por provedor:
+     * Evolution grava 'reactionMessage'; Cloud API grava 'reaction'. Reacao NAO e
+     * mensagem: e cortada na ingestao e filtrada de metrica/thread. Fonte unica.
+     */
+    public const REACTION_TYPES = ['reactionMessage', 'reaction'];
+
+    /** Prompt 13 — categoria de midia baixavel: 'image' | 'audio' | null.
      * Cobre os nomes dos dois provedores (Evolution *Message / Cloud simples).
      * Escopo desta fatia: imagem e audio (video/documento ficam pra depois).
      */

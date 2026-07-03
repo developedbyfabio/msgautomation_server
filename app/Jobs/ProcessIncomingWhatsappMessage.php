@@ -70,6 +70,18 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
+        // Prompt 16 — REACAO (curtir/coracao/emoji) NAO e mensagem: choke point unico,
+        // ANTES de criar IncomingMessage e ANTES de QUALQUER consumidor (popularContato,
+        // evento/Kanban, RuleMatcher, aiEligible/ClassifyWithAi, metrica). Corte por TIPO
+        // EXPLICITO (nunca por texto vazio — midia legitima tambem tem texto nulo).
+        if (in_array($data->type, IncomingMessage::REACTION_TYPES, true)) {
+            Log::debug('Reacao recebida descartada (nao vira mensagem).', [
+                'type' => $data->type, 'instance' => $data->instance,
+            ]);
+
+            return;
+        }
+
         // MT-0 (L1): a CONTA vem do CANAL da instancia do payload — unico lookup
         // legitimamente cross-account do pipeline (bypass NOMEADO). Instancia
         // desconhecida: loga + conta no cache (diagnostico) e DESCARTA com

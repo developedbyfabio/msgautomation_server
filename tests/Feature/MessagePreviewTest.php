@@ -94,14 +94,17 @@ class MessagePreviewTest extends TestCase
 
         IncomingMessage::create($base + ['evolution_message_id' => 'I1', 'type' => 'imageMessage', 'text' => 'olha isso',
             'raw_payload' => ['data' => ['message' => ['imageMessage' => ['caption' => 'olha isso']]]]]);
+        // Prompt 16: reacao NAO e mais bolha na thread — ela e filtrada. Mantida no
+        // cenario pra provar o filtro (o emoji da reacao nao deve aparecer).
         IncomingMessage::create($base + ['evolution_message_id' => 'R1', 'type' => 'reactionMessage', 'text' => null,
             'raw_payload' => ['data' => ['message' => ['reactionMessage' => ['text' => '👍']]]]]);
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', $jid)
             ->assertSee('Imagem')
-            ->assertSee('olha isso')   // legenda
-            ->assertSee('👍')          // emoji da reacao
+            ->assertSee('olha isso')   // legenda da imagem
+            ->assertDontSee('👍')       // Prompt 16: emoji da reacao NAO aparece na thread
+            ->assertDontSee('reagiu')   // nem o rotulo de reacao
             ->assertDontSee('[imageMessage]')
             ->assertDontSee('[reactionMessage]');
     }

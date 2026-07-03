@@ -386,7 +386,8 @@ class Conversas extends Component
 
         $rows = [];
 
-        foreach (IncomingMessage::query()->where('account_id', $account)->orderByDesc('received_at')->limit(1000)->get() as $m) {
+        // Prompt 16: reacao nao e mensagem — nao vira preview nem bumpa a conversa na lista.
+        foreach (IncomingMessage::query()->where('account_id', $account)->whereNotIn('type', IncomingMessage::REACTION_TYPES)->orderByDesc('received_at')->limit(1000)->get() as $m) {
             $at = $m->received_at;
             if (! isset($rows[$m->remote_jid]) || ($at && $at->greaterThan($rows[$m->remote_jid]['at']))) {
                 $rows[$m->remote_jid] = [
@@ -491,7 +492,9 @@ class Conversas extends Component
 
         $items = [];
 
-        foreach (IncomingMessage::query()->where('account_id', $account)->where('remote_jid', $this->selectedJid)->orderBy('received_at')->limit(500)->get() as $m) {
+        // Prompt 16: reacao nao e mensagem — some das bolhas da thread (inclusive as
+        // linhas historicas, ja gravadas antes do corte da ingestao).
+        foreach (IncomingMessage::query()->where('account_id', $account)->where('remote_jid', $this->selectedJid)->whereNotIn('type', IncomingMessage::REACTION_TYPES)->orderBy('received_at')->limit(500)->get() as $m) {
             if ($m->from_me && in_array($m->evolution_message_id, $providerIds, true)) {
                 continue;
             }

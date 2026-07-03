@@ -77,6 +77,9 @@ class PainelMetrics
         $base = IncomingMessage::withoutAccountScope()
             ->where('account_id', $accountId)
             ->where('from_me', false)
+            // Prompt 16: reacao nao e mensagem — fora da contagem (neutraliza as linhas
+            // historicas e defende caso alguma escape o corte da ingestao).
+            ->whereNotIn('type', IncomingMessage::REACTION_TYPES)
             ->whereBetween('received_at', [$from, $to]);
 
         $recebidas = (clone $base)->where('remote_jid', 'not like', '%@g.us')->count();
