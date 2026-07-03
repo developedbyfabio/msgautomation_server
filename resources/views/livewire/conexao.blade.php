@@ -6,6 +6,23 @@
 
         <h1 class="text-lg font-semibold">Conectar o WhatsApp</h1>
 
+        @if (! $temCanal)
+            {{-- Prompt 23 — conta ainda SEM canal: self-service pra criar a instancia da conta. --}}
+            <p class="mt-2 text-sm text-zinc-500">
+                Sua conta ainda nao tem um WhatsApp conectado. Clique abaixo para criar a instancia
+                e gerar o QR de conexao.
+            </p>
+            @if ($provisionError)
+                <div class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{{ $provisionError }}</div>
+            @endif
+            <button type="button" wire:click="conectar" wire:loading.attr="disabled" wire:target="conectar"
+                class="mt-6 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+                <flux:icon icon="qr-code" variant="micro" wire:loading.remove wire:target="conectar" />
+                <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="conectar" />
+                <span wire:loading.remove wire:target="conectar">Conectar WhatsApp</span>
+                <span wire:loading wire:target="conectar">Criando instancia...</span>
+            </button>
+        @else
         @php
             [$cor, $rotulo] = match ($state) {
                 'connecting' => ['text-amber-600', 'conectando...'],
@@ -46,5 +63,6 @@
                 Gerar novo QR
             </button>
         </div>
+        @endif
     </div>
 </div>
