@@ -234,6 +234,17 @@ class CloudApiProvider implements ChannelProvider
         return $this->sendMediaMessage($channel, $to, 'document', $node, $replyTo);
     }
 
+    /**
+     * Prompt 06 — audio: upload -> media_id -> type=audio (SEM caption/filename —
+     * a Meta nao suporta em audio). Fonte abstrata (audio-robo futuro ok).
+     */
+    public function sendAudio(Channel $channel, string $to, string $filePath, string $mime, ?string $replyTo = null): SentMessageData
+    {
+        $node = ['id' => $this->uploadMedia($channel, $filePath, $mime, basename($filePath))];
+
+        return $this->sendMediaMessage($channel, $to, 'audio', $node, $replyTo);
+    }
+
     /** Etapa 1 da midia na Meta: upload multipart pro /{phone_number_id}/media -> media_id. */
     private function uploadMedia(Channel $channel, string $filePath, string $mime, string $fileName): string
     {

@@ -51,6 +51,14 @@ interface ChannelProvider
      */
     public function sendDocument(Channel $channel, string $to, string $filePath, string $mime, string $fileName, ?string $caption = null, ?string $replyTo = null): SentMessageData;
 
+    /**
+     * Prompt 06 — envia AUDIO. FONTE ABSTRATA de proposito (ponto de extensao
+     * do audio-robo futuro): recebe um caminho de arquivo local qualquer — hoje
+     * vem do upload da UI, amanha pode vir de um TTS que gravou no storage.
+     * Audio NAO tem legenda nos dois canais (limitacao do WhatsApp, nao nossa).
+     */
+    public function sendAudio(Channel $channel, string $to, string $filePath, string $mime, ?string $replyTo = null): SentMessageData;
+
     /** Valida a origem do webhook pro canal resolvido (token / HMAC no CH-2). */
     public function verifyWebhook(Request $request, Channel $channel): bool;
 

@@ -129,6 +129,43 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
         return $this->sendMedia($channel, $to, 'document', $filePath, $mime, $fileName, $caption);
     }
 
+    /**
+     * Prompt 06 — audio pela Evolution v2.3.7: endpoint PROPRIO de audio
+     * (POST /message/sendWhatsAppAudio/{instance}, base64) — chega como
+     * mensagem de voz. Fonte abstrata (caminho local qualquer — audio-robo ok).
+     */
+    public function sendAudio(Channel $channel, string $to, string $filePath, string $mime, ?string $replyTo = null): SentMessageData
+    {
+        $c = $this->credentialsFor($channel);
+        $number = str_contains($to, '@') ? Str::before($to, '@') : $to;
+
+        $conteudo = @file_get_contents($filePath);
+        if ($conteudo === false) {
+            throw new WhatsappSendException('Evolution sendAudio: arquivo de audio ilegivel.');
+        }
+
+        $resp = Http::baseUrl(rtrim($c['base_url'], '/'))
+            ->withHeaders(['apikey' => $c['apikey']])
+            ->acceptJson()
+            ->timeout(60)
+            ->post("/message/sendWhatsAppAudio/{$c['instance']}", [
+                'number' => $number,
+                'audio' => base64_encode($conteudo),
+            ]);
+
+        if ($resp->failed()) {
+            throw new WhatsappSendException("Evolution sendAudio falhou (HTTP {$resp->status()}).");
+        }
+
+        $json = $resp->json() ?? [];
+
+        return new SentMessageData(
+            providerMessageId: data_get($json, 'key.id'),
+            status: $resp->status(),
+            raw: is_array($json) ? $json : [],
+        );
+    }
+
     /** Nucleo comum de midia da Evolution v2.3.7 (base64 no corpo). */
     private function sendMedia(Channel $channel, string $to, string $mediatype, string $filePath, string $mime, string $fileName, ?string $caption): SentMessageData
     {

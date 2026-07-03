@@ -200,6 +200,9 @@
                                         <img src="{{ $msg['media'] }}" alt="Imagem enviada" loading="lazy"
                                             class="mb-1 max-h-64 max-w-full rounded-lg object-contain" />
                                     </a>
+                                @elseif (($msg['media_kind'] ?? 'image') === 'audio')
+                                    {{-- Prompt 06: audio enviado com player --}}
+                                    <audio controls preload="none" src="{{ $msg['media'] }}" class="mb-1 h-10 w-60 max-w-full"></audio>
                                 @else
                                     <a href="{{ $msg['media'] }}" target="_blank" rel="noopener"
                                         class="mb-1 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 text-sm hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/70 dark:hover:bg-zinc-800">
@@ -246,22 +249,34 @@
                         <div class="mb-2 rounded-lg bg-red-100 px-3 py-1.5 text-xs text-red-800 dark:bg-red-950 dark:text-red-300">{{ $message }}</div>
                     @enderror
                     @if ($anexo)
-                        @php $ehImagem = str_starts_with((string) $anexo->getMimeType(), 'image/'); @endphp
+                        @php
+                            $mimeAnexo = (string) $anexo->getMimeType();
+                            $ehImagem = str_starts_with($mimeAnexo, 'image/');
+                            $ehAudio = str_starts_with($mimeAnexo, 'audio/');
+                            // Preview do Livewire cobre imagem e a maioria dos audios;
+                            // formato fora da lista (ex.: ogg) cai no card sem player.
+                            $previewUrl = null;
+                            if ($ehImagem || $ehAudio) {
+                                try { $previewUrl = $anexo->temporaryUrl(); } catch (\Throwable) { $previewUrl = null; }
+                            }
+                        @endphp
                         <div class="mb-2 flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800">
-                            @if ($ehImagem)
-                                <img src="{{ $anexo->temporaryUrl() }}" alt="Preview da imagem anexada" class="h-16 w-16 rounded-lg object-cover" />
+                            @if ($ehImagem && $previewUrl)
+                                <img src="{{ $previewUrl }}" alt="Preview da imagem anexada" class="h-16 w-16 rounded-lg object-cover" />
+                            @elseif ($ehAudio && $previewUrl)
+                                <audio controls preload="metadata" src="{{ $previewUrl }}" class="h-10 w-56 max-w-full"></audio>
                             @else
-                                <span class="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-red-100 dark:bg-red-950/50">
-                                    <flux:icon icon="document" class="size-8 text-red-500" />
+                                <span class="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-lg {{ $ehAudio ? 'bg-emerald-100 dark:bg-emerald-950/50' : 'bg-red-100 dark:bg-red-950/50' }}">
+                                    <flux:icon :icon="$ehAudio ? 'musical-note' : 'document'" class="size-8 {{ $ehAudio ? 'text-emerald-600' : 'text-red-500' }}" />
                                 </span>
                             @endif
                             <div class="min-w-0 flex-1 text-xs text-zinc-500">
                                 <p class="truncate font-medium text-zinc-700 dark:text-zinc-200">
-                                    {{ $ehImagem ? 'Imagem pronta pra enviar' : $anexo->getClientOriginalName() }}
+                                    {{ $ehImagem ? 'Imagem pronta pra enviar' : ($ehAudio ? 'Audio pronto pra enviar — ' . $anexo->getClientOriginalName() : $anexo->getClientOriginalName()) }}
                                 </p>
                                 <p>
                                     @unless ($ehImagem){{ number_format($anexo->getSize() / 1024, 0, ',', '.') }} KB · @endunless
-                                    O texto digitado abaixo vai junto como legenda (opcional).
+                                    {{ $ehAudio ? 'Audio nao leva legenda (o texto digitado fica na caixa).' : 'O texto digitado abaixo vai junto como legenda (opcional).' }}
                                 </p>
                             </div>
                             <button type="button" wire:click="cancelarAnexo"
@@ -301,11 +316,11 @@
                         }">
                         {{-- Prompts 04/05: anexar imagem ou documento (clipe -> input escondido -> preview) --}}
                         <input type="file" x-ref="arquivo" wire:model="anexo"
-                            accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.docx,.xlsx" class="hidden"
-                            aria-label="Escolher imagem ou documento pra anexar" />
+                            accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.docx,.xlsx,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/amr,.mp3,.m4a,.ogg,.aac,.amr" class="hidden"
+                            aria-label="Escolher imagem, documento ou audio pra anexar" />
                         <button type="button" @click="$refs.arquivo.click()" wire:loading.attr="disabled" wire:target="anexo"
                             class="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
-                            aria-label="Anexar imagem ou documento" title="Anexar imagem ou documento (PDF)">
+                            aria-label="Anexar imagem, documento ou audio" title="Anexar imagem, documento (PDF) ou audio">
                             <flux:icon icon="paper-clip" variant="mini" wire:loading.remove wire:target="anexo" />
                             <flux:icon icon="arrow-path" variant="mini" class="animate-spin" wire:loading wire:target="anexo" />
                         </button>

@@ -207,29 +207,48 @@ class Conversas extends Component
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ];
 
-    /** 'image' | 'document' (pelo mime real do upload). */
+    /**
+     * Prompt 06 — mimes de AUDIO aceitos: intersecao segura com o que a Meta
+     * suporta (aac, mp3/mpeg, m4a/mp4, amr, ogg-opus) — formato fora disso e
+     * RECUSADO com mensagem clara (nunca enviar o que o canal vai rejeitar).
+     */
+    private const MIMES_AUDIO = [
+        'audio/aac', 'audio/mpeg', 'audio/mp4', 'audio/amr', 'audio/ogg',
+        'audio/x-m4a', 'audio/mp3', // variantes comuns de browser pros mesmos formatos
+    ];
+
+    /** 'image' | 'audio' | 'document' (pelo mime real do upload). */
     private function anexoKind(): string
     {
-        return str_starts_with((string) ($this->anexo?->getMimeType() ?? ''), 'image/') ? 'image' : 'document';
+        $mime = (string) ($this->anexo?->getMimeType() ?? '');
+
+        return match (true) {
+            str_starts_with($mime, 'image/') => 'image',
+            str_starts_with($mime, 'audio/') => 'audio',
+            default => 'document',
+        };
     }
 
     /**
      * Regras por tipo: imagem jpeg/png/webp ate 5 MB (limite de imagem da Meta);
-     * documento PDF/docx/xlsx ate 10 MB (folga sob os limites dos canais e do
-     * upload do Livewire — o teto da Meta pra documento e bem maior).
+     * documento PDF/docx/xlsx ate 10 MB; audio nos formatos da Meta ate 10 MB
+     * (o teto oficial de audio e 16 MB — 10 fica sob o limite de upload do
+     * Livewire sem mexer em mais infra).
      */
     private function regrasAnexo(): array
     {
-        return $this->anexoKind() === 'image'
-            ? ['anexo' => 'image|mimes:jpg,jpeg,png,webp|max:5120']
-            : ['anexo' => 'file|mimetypes:' . implode(',', self::MIMES_DOCUMENTO) . '|max:10240'];
+        return match ($this->anexoKind()) {
+            'image' => ['anexo' => 'image|mimes:jpg,jpeg,png,webp|max:5120'],
+            'audio' => ['anexo' => 'file|mimetypes:' . implode(',', self::MIMES_AUDIO) . '|max:10240'],
+            default => ['anexo' => 'file|mimetypes:' . implode(',', self::MIMES_DOCUMENTO) . '|max:10240'],
+        };
     }
 
     private const MENSAGENS_ANEXO = [
         'anexo.image' => 'O arquivo escolhido nao e uma imagem valida.',
         'anexo.mimes' => 'Imagem em tipo nao aceito — use jpg, jpeg, png ou webp.',
-        'anexo.mimetypes' => 'Documento em tipo nao aceito — use PDF (ou docx/xlsx).',
-        'anexo.max' => 'Arquivo acima do limite (5 MB pra imagem, 10 MB pra documento).',
+        'anexo.mimetypes' => 'Tipo nao aceito — documentos: PDF/docx/xlsx; audio: mp3, ogg, aac, m4a ou amr.',
+        'anexo.max' => 'Arquivo acima do limite (5 MB pra imagem, 10 MB pra documento/audio).',
     ];
 
     /** Valida na hora do anexo: tipo/tamanho invalido e recusado ANTES do preview. */
@@ -276,7 +295,8 @@ class Conversas extends Component
         $nome = (string) Str::uuid() . '.' . strtolower($this->anexo->getClientOriginalExtension());
         $path = $this->anexo->storeAs($dir, $nome, 'local');
 
-        $log = $sender->send('manual', $channel, $this->selectedJid, trim($this->body), media: [
+        // Audio nao leva legenda (WhatsApp): o texto digitado FICA no composer.
+        $log = $sender->send('manual', $channel, $this->selectedJid, $kind === 'audio' ? '' : trim($this->body), media: [
             'kind' => $kind,
             'path' => $path,
             'mime' => (string) $this->anexo->getMimeType(),
@@ -285,9 +305,13 @@ class Conversas extends Component
 
         $this->anexo = null;
         if ($log->status === 'sent') {
-            $this->body = '';
+            if ($kind !== 'audio') {
+                $this->body = '';
+            }
             $this->sendStatus = null;
-            $this->dispatch('toast', message: $kind === 'image' ? 'Imagem enviada.' : 'Documento enviado.');
+            $this->dispatch('toast', message: match ($kind) {
+                'image' => 'Imagem enviada.', 'audio' => 'Audio enviado.', default => 'Documento enviado.',
+            });
         } else {
             $this->sendStatus = $log->status === 'blocked'
                 ? 'Bloqueado por freio: ' . $log->motivo
@@ -476,7 +500,11 @@ class Conversas extends Component
                 'kind' => $l->mode === 'auto' ? 'out_bot' : 'out_manual',
                 // Prompts 04/05: anexo enviado renderiza na bolha (rota autenticada+escopada).
                 'media' => $l->media_path ? route('media.show', $l->id) : null,
-                'media_kind' => str_starts_with((string) $l->media_mime, 'image/') ? 'image' : 'document',
+                'media_kind' => match (true) {
+                    str_starts_with((string) $l->media_mime, 'image/') => 'image',
+                    str_starts_with((string) $l->media_mime, 'audio/') => 'audio',
+                    default => 'document',
+                },
                 'media_name' => $l->media_name,
             ];
         }

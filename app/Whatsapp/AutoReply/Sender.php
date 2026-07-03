@@ -40,7 +40,7 @@ class Sender
         bool $fromMe = false,
         bool $flow = false,
         ?int $campaignId = null,
-        ?array $media = null, // Prompts 04/05: ['kind' => image|document, 'path' => relativo ao disco local, 'mime', 'name' => nome original]
+        ?array $media = null, // Prompts 04/05/06: ['kind' => image|document|audio, 'path' => relativo ao disco local, 'mime', 'name' => nome original]
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
@@ -139,9 +139,11 @@ class Sender
                 $provider = $this->providers->for($channel);
                 $absoluto = \Illuminate\Support\Facades\Storage::disk('local')->path($media['path']);
                 $caption = $textoEnvio !== '' ? $textoEnvio : null;
-                $sent = ($media['kind'] ?? 'image') === 'document'
-                    ? $provider->sendDocument($channel, $jid, $absoluto, (string) $media['mime'], (string) ($media['name'] ?? basename($absoluto)), $caption, $replyTo)
-                    : $provider->sendImage($channel, $jid, $absoluto, (string) $media['mime'], $caption, $replyTo);
+                $sent = match ($media['kind'] ?? 'image') {
+                    'document' => $provider->sendDocument($channel, $jid, $absoluto, (string) $media['mime'], (string) ($media['name'] ?? basename($absoluto)), $caption, $replyTo),
+                    'audio' => $provider->sendAudio($channel, $jid, $absoluto, (string) $media['mime'], $replyTo), // sem caption (WhatsApp nao suporta em audio)
+                    default => $provider->sendImage($channel, $jid, $absoluto, (string) $media['mime'], $caption, $replyTo),
+                };
             } else {
                 $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
             }

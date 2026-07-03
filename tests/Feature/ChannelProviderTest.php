@@ -109,6 +109,11 @@ class ChannelProviderTest extends TestCase
                 return new SentMessageData(providerMessageId: 'FAKE-DOC', status: 201, raw: []);
             }
 
+            public function sendAudio(Channel $channel, string $to, string $filePath, string $mime, ?string $replyTo = null): SentMessageData
+            {
+                return new SentMessageData(providerMessageId: 'FAKE-AUD', status: 201, raw: []);
+            }
+
             public function verifyWebhook(Request $request, Channel $channel): bool
             {
                 return true;
