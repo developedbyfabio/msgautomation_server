@@ -63,9 +63,13 @@ class MessagePreviewTest extends TestCase
             ['data' => [0 => ['message' => ['imageMessage' => ['jpegThumbnail' => $bytes]]]]]
         ));
 
-        // string ja em base64 (fallback defensivo — confia)
-        $this->assertSame('data:image/jpeg;base64,QUJD', MessagePreview::thumbnail(
-            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => 'QUJD']]]]
+        // string ja em base64 (serializacao alternativa): decodifica e valida assinatura
+        $this->assertSame($esperado, MessagePreview::thumbnail(
+            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => $b64]]]]
+        ));
+        // string base64 que NAO e JPEG -> null (nao serve lixo como imagem)
+        $this->assertNull(MessagePreview::thumbnail(
+            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => base64_encode('ABC')]]]]
         ));
 
         // sem thumbnail -> null (cai no rotulo)

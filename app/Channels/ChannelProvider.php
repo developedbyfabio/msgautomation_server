@@ -3,6 +3,8 @@
 namespace App\Channels;
 
 use App\Models\Channel;
+use App\Models\IncomingMessage;
+use App\Whatsapp\FetchedMedia;
 use App\Whatsapp\IncomingMessageData;
 use App\Whatsapp\SentMessageData;
 use Illuminate\Http\Request;
@@ -64,6 +66,17 @@ interface ChannelProvider
 
     /** Adapta o payload bruto do provedor pro DTO neutro (null = nao-mensagem). */
     public function normalizeIncoming(array $payload): ?IncomingMessageData;
+
+    /**
+     * Prompt 13 — resolve o BINARIO de uma midia RECEBIDA (imagem cheia / audio),
+     * lendo o que precisa do $message->raw_payload. Cada provider tem sua mecanica:
+     * Cloud API (media_id -> Graph -> download com token), Evolution (endpoint
+     * getBase64FromMediaMessage da instancia). Retorna null quando NAO ha midia a
+     * baixar (tipo sem midia, sem referencia, sem credencial). LANCA em falha de
+     * TRANSPORTE (o job chamador captura, loga com visibilidade e nunca derruba o
+     * processamento da mensagem). NUNCA loga segredo (token/apikey).
+     */
+    public function fetchIncomingMedia(Channel $channel, IncomingMessage $message): ?FetchedMedia;
 
     /** Estado normalizado da conexao: connected | connecting | disconnected | unknown. */
     public function connectionState(?Channel $channel = null): string;

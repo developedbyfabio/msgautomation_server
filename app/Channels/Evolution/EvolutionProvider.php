@@ -6,7 +6,9 @@ use App\Channels\ChannelCapabilities;
 use App\Channels\ChannelProvider;
 use App\Contracts\WhatsappGateway;
 use App\Models\Channel;
+use App\Models\IncomingMessage;
 use App\Whatsapp\Exceptions\WhatsappSendException;
+use App\Whatsapp\FetchedMedia;
 use App\Whatsapp\IncomingMessageData;
 use App\Whatsapp\SentMessageData;
 use DateTimeImmutable;
@@ -260,6 +262,69 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
             raw: $payload,
             receivedAt: $this->timestamp($data['messageTimestamp'] ?? null),
         );
+    }
+
+    /**
+     * Prompt 13 — midia RECEBIDA (Evolution): usa o endpoint PROPRIO da instancia
+     * `POST /chat/getBase64FromMediaMessage/{instance}`, que devolve a midia JA
+     * decodificada em base64 (evita reimplementar a descriptografia .enc/mediaKey
+     * do WhatsApp — menos risco). Passa a `key` da mensagem recebida.
+     * LANCA em falha de transporte (o job captura/loga). NAO loga a apikey.
+     *
+     * ATENCAO (validacao viva): implementado por contrato do endpoint v2.3.7 e
+     * testado com mock — a chamada real ao servidor da Evolution ainda deve ser
+     * confirmada no ambiente do Fabio (checklist do relatorio). Se o servidor nao
+     * expuser esse endpoint, cai como falha best-effort (rotulo/thumbnail seguem).
+     */
+    public function fetchIncomingMedia(Channel $channel, IncomingMessage $message): ?FetchedMedia
+    {
+        $raw = (array) $message->raw_payload;
+        $data = $raw['data'] ?? null;
+        if (is_array($data) && array_is_list($data)) {
+            $data = $data[0] ?? null;
+        }
+        $key = is_array($data) && is_array($data['key'] ?? null) ? $data['key'] : null;
+        if ($key === null) {
+            return null; // sem key nao da pra pedir a midia
+        }
+
+        $c = $this->credentialsFor($channel);
+        $max = (int) config('services.incoming_media.max_bytes', 20 * 1024 * 1024);
+
+        $resp = Http::baseUrl(rtrim($c['base_url'], '/'))
+            ->withHeaders(['apikey' => $c['apikey']])
+            ->acceptJson()->timeout(30)
+            ->post('/chat/getBase64FromMediaMessage/' . $c['instance'], [
+                'message' => ['key' => $key],
+                'convertToMp4' => false,
+            ]);
+
+        if ($resp->failed()) {
+            throw new \RuntimeException('Evolution: getBase64FromMediaMessage falhou (HTTP ' . $resp->status() . ').');
+        }
+
+        $b64 = (string) data_get($resp->json(), 'base64', '');
+        if ($b64 === '') {
+            return null; // resposta sem base64 — nada util
+        }
+
+        $bin = base64_decode($b64, true);
+        if ($bin === false || $bin === '') {
+            throw new \RuntimeException('Evolution: base64 de midia invalido.');
+        }
+        if ($max > 0 && strlen($bin) > $max) {
+            throw new \RuntimeException('Evolution: midia acima do limite (' . strlen($bin) . ' bytes).');
+        }
+
+        $mime = (string) (data_get($resp->json(), 'mimetype')
+            ?: data_get($data, 'message.imageMessage.mimetype')
+            ?: data_get($data, 'message.audioMessage.mimetype')
+            ?: 'application/octet-stream');
+        // A Evolution pode anexar "; codecs=opus" no mime do audio — o disco/host aceita,
+        // mas normalizamos o mime base pra servir com content-type limpo.
+        $mime = trim(explode(';', $mime)[0]);
+
+        return new FetchedMedia($bin, $mime, $this->str(data_get($data, 'message.documentMessage.fileName')));
     }
 
     // ---- conexao ---------------------------------------------------------------------

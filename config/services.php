@@ -50,6 +50,14 @@ return [
         'graph_version' => env('CLOUD_API_GRAPH_VERSION', 'v23.0'),
     ],
 
+    // Prompt 13 — midia RECEBIDA (download best-effort em job separado). Desligado
+    // nos testes (phpunit.xml) pra nao disparar HTTP no inbound; ligado em producao.
+    // max_bytes: teto de download (audio da Meta ~16 MB; folga ate 20 MB).
+    'incoming_media' => [
+        'download' => env('INCOMING_MEDIA_DOWNLOAD', true),
+        'max_bytes' => (int) env('INCOMING_MEDIA_MAX_BYTES', 20 * 1024 * 1024),
+    ],
+
     'evolution' => [
         'base_url' => env('EVOLUTION_BASE_URL', 'http://127.0.0.1:8090'),
         'api_key' => env('EVOLUTION_API_KEY'),

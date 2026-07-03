@@ -124,6 +124,11 @@ class ChannelProviderTest extends TestCase
                 return null;
             }
 
+            public function fetchIncomingMedia(Channel $channel, \App\Models\IncomingMessage $message): ?\App\Whatsapp\FetchedMedia
+            {
+                return null;
+            }
+
             public function connectionState(?Channel $channel = null): string
             {
                 return 'connected';

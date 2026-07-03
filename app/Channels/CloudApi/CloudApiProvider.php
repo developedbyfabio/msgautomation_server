@@ -6,7 +6,9 @@ use App\Channels\ChannelCapabilities;
 use App\Channels\ChannelProvider;
 use App\Models\Channel;
 use App\Models\Contact;
+use App\Models\IncomingMessage;
 use App\Whatsapp\Exceptions\WhatsappSendException;
+use App\Whatsapp\FetchedMedia;
 use App\Whatsapp\IncomingMessageData;
 use App\Whatsapp\SentMessageData;
 use DateTimeImmutable;
@@ -319,6 +321,63 @@ class CloudApiProvider implements ChannelProvider
             status: $resp->status(),
             raw: (array) $resp->json(),
         );
+    }
+
+    /**
+     * Prompt 13 — midia RECEBIDA (Cloud): media_id no payload -> GET Graph
+     * /{version}/{media_id} devolve uma URL temporaria -> baixa o binario dessa
+     * URL (token no header nas DUAS etapas). Token nunca vai na URL nem em log.
+     */
+    public function fetchIncomingMedia(Channel $channel, IncomingMessage $message): ?FetchedMedia
+    {
+        $msg = data_get((array) $message->raw_payload, 'entry.0.changes.0.value.messages.0');
+        $type = (string) data_get($msg, 'type', ''); // image | audio | ...
+        $node = is_array($msg) ? data_get($msg, $type) : null;
+        $mediaId = (string) data_get($node, 'id', '');
+        if ($mediaId === '') {
+            return null; // sem referencia de midia — nada a baixar
+        }
+
+        $cred = $this->credentialsFor($channel);
+        if ($cred['access_token'] === '') {
+            return null; // canal sem token: nao ha como baixar (log fica no job)
+        }
+
+        // Etapa 1: metadados -> { url, mime_type, file_size }.
+        $meta = Http::baseUrl($this->graphBase())
+            ->withToken($cred['access_token'])
+            ->acceptJson()->timeout(20)
+            ->get('/' . $this->graphVersion() . '/' . $mediaId);
+
+        if ($meta->failed()) {
+            throw new \RuntimeException('Cloud API: metadados de midia falharam (HTTP ' . $meta->status() . ').');
+        }
+
+        $url = (string) data_get($meta->json(), 'url', '');
+        $mime = (string) (data_get($meta->json(), 'mime_type') ?: data_get($node, 'mime_type') ?: 'application/octet-stream');
+        if ($url === '') {
+            return null;
+        }
+
+        // Teto de tamanho: se a Meta informa file_size acima do limite, nem baixa.
+        $max = (int) config('services.incoming_media.max_bytes', 20 * 1024 * 1024);
+        $tamanho = (int) data_get($meta->json(), 'file_size', 0);
+        if ($max > 0 && $tamanho > $max) {
+            throw new \RuntimeException('Cloud API: midia acima do limite (' . $tamanho . ' bytes).');
+        }
+
+        // Etapa 2: baixa o binario (mesmo token no header — host lookaside/graph).
+        $bin = Http::withToken($cred['access_token'])->timeout(30)->get($url);
+        if ($bin->failed()) {
+            throw new \RuntimeException('Cloud API: download de midia falhou (HTTP ' . $bin->status() . ').');
+        }
+
+        $corpo = (string) $bin->body();
+        if ($corpo === '' || ($max > 0 && strlen($corpo) > $max)) {
+            throw new \RuntimeException('Cloud API: binario vazio ou acima do limite.');
+        }
+
+        return new FetchedMedia($corpo, $mime, $this->str(data_get($node, 'filename')));
     }
 
     // ---- conexao -----------------------------------------------------------------------

@@ -230,22 +230,35 @@
                                         <span class="truncate">{{ $msg['media_name'] ?: 'Documento' }}</span>
                                     </a>
                                 @endif
-                            @elseif (!empty($msg['media_thumb']))
-                                {{-- Prompt 12 (midia recebida, Fatia 1): miniatura embutida (jpegThumbnail
-                                     do payload), low-res, SEM download. A imagem em resolucao cheia vem
-                                     na Fatia 2. Tamanho contido pra caber no balao (desktop e mobile). --}}
-                                <div class="mb-1">
-                                    <img src="{{ $msg['media_thumb'] }}" alt="Previa da imagem recebida" loading="lazy"
-                                        class="max-h-48 max-w-full rounded-lg object-contain" />
-                                    <div class="mt-0.5 flex items-center gap-1 text-[10px] opacity-70">
-                                        <flux:icon icon="photo" variant="micro" class="size-3 shrink-0" />
-                                        <span>Previa (imagem completa em breve)</span>
-                                    </div>
-                                </div>
+                            @elseif (!empty($msg['in_kind']))
+                                {{-- Prompt 13 (midia recebida, Fatia 2): imagem cheia (clicavel, servida
+                                     por URL escopada) ou player de audio. A miniatura (jpegThumbnail) vem
+                                     por URL tambem (?thumb=1) — sem base64 inline no HTML do poll. --}}
+                                @php $imgSrc = $msg['thumb_url'] ?? $msg['full_url'] ?? null; @endphp
+                                @if ($msg['in_kind'] === 'image' && $imgSrc)
+                                    <a href="{{ $msg['full_url'] ?? $imgSrc }}" target="_blank" rel="noopener">
+                                        <img src="{{ $imgSrc }}" alt="Imagem recebida" loading="lazy"
+                                            class="mb-1 max-h-64 max-w-full rounded-lg object-contain" />
+                                    </a>
+                                    @if (empty($msg['full_url']))
+                                        <div class="mb-0.5 flex items-center gap-1 text-[10px] opacity-70">
+                                            <flux:icon icon="photo" variant="micro" class="size-3 shrink-0" />
+                                            <span>Previa (imagem completa em breve)</span>
+                                        </div>
+                                    @endif
+                                @elseif ($msg['in_kind'] === 'audio' && !empty($msg['full_url']))
+                                    <audio controls preload="none" src="{{ $msg['full_url'] }}" class="mb-1 h-10 w-60 max-w-full"></audio>
+                                @endif
                             @endif
-                            {{-- Texto/legenda. Com miniatura, o rotulo "Imagem" seria redundante embaixo
-                                 dela — mostra so a legenda (se houver). --}}
-                            @if (empty($msg['media_thumb']))
+                            {{-- Texto/legenda. Se renderizou a midia recebida (imagem/audio), o rotulo
+                                 "Imagem"/"Audio" seria redundante — mostra so a legenda (quando houver). --}}
+                            @php
+                                $renderouRecebida = !empty($msg['in_kind']) && (
+                                    ($msg['in_kind'] === 'image' && ($msg['thumb_url'] ?? $msg['full_url'] ?? null))
+                                    || ($msg['in_kind'] === 'audio' && !empty($msg['full_url']))
+                                );
+                            @endphp
+                            @if (! $renderouRecebida)
                                 <div class="whitespace-pre-wrap break-words"><x-msg-preview :preview="$msg['preview']" /></div>
                             @elseif (!empty($msg['preview']['caption']))
                                 <div class="whitespace-pre-wrap break-words">{{ $msg['preview']['caption'] }}</div>

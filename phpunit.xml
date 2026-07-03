@@ -29,6 +29,7 @@
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="INCOMING_MEDIA_DOWNLOAD" value="false"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TENANCY_SINGLE_ACCOUNT_FALLBACK" value="true"/>
         <env name="PULSE_ENABLED" value="false"/>

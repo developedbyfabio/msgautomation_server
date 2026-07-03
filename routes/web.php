@@ -63,6 +63,29 @@ Route::middleware('auth')->group(function () {
         // Prompt 05: documento baixa/abre com o nome ORIGINAL (path no disco e uuid).
         return \Illuminate\Support\Facades\Storage::disk('local')->response($log->media_path, $log->media_name);
     })->whereNumber('logId')->name('media.show');
+
+    // Prompt 13 — serve a midia RECEBIDA (imagem cheia / audio), escopada por conta:
+    // a query passa pelo escopo de conta (SetAccountContext ja rodou), entao midia
+    // de outra conta = 404 (findOrFail), nunca vaza. ?thumb=1 devolve a miniatura
+    // EMBUTIDA (jpegThumbnail) extraida on-the-fly — tira o base64 do HTML do poll.
+    Route::get('/media/incoming/{id}', function (int $id, \Illuminate\Http\Request $request) {
+        $msg = \App\Models\IncomingMessage::query()->findOrFail($id);
+
+        if ($request->boolean('thumb')) {
+            $bin = \App\Whatsapp\MessagePreview::thumbnailBinary((array) $msg->raw_payload);
+            abort_if($bin === null, 404);
+
+            return response($bin, 200, [
+                'Content-Type' => 'image/jpeg',
+                'Cache-Control' => 'private, max-age=86400',
+            ]);
+        }
+
+        abort_if($msg->media_path === null, 404);
+
+        return \Illuminate\Support\Facades\Storage::disk('local')
+            ->response($msg->media_path, $msg->media_name, ['Content-Type' => $msg->media_mime ?: 'application/octet-stream']);
+    })->whereNumber('id')->name('media.incoming');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
     // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.

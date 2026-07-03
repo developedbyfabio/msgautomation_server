@@ -35,11 +35,38 @@ class MessagePreview
      */
     public static function thumbnail(array $raw): ?string
     {
+        $bin = self::thumbnailBinary($raw);
+
+        return $bin !== null ? 'data:image/jpeg;base64,' . base64_encode($bin) : null;
+    }
+
+    /**
+     * Prompt 13 (Frente 3) — checagem BARATA de que ha miniatura embutida (so
+     * presenca, sem reconstruir bytes): o thread() decide se emite a URL do thumb
+     * sem carregar base64 no HTML do poll. A validacao real fica na rota.
+     */
+    public static function hasThumbnail(array $raw): bool
+    {
+        return ! empty(data_get(self::msgNode($raw), 'imageMessage.jpegThumbnail'));
+    }
+
+    /**
+     * Prompt 13 (Frente 3) — os BYTES crus do jpegThumbnail (pra servir por URL,
+     * tirando o base64 do HTML do poll). Mesma extracao/validacao do thumbnail(),
+     * so que devolve o binario JPEG em vez do data URI. null = sem miniatura valida.
+     */
+    public static function thumbnailBinary(array $raw): ?string
+    {
         $t = data_get(self::msgNode($raw), 'imageMessage.jpegThumbnail');
 
-        // Ja veio base64 (serializacao alternativa) — confia e monta o data URI.
+        // Ja veio base64 (serializacao alternativa) — decodifica.
         if (is_string($t)) {
-            return $t !== '' ? 'data:image/jpeg;base64,' . $t : null;
+            if ($t === '') {
+                return null;
+            }
+            $bin = base64_decode($t, true);
+
+            return ($bin !== false && strncmp($bin, "\xFF\xD8\xFF", 3) === 0) ? $bin : null;
         }
 
         // Buffer serializado: {type:'Buffer', data:[...]}.
@@ -61,11 +88,7 @@ class MessagePreview
         }
 
         // Confere a assinatura JPEG (FF D8 FF) — nao vira <img> quebrada com lixo.
-        if (strncmp($bin, "\xFF\xD8\xFF", 3) !== 0) {
-            return null;
-        }
-
-        return 'data:image/jpeg;base64,' . base64_encode($bin);
+        return strncmp($bin, "\xFF\xD8\xFF", 3) === 0 ? $bin : null;
     }
 
     public static function for(string $type, ?string $text, array $raw = []): array

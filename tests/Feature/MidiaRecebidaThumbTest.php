@@ -28,11 +28,6 @@ class MidiaRecebidaThumbTest extends TestCase
         return [0xFF, 0xD8, 0xFF, 0xE0, $marcador, $marcador, 0xFF, 0xD9];
     }
 
-    private function dataUri(array $bytes): string
-    {
-        return 'data:image/jpeg;base64,' . base64_encode(implode('', array_map('chr', $bytes)));
-    }
-
     private function imagem(Account $a, Channel $c, string $jid, string $id, ?array $thumbBytes, ?string $caption = null): void
     {
         $imageMessage = [];
@@ -52,24 +47,45 @@ class MidiaRecebidaThumbTest extends TestCase
         ]);
     }
 
-    public function test_imagem_com_thumbnail_renderiza_miniatura_data_uri(): void
+    public function test_imagem_com_thumbnail_renderiza_miniatura_por_url_sem_base64(): void
     {
         $a = Account::create(['name' => 'A']);
         $c = Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
         $jid = '5541999990000@s.whatsapp.net';
         Contact::create(['account_id' => $a->id, 'remote_jid' => $jid, 'auto_reply_mode' => 'default']);
 
-        $bytes = $this->jpegBytes(0x41);
-        $this->imagem($a, $c, $jid, 'IMG1', $bytes, 'olha essa foto');
+        $this->imagem($a, $c, $jid, 'IMG1', $this->jpegBytes(0x41), 'olha essa foto');
+        $id = IncomingMessage::where('evolution_message_id', 'IMG1')->value('id');
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', $jid)
-            ->assertSeeHtml('src="' . $this->dataUri($bytes) . '"') // miniatura embutida
-            ->assertSee('Previa (imagem completa em breve)')         // indicador de preview
-            ->assertSee('olha essa foto');                            // legenda preservada
+            // Frente 3: miniatura vem por URL (?thumb=1), NAO base64 inline no HTML do poll.
+            ->assertSeeHtml('/media/incoming/' . $id . '?thumb=1')
+            ->assertDontSee('data:image/jpeg;base64,')
+            ->assertSee('Previa (imagem completa em breve)')
+            ->assertSee('olha essa foto'); // legenda preservada
     }
 
-    public function test_imagem_sem_thumbnail_cai_no_rotulo(): void
+    public function test_imagem_cheia_baixada_vira_link_para_a_rota(): void
+    {
+        $a = Account::create(['name' => 'A']);
+        $c = Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
+        $jid = '5541999990000@s.whatsapp.net';
+        Contact::create(['account_id' => $a->id, 'remote_jid' => $jid, 'auto_reply_mode' => 'default']);
+
+        $this->imagem($a, $c, $jid, 'IMG3', $this->jpegBytes(0x41));
+        // simula o download ja concluido (Fatia 2)
+        $msg = IncomingMessage::where('evolution_message_id', 'IMG3')->first();
+        $msg->update(['media_path' => 'media/incoming/' . $a->id . '/x/foto.jpg', 'media_mime' => 'image/jpeg', 'media_status' => 'stored']);
+
+        Livewire::test(Conversas::class)
+            ->set('selectedJid', $jid)
+            // abre a imagem cheia (sem ?thumb) — o indicador "Previa" some.
+            ->assertSeeHtml('href="' . route('media.incoming', $msg->id) . '"')
+            ->assertDontSee('Previa (imagem completa em breve)');
+    }
+
+    public function test_imagem_sem_thumbnail_e_sem_download_cai_no_rotulo(): void
     {
         $a = Account::create(['name' => 'A']);
         $c = Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
@@ -81,7 +97,8 @@ class MidiaRecebidaThumbTest extends TestCase
         Livewire::test(Conversas::class)
             ->set('selectedJid', $jid)
             ->assertSee('Imagem')                       // rotulo padrao (nao quebra)
-            ->assertDontSee('data:image/jpeg;base64,'); // nada de miniatura
+            ->assertDontSee('data:image/jpeg;base64,')
+            ->assertDontSeeHtml('?thumb=1');
     }
 
     public function test_thumbnail_nao_vaza_entre_contas(): void
@@ -94,17 +111,17 @@ class MidiaRecebidaThumbTest extends TestCase
         Contact::create(['account_id' => $a->id, 'remote_jid' => $jid, 'auto_reply_mode' => 'default']);
         Contact::create(['account_id' => $b->id, 'remote_jid' => $jid, 'auto_reply_mode' => 'default']);
 
-        $bytesA = $this->jpegBytes(0x41); // "AA"
-        $bytesB = $this->jpegBytes(0x42); // "BB"
-        $this->imagem($a, $c = $ca, $jid, 'A1', $bytesA);
-        $this->imagem($b, $c = $cb, $jid, 'B1', $bytesB);
+        $this->imagem($a, $ca, $jid, 'A1', $this->jpegBytes(0x41));
+        $this->imagem($b, $cb, $jid, 'B1', $this->jpegBytes(0x42));
+        $idA = IncomingMessage::where('evolution_message_id', 'A1')->value('id');
+        $idB = IncomingMessage::where('evolution_message_id', 'B1')->value('id');
 
-        // Contexto = conta A: ve so a miniatura de A, nunca a de B.
+        // Contexto = conta A: a thread carrega SO mensagens de A (escopo por conta).
         app(AccountContext::class)->set($a->id);
 
         Livewire::test(Conversas::class)
             ->set('selectedJid', $jid)
-            ->assertSeeHtml('src="' . $this->dataUri($bytesA) . '"')
-            ->assertDontSeeHtml('src="' . $this->dataUri($bytesB) . '"');
+            ->assertSeeHtml('/media/incoming/' . $idA . '?thumb=1')
+            ->assertDontSeeHtml('/media/incoming/' . $idB . '?thumb=1');
     }
 }

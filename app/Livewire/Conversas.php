@@ -495,14 +495,19 @@ class Conversas extends Component
             if ($m->from_me && in_array($m->evolution_message_id, $providerIds, true)) {
                 continue;
             }
-            // Fatia 1 (midia recebida): so imagem, so a miniatura embutida no payload
-            // (jpegThumbnail) — sem baixar nada. Nao-imagem/sem thumb => null (cai no rotulo).
-            $ehImagem = in_array($m->type, ['imageMessage', 'image'], true);
+            // Midia recebida (Fatia 2): emite URLs escopadas por conta — NAO base64
+            // inline (Frente 3: HTML do poll fica leve). in_kind = image|audio|null;
+            // full_url = imagem cheia/audio baixados; thumb_url = miniatura embutida
+            // servida pela rota (?thumb=1), so quando ha jpegThumbnail (Evolution).
+            $cat = $m->mediaCategory();
             $items[] = [
                 'at' => $m->received_at,
                 'preview' => MessagePreview::for($m->type, $m->text, (array) $m->raw_payload),
                 'kind' => $m->from_me ? 'out_phone' : 'in',
-                'media_thumb' => $ehImagem ? MessagePreview::thumbnail((array) $m->raw_payload) : null,
+                'in_kind' => $cat,
+                'full_url' => $m->media_path ? route('media.incoming', $m->id) : null,
+                'thumb_url' => ($cat === 'image' && MessagePreview::hasThumbnail((array) $m->raw_payload))
+                    ? route('media.incoming', ['id' => $m->id, 'thumb' => 1]) : null,
             ];
         }
 
