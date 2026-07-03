@@ -47,7 +47,10 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @fluxAppearance
 </head>
-<body class="h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased">
+{{-- Prompt 09: h-viewport (100dvh c/ fallback 100vh) — no mobile o 100vh puro e mais
+     alto que a area visivel (barra do navegador), criava rolagem de pagina e escondia
+     a caixa de envio da conversa. No desktop dvh == vh: nada muda. --}}
+<body class="h-viewport bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased">
     {{-- Sidebar Flux (free): colapsavel no desktop (icones-so quando retraida, tooltip no hover)
          e overlay no mobile (abre pelo hamburguer do header, fecha no backdrop/navegacao). --}}
     <flux:sidebar sticky collapsible class="border-e border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">

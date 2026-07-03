@@ -181,7 +181,9 @@
                     },
                     destroy() { this.obs?.disconnect(); }
                 }">
-                <div x-ref="scroller" @scroll="onScroll" class="flex-1 overflow-y-auto p-4">
+                {{-- Prompt 09: overscroll-contain — chegar no fim/topo das mensagens nao
+                     encadeia o scroll pro documento (evita puxar a pagina no touch). --}}
+                <div x-ref="scroller" @scroll="onScroll" class="flex-1 overflow-y-auto overscroll-contain p-4">
                 @forelse ($thread as $msg)
                     @php
                         $isIn = $msg['side'] === 'in';
