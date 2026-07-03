@@ -13,6 +13,11 @@ class Contatos extends Component
 {
     public string $search = '';
 
+    // Prompt 19 — adicionar contato manualmente (form).
+    public bool $showAdd = false;
+    public string $newName = '';
+    public string $newNumber = '';
+
     public ?int $editingId = null;
     public string $editName = '';
     public string $editNotes = '';
@@ -31,6 +36,96 @@ class Contatos extends Component
     public ?int $confirmingDeleteTagId = null;
 
     /** Aprovar (on) e default sao instantaneos. Silenciar (off) passa por confirmacao. */
+    // ---- Prompt 19: adicionar contato manualmente -------------------------------
+
+    public function openAdd(): void
+    {
+        $this->reset(['newName', 'newNumber']);
+        $this->resetErrorBag(['newName', 'newNumber']);
+        $this->showAdd = true;
+    }
+
+    public function cancelAdd(): void
+    {
+        $this->showAdd = false;
+    }
+
+    /**
+     * Cria/adota contato manual (saved=true). Numero canonicalizado com o MESMO
+     * helper do inbound/envio (BrWaId) — sem reimplementar. Dedup POR CONTA: se o
+     * numero ja existe (qualquer variante do 9o digito), adota (nao duplica).
+     */
+    public function saveNew(): void
+    {
+        $this->validate([
+            'newName' => 'required|string|max:120',
+            'newNumber' => 'required|string',
+        ], [], ['newName' => 'nome', 'newNumber' => 'numero']);
+
+        $canonical = $this->canonicalizarNumero($this->newNumber);
+        if ($canonical === null) {
+            $this->addError('newNumber', 'Numero invalido — informe DDD + numero (ex.: 41 98765-4321).');
+
+            return;
+        }
+
+        // Variantes do 9o digito (com/sem) — casa com o formato dos contatos auto.
+        $variantes = array_values(array_unique(array_filter([
+            $canonical,
+            \App\Channels\CloudApi\BrWaId::comNonoDigito($canonical),
+            \App\Channels\CloudApi\BrWaId::semNonoDigito($canonical),
+        ])));
+        $jids = array_map(fn ($d) => $d . '@s.whatsapp.net', $variantes);
+        $nome = trim($this->newName);
+
+        // Dedup/adocao SEMPRE escopada a conta ativa.
+        $existente = Contact::query()->where('account_id', $this->accountId())
+            ->whereIn('remote_jid', $jids)->first();
+
+        if ($existente !== null) {
+            $existente->saved = true;
+            if ($nome !== '') {
+                $existente->push_name = $nome; // nao sobrescreve com vazio
+            }
+            $existente->save();
+            $this->dispatch('toast', message: 'Contato adicionado a lista.');
+        } else {
+            Contact::create([
+                'account_id' => $this->accountId(),
+                'remote_jid' => $canonical . '@s.whatsapp.net',
+                'push_name' => $nome !== '' ? $nome : null,
+                'saved' => true,
+                'auto_reply_mode' => 'default',
+            ]);
+            $this->dispatch('toast', message: 'Contato adicionado.');
+        }
+
+        $this->showAdd = false;
+        $this->reset(['newName', 'newNumber']);
+    }
+
+    /**
+     * Digitos canonicos (com DDI) do numero, ou null se nao for canonicalizavel.
+     * Reusa BrWaId::paraEnvio (celular BR sempre COM o 9 — mesma regra do envio,
+     * casa com Evolution e com canonicalJid do Cloud).
+     */
+    private function canonicalizarNumero(string $input): ?string
+    {
+        $d = preg_replace('/\D+/', '', $input);
+
+        // BR local sem DDI (10-11 digitos): prefixa 55.
+        if (! str_starts_with($d, '55') && (strlen($d) === 10 || strlen($d) === 11)) {
+            $d = '55' . $d;
+        }
+
+        // Valido = BR full: 12 (fixo) ou 13 (celular com 9). Fora disso: lixo.
+        if (strlen($d) < 12 || strlen($d) > 13) {
+            return null;
+        }
+
+        return \App\Channels\CloudApi\BrWaId::paraEnvio($d);
+    }
+
     public function setMode(int $id, string $mode): void
     {
         if (! in_array($mode, ['default', 'on'], true)) {
@@ -216,6 +311,10 @@ class Contatos extends Component
     {
         $contacts = Contact::query()->with('tags')
             ->where('account_id', $this->accountId())
+            // Prompt 19: "meus contatos" = criados do zero OU nomeados/salvos (saved=true).
+            // Auto nunca-tocados (saved=false) NAO aparecem AQUI, mas seguem vivos no
+            // resto do sistema (Kanban/Conversas/Painel/reativo).
+            ->where('saved', true)
             ->when($this->search !== '', function ($q) {
                 $q->where(function ($w) {
                     $w->where('remote_jid', 'like', '%' . $this->search . '%')

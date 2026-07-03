@@ -14,6 +14,11 @@
                     class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                     <flux:icon icon="tag" variant="micro" /> Tags
                 </button>
+                {{-- Prompt 19: adicionar contato manualmente --}}
+                <button type="button" wire:click="openAdd"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                    <flux:icon icon="plus" variant="micro" /> Adicionar contato
+                </button>
             </div>
         </div>
 
@@ -89,6 +94,33 @@
             @endforelse
         </div>
     </div>
+
+    {{-- Prompt 19 — MODAL: adicionar contato manualmente --}}
+    @if ($showAdd)
+        <x-modal wireClose="cancelAdd" title="Adicionar contato">
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium mb-1">Nome</label>
+                    <input type="text" wire:model="newName" data-autofocus placeholder="Nome do contato"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('newName') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1">Numero (WhatsApp)</label>
+                    <input type="text" wire:model="newNumber" placeholder="41 98765-4321"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    @error('newNumber') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <p class="mt-1 text-[11px] text-zinc-400">Com DDD. O 9o digito e o DDI (55) sao ajustados automaticamente.</p>
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" wire:click="cancelAdd" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                    <button type="button" wire:click="saveNew" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                        <flux:icon icon="check" variant="micro" /> Adicionar
+                    </button>
+                </div>
+            </div>
+        </x-modal>
+    @endif
 
     {{-- MODAL: editar contato --}}
     @if ($editing)

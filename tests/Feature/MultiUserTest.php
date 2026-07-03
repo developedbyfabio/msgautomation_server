@@ -39,8 +39,9 @@ class MultiUserTest extends TestCase
             Channel::create(['account_id' => $acc->id, 'instance' => $inst, 'status' => 'connected']);
             AutoReplySetting::create(['account_id' => $acc->id]);
         }
-        Contact::create(['account_id' => $this->a->id, 'remote_jid' => '5541999990000@s.whatsapp.net', 'push_name' => 'Cliente-da-A']);
-        Contact::create(['account_id' => $this->b->id, 'remote_jid' => '5541999990000@s.whatsapp.net', 'push_name' => 'Cliente-da-B']);
+        // Prompt 19: a listagem de Contatos filtra saved=true (representam "meus contatos").
+        Contact::create(['account_id' => $this->a->id, 'remote_jid' => '5541999990000@s.whatsapp.net', 'push_name' => 'Cliente-da-A', 'saved' => true]);
+        Contact::create(['account_id' => $this->b->id, 'remote_jid' => '5541999990000@s.whatsapp.net', 'push_name' => 'Cliente-da-B', 'saved' => true]);
 
         app(AccountContext::class)->clear();
     }

@@ -72,8 +72,10 @@ class TenantIsolationTest extends TestCase
             ]);
         }
 
-        Contact::create(['account_id' => $this->a->id, 'remote_jid' => self::JID, 'push_name' => 'Cliente-da-A', 'auto_reply_mode' => 'on']);
-        Contact::create(['account_id' => $this->b->id, 'remote_jid' => self::JID, 'push_name' => 'Cliente-da-B', 'auto_reply_mode' => 'on']);
+        // Prompt 19: a listagem de Contatos filtra saved=true — estes representam "meus
+        // contatos" (nomeados). saved nao afeta nenhuma outra logica; isolamento intacto.
+        Contact::create(['account_id' => $this->a->id, 'remote_jid' => self::JID, 'push_name' => 'Cliente-da-A', 'auto_reply_mode' => 'on', 'saved' => true]);
+        Contact::create(['account_id' => $this->b->id, 'remote_jid' => self::JID, 'push_name' => 'Cliente-da-B', 'auto_reply_mode' => 'on', 'saved' => true]);
 
         // Regras com o MESMO gatilho e respostas diferentes.
         foreach ([[$this->a, 'RESPOSTA-DA-CONTA-A'], [$this->b, 'RESPOSTA-DA-CONTA-B']] as [$acc, $resp]) {
