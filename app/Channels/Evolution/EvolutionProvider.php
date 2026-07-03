@@ -55,8 +55,12 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
     // ---- credenciais (fallback ADITIVO no env — MT-2 remove) ---------------------
 
     /**
-     * Credenciais efetivas do canal: channels.credentials quando preenchido,
-     * senao o env atual (identico ao comportamento pre-CH-1). NUNCA logar.
+     * Credenciais efetivas do canal. base_url/apikey vem do canal, senao do env
+     * (INFRA compartilhada: o servidor Evolution e um so). NUNCA logar.
+     *
+     * Prompt 27 (Fatia 3): a INSTANCIA e SEMPRE a do canal — NUNCA cai na instancia
+     * global do .env. Sem canal => instancia vazia (no-op explicito): um tenant sem
+     * canal jamais opera sobre a instancia de outra conta (ex.: 'fabio-pessoal').
      *
      * @return array{base_url: string, apikey: string, instance: string}
      */
@@ -67,7 +71,7 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
         return [
             'base_url' => (string) (($cred['base_url'] ?? null) ?: config('services.evolution.base_url')),
             'apikey' => (string) (($cred['apikey'] ?? null) ?: config('services.evolution.api_key')),
-            'instance' => (string) (($cred['instance'] ?? null) ?: ($channel->instance ?? config('services.evolution.instance'))),
+            'instance' => (string) (($cred['instance'] ?? null) ?: ($channel?->instance ?? '')),
         ];
     }
 
