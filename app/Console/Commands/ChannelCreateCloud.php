@@ -2,10 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Channels\CloudApi\SaveCloudChannel;
 use App\Models\Account;
 use App\Models\Channel;
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 
 /**
  * CH-2 — cria (ou, com --update, CORRIGE) o canal WhatsApp Cloud API da conta.
@@ -26,7 +26,7 @@ class ChannelCreateCloud extends Command
 
     protected $description = 'Cria ou atualiza (--update) um canal WhatsApp Cloud API (credenciais por prompt oculto, cifradas)';
 
-    public function handle(): int
+    public function handle(SaveCloudChannel $saver): int
     {
         $account = $this->option('account')
             ? Account::find((int) $this->option('account'))
@@ -41,6 +41,8 @@ class ChannelCreateCloud extends Command
 
         // Ordem fixa dos campos (rotulos explicitos contra troca de valores):
         // phone_number_id -> waba_id -> access_token -> app_secret -> verify_token.
+        // Early-exit de UX (falha antes de pedir segredos); a fonte da verdade da
+        // validacao/persistencia e o Action SaveCloudChannel (chamado ao fim).
         $phoneNumberId = trim((string) $this->ask('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)'));
         if (! preg_match('/^\d{5,20}$/', $phoneNumberId)) {
             $this->error('phone_number_id invalido (esperado: so digitos).');
@@ -72,57 +74,38 @@ class ChannelCreateCloud extends Command
         }
 
         $wabaId = trim((string) $this->ask('waba_id (WhatsApp Business Account id, NUMERICO — nao e o app id)'));
-
         $accessToken = trim((string) $this->secret('access_token (o TOKEN GRANDE da Meta, comeca com EAA... — oculto)'));
         $appSecret = trim((string) $this->secret('app_secret (App settings > Basic, hex curto — NAO e o access token; oculto)'));
-        if ($accessToken === '' || $appSecret === '') {
-            $this->error('access_token e app_secret sao obrigatorios.');
-
-            return self::FAILURE;
-        }
-        if (! str_starts_with($accessToken, 'EAA')) {
-            $this->warn('Aviso: access_token da Meta normalmente comeca com "EAA" — confira se nao inverteu os campos.');
-        }
 
         $rotuloVerify = 'verify_token (a string CURTA que VOCE inventou pro webhook — NAO o token EAA... da Meta; '
             . ($update ? 'vazio = mantem o atual; oculto)' : 'vazio = gero um; oculto)');
         $verifyToken = trim((string) $this->secret($rotuloVerify));
-        if ($verifyToken !== '' && str_starts_with($verifyToken, 'EAA')
-            && ! $this->confirm('Isso parece um ACCESS TOKEN da Meta, nao um verify_token. Usar mesmo assim?', false)) {
-            $this->error('Abortado sem gravar nada — rode de novo com o verify_token certo.');
+
+        // Delegacao: validacao (obrigatorios), anti-swap (verify "EAA" = erro),
+        // montagem+cifra e create/update ficam no Action (fonte unica).
+        $r = $saver->handle($account, [
+            'phone_number_id' => $phoneNumberId,
+            'waba_id' => $wabaId,
+            'access_token' => $accessToken,
+            'app_secret' => $appSecret,
+            'verify_token' => $verifyToken,
+        ], $update);
+
+        if ($r->warning !== null) {
+            $this->warn($r->warning); // aviso nao bloqueante (access_token sem "EAA")
+        }
+        if (! $r->ok) {
+            $this->error($r->error);
 
             return self::FAILURE;
         }
 
-        $credentials = [
-            'access_token' => $accessToken,
-            'phone_number_id' => $phoneNumberId,
-            'waba_id' => $wabaId,
-            'app_secret' => $appSecret,
-        ];
-
-        if ($update) {
-            $verifyGerado = false;
-            $credentials['verify_token'] = $verifyToken !== ''
-                ? $verifyToken
-                : (string) ($existente->credentials['verify_token'] ?? '');
-            // SO credenciais: instance, webhook_token e status ficam como estao.
-            $existente->update(['credentials' => $credentials]);
-            $channel = $existente;
-            $this->info("Canal cloud_api {$channel->id} (conta {$account->id}) ATUALIZADO. Webhook token preservado; credenciais cifradas.");
-        } else {
-            $verifyGerado = $verifyToken === '';
-            $credentials['verify_token'] = $verifyGerado ? Str::random(32) : $verifyToken;
-            $channel = Channel::withoutAccountScope()->create([
-                'account_id' => $account->id,
-                'instance' => $phoneNumberId, // roteamento: DTO.instance = metadata.phone_number_id
-                'provider' => 'cloud_api',
-                'webhook_token' => Str::random(48),
-                'status' => 'disconnected', // vira connected no "verificar" / primeiro trafego
-                'credentials' => $credentials,
-            ]);
-            $this->info("Canal cloud_api criado: id {$channel->id} (conta {$account->id}). Credenciais CIFRADAS no banco.");
-        }
+        $channel = $r->channel;
+        $verifyGerado = $r->verifyGerado;
+        $credentials = $channel->credentials;
+        $this->info($update
+            ? "Canal cloud_api {$channel->id} (conta {$account->id}) ATUALIZADO. Webhook token preservado; credenciais cifradas."
+            : "Canal cloud_api criado: id {$channel->id} (conta {$account->id}). Credenciais CIFRADAS no banco.");
 
         $this->line('Configure/confira o webhook no app da Meta (produto WhatsApp > Configuration):');
         $this->line('  Callback URL: https://wa.nextgest.com.br/webhook/cloud/' . $channel->webhook_token);
