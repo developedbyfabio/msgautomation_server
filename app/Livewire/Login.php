@@ -29,10 +29,15 @@ class Login extends Component
     {
         $this->validate();
 
-        $key = 'login:' . Str::lower($this->email) . '|' . request()->ip();
+        $ip = request()->ip();
+        // Dois freios anti-forca-bruta (Prompt 28):
+        //  - por (email+IP): 5/min — protege UMA conta;
+        //  - por IP: 20/min — corta password-spraying (muitos emails, mesmo IP).
+        $key = 'login:' . Str::lower($this->email) . '|' . $ip;
+        $ipKey = 'login-ip:' . $ip;
 
-        if (RateLimiter::tooManyAttempts($key, 5)) {
-            $seconds = RateLimiter::availableIn($key);
+        if (RateLimiter::tooManyAttempts($key, 5) || RateLimiter::tooManyAttempts($ipKey, 20)) {
+            $seconds = max(RateLimiter::availableIn($key), RateLimiter::availableIn($ipKey));
             throw ValidationException::withMessages([
                 'email' => "Muitas tentativas. Tente de novo em {$seconds}s.",
             ]);
@@ -57,12 +62,15 @@ class Login extends Component
 
         if (! Auth::attempt(['email' => $this->email, 'password' => $this->password], $this->remember)) {
             RateLimiter::hit($key, 60);
+            RateLimiter::hit($ipKey, 60);
+            // Mensagem GENERICA (anti-enumeracao): identica pra email inexistente e
+            // senha errada — nao revela se o email existe.
             throw ValidationException::withMessages([
                 'email' => 'Credenciais invalidas.',
             ]);
         }
 
-        RateLimiter::clear($key);
+        RateLimiter::clear($key); // limpa o freio da conta; o freio por IP decai sozinho
         session()->regenerate();
 
         return $this->redirectRoute('conversas', navigate: false);
