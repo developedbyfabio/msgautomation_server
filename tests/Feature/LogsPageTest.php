@@ -152,6 +152,36 @@ class LogsPageTest extends TestCase
             ->assertSee('frase misteriosa');
     }
 
+    /** Prompt 17 — reacao (curtir/coracao) nao aparece na listagem de recebidas dos Logs. */
+    public function test_reacao_nao_aparece_na_listagem_de_recebidas(): void
+    {
+        $base = [
+            'account_id' => $this->account->id, 'channel_id' => $this->evo->id, 'instance' => 'evo-a',
+            'remote_jid' => '554188881111@s.whatsapp.net', 'from_me' => false, 'received_at' => now(),
+        ];
+        // Mensagem de texto normal: DEVE aparecer.
+        \App\Models\IncomingMessage::withoutAccountScope()->create($base + [
+            'evolution_message_id' => 'TXT-OK', 'push_name' => 'Fulano Texto',
+            'type' => 'conversation', 'text' => 'mensagem legitima', 'raw_payload' => [],
+        ]);
+        // Reacao Evolution (historica) + reacao Cloud: NAO devem aparecer.
+        \App\Models\IncomingMessage::withoutAccountScope()->create($base + [
+            'evolution_message_id' => 'REACT-EVO', 'push_name' => 'Fulano Reacao',
+            'type' => 'reactionMessage', 'text' => null, 'raw_payload' => [],
+        ]);
+        \App\Models\IncomingMessage::withoutAccountScope()->create($base + [
+            'evolution_message_id' => 'REACT-CLOUD', 'push_name' => 'Beltrano Reacao',
+            'type' => 'reaction', 'text' => null, 'raw_payload' => [],
+        ]);
+
+        $this->tela()
+            ->set('tipo', 'recebida')
+            ->assertSee('Fulano Texto')       // texto normal continua listado
+            ->assertSee('mensagem legitima')
+            ->assertDontSee('Fulano Reacao')  // reacao Evolution filtrada
+            ->assertDontSee('Beltrano Reacao'); // reacao Cloud filtrada
+    }
+
     public function test_filtros_por_tipo_canal_e_periodo(): void
     {
         $this->logEnviado('wamid.OKC', $this->cloud->id);

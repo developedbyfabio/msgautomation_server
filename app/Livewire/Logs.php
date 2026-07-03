@@ -80,6 +80,9 @@ class Logs extends Component
         if ($quer('recebida')) {
             $eventos = $eventos->concat(IncomingMessage::query()
                 ->where('from_me', false)->where('received_at', '>=', $cutoff)
+                // Prompt 17: reacao nao e mensagem — some da listagem de recebidas
+                // (limpa as linhas historicas; novas ja nem entram, corte do prompt 16).
+                ->whereNotIn('type', IncomingMessage::REACTION_TYPES)
                 ->when($ids !== null, fn ($q) => $q->whereIn('channel_id', $ids))
                 ->orderByDesc('received_at')->limit($this->limite)
                 ->get()->map(fn ($m) => [
