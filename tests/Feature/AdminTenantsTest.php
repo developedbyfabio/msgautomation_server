@@ -153,4 +153,130 @@ class AdminTenantsTest extends TestCase
             ->assertSee('Tenant A')->assertSee('Tenant B')
             ->assertDontSee('5541999990000');
     }
+
+    // ---- Prompt 25: editar conta + gerir usuarios ------------------------------
+
+    private function admin(): User
+    {
+        return $this->usuario($this->conta('Base Admin'), admin: true, email: 'admin@plat.local');
+    }
+
+    public function test_renomear_tenant_nao_muda_o_slug_instancia(): void
+    {
+        $admin = $this->admin();
+        $t = Account::create(['name' => 'Antigo']);
+        $canal = \App\Models\Channel::create([
+            'account_id' => $t->id, 'instance' => 'conta-' . $t->id . '-antigo', 'provider' => 'evolution',
+            'webhook_token' => 'tok', 'status' => 'disconnected',
+        ]);
+
+        \Livewire\Livewire::actingAs($admin)->test(Tenants::class)
+            ->call('openEdit', $t->id)
+            ->set('editName', 'Nome Novo')
+            ->call('salvarConta')->assertHasNoErrors();
+
+        $this->assertSame('Nome Novo', $t->fresh()->name);
+        $this->assertSame('conta-' . $t->id . '-antigo', $canal->fresh()->instance); // slug/instancia imutavel
+    }
+
+    public function test_adicionar_owner_a_tenant_sem_usuarios(): void
+    {
+        $admin = $this->admin();
+        $t = Account::create(['name' => 'T']); // 0 usuarios (o caso orfao)
+        $this->assertSame(0, $t->users()->count());
+
+        \Livewire\Livewire::actingAs($admin)->test(Tenants::class)
+            ->call('openEdit', $t->id)
+            ->set('nuName', 'Dono do T')->set('nuEmail', 'dono@t.com')
+            ->set('nuPassword', 'senha-forte-123')->set('nuOwner', true)
+            ->call('adicionarUsuario')->assertHasNoErrors();
+
+        $owner = User::where('email', 'dono@t.com')->firstOrFail();
+        $this->assertTrue(Hash::check('senha-forte-123', $owner->password)); // hasheada
+        $this->assertFalse((bool) $owner->is_platform_admin);                 // nao vira super-admin
+        $this->assertSame(1, $t->fresh()->users()->count());
+        $this->assertSame('owner', $t->users()->where('users.id', $owner->id)->first()->pivot->role);
+    }
+
+    public function test_editar_email_e_resetar_senha(): void
+    {
+        $admin = $this->admin();
+        $t = Account::create(['name' => 'Tenant U']);
+        $u = User::create(['name' => 'User', 'email' => 'velho@t.com', 'password' => Hash::make('senha-antiga-1')]);
+        $u->accounts()->attach($t->id, ['role' => 'operador']);
+
+        $tela = \Livewire\Livewire::actingAs($admin)->test(Tenants::class)->call('openEdit', $t->id);
+
+        // editar email
+        $tela->set('rowUserId', $u->id)->set('rowEmail', 'novo@t.com')->call('editarEmail', $u->id)->assertHasNoErrors();
+        $this->assertSame('novo@t.com', $u->fresh()->email);
+
+        // resetar senha (nova funciona, antiga nao)
+        $tela->set('rowUserId', $u->id)->set('rowPassword', 'senha-nova-123')->call('resetarSenha', $u->id)->assertHasNoErrors();
+        $fresh = $u->fresh();
+        $this->assertTrue(Hash::check('senha-nova-123', $fresh->password));
+        $this->assertFalse(Hash::check('senha-antiga-1', $fresh->password));
+    }
+
+    public function test_remover_usuario_e_bloqueio_do_ultimo_owner(): void
+    {
+        $admin = $this->admin();
+        $t = Account::create(['name' => 'Tenant R']);
+        $owner = User::create(['name' => 'O', 'email' => 'o@t.com', 'password' => Hash::make('x-123456789')]);
+        $owner->accounts()->attach($t->id, ['role' => 'owner']);
+        $op = User::create(['name' => 'P', 'email' => 'p@t.com', 'password' => Hash::make('x-123456789')]);
+        $op->accounts()->attach($t->id, ['role' => 'operador']);
+
+        $tela = \Livewire\Livewire::actingAs($admin)->test(Tenants::class)->call('openEdit', $t->id);
+
+        // remove operador: ok
+        $tela->call('removerUsuario', $op->id);
+        $this->assertSame(0, $t->users()->where('users.id', $op->id)->count());
+
+        // remove o ULTIMO owner: bloqueado (segue vinculado)
+        $tela->call('removerUsuario', $owner->id);
+        $this->assertSame(1, $t->users()->where('users.id', $owner->id)->count());
+        $this->assertSame(1, $this->ownersDe($t));
+    }
+
+    public function test_nao_rebaixar_o_ultimo_owner(): void
+    {
+        $admin = $this->admin();
+        $t = Account::create(['name' => 'Tenant Owner']);
+        $owner = User::create(['name' => 'O', 'email' => 'o@to.com', 'password' => Hash::make('x-123456789')]);
+        $owner->accounts()->attach($t->id, ['role' => 'owner']);
+
+        \Livewire\Livewire::actingAs($admin)->test(Tenants::class)
+            ->call('openEdit', $t->id)
+            ->call('alternarOwner', $owner->id); // tentar rebaixar o unico owner
+
+        $this->assertSame('owner', $t->users()->where('users.id', $owner->id)->first()->pivot->role); // segue owner
+    }
+
+    public function test_gestao_de_usuarios_de_a_nao_afeta_b(): void
+    {
+        $admin = $this->admin();
+        $a = Account::create(['name' => 'Tenant A']);
+        $b = Account::create(['name' => 'Tenant B']);
+        $ub = User::create(['name' => 'B User', 'email' => 'b@b.com', 'password' => Hash::make('x-123456789')]);
+        $ub->accounts()->attach($b->id, ['role' => 'owner']);
+
+        // Editando A: adiciona usuario, renomeia. B nao pode ser tocado.
+        \Livewire\Livewire::actingAs($admin)->test(Tenants::class)
+            ->call('openEdit', $a->id)
+            ->set('editName', 'A Renomeada')->call('salvarConta')
+            ->set('nuName', 'A User')->set('nuEmail', 'a@a.com')->set('nuPassword', 'senha-forte-123')
+            ->call('adicionarUsuario')
+            // a lista de usuarios em edicao (A) NAO mostra o usuario da B
+            ->assertDontSee('b@b.com');
+
+        $this->assertSame('Tenant B', $b->fresh()->name);         // B intacto
+        $this->assertSame(1, $b->users()->count());               // so o dele
+        $this->assertSame('b@b.com', $b->users()->first()->email);
+    }
+
+    private function ownersDe(Account $a): int
+    {
+        return $a->users()->wherePivot('role', 'owner')->count();
+    }
 }
