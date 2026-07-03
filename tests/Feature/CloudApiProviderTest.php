@@ -357,11 +357,11 @@ class CloudApiProviderTest extends TestCase
     public function test_comando_cria_canal_cloud_com_segredos_ocultos_e_cifrados(): void
     {
         $this->artisan('msg:channel:create-cloud', ['--account' => $this->account->id])
-            ->expectsQuestion('phone_number_id (do painel da Meta, numero de TESTE)', '333444555666777')
-            ->expectsQuestion('WABA id (WhatsApp Business Account id)', '888999000')
-            ->expectsQuestion('verify_token do webhook (vazio = gero um)', '')
-            ->expectsQuestion('access token (oculto; temporario do painel vale ~23h)', 'token-secreto-abc')
-            ->expectsQuestion('app secret (oculto; em App settings > Basic)', 'segredo-app-xyz')
+            ->expectsQuestion('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)', '333444555666777')
+            ->expectsQuestion('waba_id (WhatsApp Business Account id, NUMERICO — nao e o app id)', '888999000')
+            ->expectsQuestion('access_token (o TOKEN GRANDE da Meta, comeca com EAA... — oculto)', 'token-secreto-abc')
+            ->expectsQuestion('app_secret (App settings > Basic, hex curto — NAO e o access token; oculto)', 'segredo-app-xyz')
+            ->expectsQuestion('verify_token (a string CURTA que VOCE inventou pro webhook — NAO o token EAA... da Meta; vazio = gero um; oculto)', '')
             ->assertSuccessful();
 
         $canal = Channel::withoutAccountScope()->where('instance', '333444555666777')->firstOrFail();

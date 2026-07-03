@@ -239,6 +239,69 @@ class CloudApiParteBTest extends TestCase
             && data_get($req->data(), 'context') === null);
     }
 
+    // ---- msg:channel:create-cloud --update (correcao de credenciais) ---------------------
+
+    public function test_update_corrige_credenciais_sem_recriar_e_preserva_o_webhook_token(): void
+    {
+        $idAntes = $this->cloud->id;
+
+        $this->artisan('msg:channel:create-cloud', ['--account' => $this->account->id, '--update' => true])
+            ->expectsQuestion('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)', self::PNID)
+            ->expectsQuestion('waba_id (WhatsApp Business Account id, NUMERICO — nao e o app id)', '102290129340398')
+            ->expectsQuestion('access_token (o TOKEN GRANDE da Meta, comeca com EAA... — oculto)', 'EAAtoken-novo-correto')
+            ->expectsQuestion('app_secret (App settings > Basic, hex curto — NAO e o access token; oculto)', 'app-secret-novo')
+            ->expectsQuestion('verify_token (a string CURTA que VOCE inventou pro webhook — NAO o token EAA... da Meta; vazio = mantem o atual; oculto)', 'verify-novo')
+            ->expectsOutputToContain('ATUALIZADO. Webhook token preservado')
+            ->expectsOutputToContain('Callback URL: https://wa.nextgest.com.br/webhook/cloud/tok-b')
+            ->expectsOutputToContain('Verify token: ver…vo (11 chars)') // mascarado, nunca inteiro
+            ->assertSuccessful();
+
+        $canal = Channel::withoutAccountScope()->where('instance', self::PNID)->firstOrFail();
+        $this->assertSame($idAntes, $canal->id);            // NAO recriou
+        $this->assertSame('tok-b', $canal->webhook_token);  // Callback URL continua valida
+        $this->assertSame('cloud_api', $canal->provider);
+        $this->assertSame('EAAtoken-novo-correto', $canal->credentials['access_token']);
+        $this->assertSame('app-secret-novo', $canal->credentials['app_secret']);
+        $this->assertSame('verify-novo', $canal->credentials['verify_token']);
+        $this->assertSame(1, Channel::withoutAccountScope()->count()); // nenhum canal novo
+
+        // Cifrado em repouso: nada em claro na coluna.
+        $cru = (string) \Illuminate\Support\Facades\DB::table('channels')->where('id', $canal->id)->value('credentials');
+        $this->assertStringNotContainsString('EAAtoken-novo-correto', $cru);
+        $this->assertStringNotContainsString('app-secret-novo', $cru);
+        $this->assertStringNotContainsString('verify-novo', $cru);
+    }
+
+    public function test_update_com_verify_token_vazio_mantem_o_atual(): void
+    {
+        $this->artisan('msg:channel:create-cloud', ['--account' => $this->account->id, '--update' => true])
+            ->expectsQuestion('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)', self::PNID)
+            ->expectsQuestion('waba_id (WhatsApp Business Account id, NUMERICO — nao e o app id)', '102290129340398')
+            ->expectsQuestion('access_token (o TOKEN GRANDE da Meta, comeca com EAA... — oculto)', 'EAAoutro')
+            ->expectsQuestion('app_secret (App settings > Basic, hex curto — NAO e o access token; oculto)', 'outro-secret')
+            ->expectsQuestion('verify_token (a string CURTA que VOCE inventou pro webhook — NAO o token EAA... da Meta; vazio = mantem o atual; oculto)', '')
+            ->assertSuccessful();
+
+        $canal = Channel::withoutAccountScope()->where('instance', self::PNID)->firstOrFail();
+        $this->assertSame(self::VERIFY, $canal->credentials['verify_token']); // manteve
+        $this->assertSame('EAAoutro', $canal->credentials['access_token']);   // trocou
+    }
+
+    public function test_update_sem_canal_existente_falha_e_create_com_canal_existente_aponta_o_update(): void
+    {
+        // --update sem canal: erro claro, nada criado.
+        $this->artisan('msg:channel:create-cloud', ['--account' => $this->account->id, '--update' => true])
+            ->expectsQuestion('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)', '777666555444333')
+            ->assertFailed();
+        $this->assertSame(0, Channel::withoutAccountScope()->where('instance', '777666555444333')->count());
+
+        // create com canal ja existente: aborta apontando o --update.
+        $this->artisan('msg:channel:create-cloud', ['--account' => $this->account->id])
+            ->expectsQuestion('phone_number_id (ID NUMERICO do numero no painel da Meta — nao e o telefone)', self::PNID)
+            ->expectsOutputToContain('rode com --update')
+            ->assertFailed();
+    }
+
     // ---- janela de 24h tambem no modo auto ----------------------------------------------
 
     public function test_auto_com_janela_fechada_e_bloqueado_sem_tentar_free_form(): void
