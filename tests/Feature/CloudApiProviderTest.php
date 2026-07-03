@@ -212,11 +212,13 @@ class CloudApiProviderTest extends TestCase
         $r->responses()->create(['response_text' => 'Das 8h as 18h.']);
 
         // 1. Chegou pelo canal CLOUD -> responde pelo Graph API com o token do canal.
+        // Parte B: o `to` sai CANONICALIZADO (celular BR ganha o 9o digito que a
+        // Meta espera no envio) — e a mudanca de comportamento DA fatia.
         $this->postAssinado($this->payloadMeta('qual o horario?', 'wamid.CANAL1'))->assertOk();
         Http::assertSent(fn ($req) => str_contains($req->url(), 'graph.facebook.com/v21.0/' . self::PNID . '/messages')
             && $req->header('Authorization')[0] === 'Bearer token-meta-teste'
             && data_get($req->data(), 'text.body') === 'Das 8h as 18h.'
-            && data_get($req->data(), 'to') === self::WA_ID);
+            && data_get($req->data(), 'to') === '5541988887777');
 
         // 2. MESMA regra, chegada pela EVOLUTION -> responde pelo sendText da Evolution.
         (new \App\Jobs\ProcessIncomingWhatsappMessage([

@@ -162,6 +162,10 @@ class CloudApiProvider implements ChannelProvider
         }
 
         $numero = str_contains($to, '@') ? Str::before($to, '@') : $to;
+        // Parte B — 9o digito BR na SAIDA: a Meta espera o celular completo (com
+        // 9) no `to`, mesmo quando entregou o wa_id sem ele (400/131030 provado
+        // em teste real contra a allowlist do numero de teste).
+        $numero = BrWaId::paraEnvio($numero);
 
         $body = [
             'messaging_product' => 'whatsapp',
@@ -245,15 +249,13 @@ class CloudApiProvider implements ChannelProvider
     {
         $jid = $waId . '@s.whatsapp.net';
 
-        $variante = null;
-        if (preg_match('/^55(\d{2})(\d{8})$/', $waId, $m)) {
-            $variante = '55' . $m[1] . '9' . $m[2] . '@s.whatsapp.net'; // sem 9 -> com 9
-        } elseif (preg_match('/^55(\d{2})9(\d{8})$/', $waId, $m)) {
-            $variante = '55' . $m[1] . $m[2] . '@s.whatsapp.net'; // com 9 -> sem 9
-        }
-        if ($variante === null) {
+        // Regra UNICA do 9o digito (BrWaId — a mesma do envio), aqui guardada
+        // pela existencia do contato: so troca pra variante se ela JA existe.
+        $digitos = BrWaId::comNonoDigito($waId) ?? BrWaId::semNonoDigito($waId);
+        if ($digitos === null) {
             return $jid;
         }
+        $variante = $digitos . '@s.whatsapp.net';
 
         $channel = Channel::withoutAccountScope()->where('instance', $phoneNumberId)->first();
         if ($channel === null) {

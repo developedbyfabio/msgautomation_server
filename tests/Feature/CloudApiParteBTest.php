@@ -302,6 +302,37 @@ class CloudApiParteBTest extends TestCase
             ->assertFailed();
     }
 
+    // ---- 9o digito BR na SAIDA (o caso real do 400/131030) --------------------------------
+
+    public function test_envio_cloud_pra_celular_br_sem_nono_digito_sai_com_o_nono(): void
+    {
+        // O caso REAL: a Meta entregou wa_id 554191541757 (sem 9); a allowlist
+        // do numero de teste tem 5541991541757 (com 9) -> 400/131030.
+        $contato = $this->contato('554191541757@s.whatsapp.net');
+        \App\Models\ContactChannelWindow::touchWindow($this->account->id, (int) $contato->id, (int) $this->cloud->id);
+
+        $log = app(Sender::class)->send(mode: 'manual', channel: $this->cloud, jid: '554191541757@s.whatsapp.net', text: 'oi');
+
+        $this->assertSame('sent', $log->status);
+        Http::assertSent(fn ($req) => data_get($req->data(), 'to') === '5541991541757');
+    }
+
+    public function test_envio_cloud_com_nono_fixo_e_estrangeiro_ficam_inalterados(): void
+    {
+        // Regra unica (BrWaId): so celular BR SEM o 9 muda; o resto passa intacto.
+        $this->assertSame('5541991541757', \App\Channels\CloudApi\BrWaId::paraEnvio('554191541757'));
+        $this->assertSame('5541991541757', \App\Channels\CloudApi\BrWaId::paraEnvio('5541991541757')); // ja com 9
+        $this->assertSame('554133224455', \App\Channels\CloudApi\BrWaId::paraEnvio('554133224455'));   // fixo (base 2-5)
+        $this->assertSame('16505551234', \App\Channels\CloudApi\BrWaId::paraEnvio('16505551234'));     // estrangeiro
+
+        // E o transporte real com numero JA com 9: `to` identico.
+        $contato = $this->contato('5541999998888@s.whatsapp.net');
+        \App\Models\ContactChannelWindow::touchWindow($this->account->id, (int) $contato->id, (int) $this->cloud->id);
+        $log = app(Sender::class)->send(mode: 'manual', channel: $this->cloud, jid: '5541999998888@s.whatsapp.net', text: 'oi');
+        $this->assertSame('sent', $log->status);
+        Http::assertSent(fn ($req) => data_get($req->data(), 'to') === '5541999998888');
+    }
+
     // ---- janela de 24h tambem no modo auto ----------------------------------------------
 
     public function test_auto_com_janela_fechada_e_bloqueado_sem_tentar_free_form(): void
