@@ -12,12 +12,18 @@ use App\Whatsapp\MessagePreview;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 #[Layout('components.layouts.app')]
 class Conversas extends Component
 {
+    use WithFileUploads;
+
     public ?string $selectedJid = null;
     public string $body = '';
+
+    /** Prompt 04 — imagem anexada (upload temporario do Livewire; preview antes de enviar). */
+    public $foto = null;
     public ?string $sendStatus = null;
     public ?string $confirmingMuteJid = null;
     public string $search = '';
@@ -192,9 +198,86 @@ class Conversas extends Component
         $this->confirmingMuteJid = null;
     }
 
+    // ---- Prompt 04: anexo de imagem -----------------------------------------
+
+    /** Limites do canal mais restritivo (Meta: imagem jpeg/png ate 5 MB; webp aceito na Evolution). */
+    private const REGRAS_FOTO = ['foto' => 'image|mimes:jpg,jpeg,png,webp|max:5120'];
+
+    private const MENSAGENS_FOTO = [
+        'foto.image' => 'O arquivo escolhido nao e uma imagem.',
+        'foto.mimes' => 'Tipo nao aceito — use jpg, jpeg, png ou webp.',
+        'foto.max' => 'Imagem acima de 5 MB (limite do canal).',
+    ];
+
+    /** Valida na hora do anexo: tipo/tamanho invalido e recusado ANTES do preview. */
+    public function updatedFoto(): void
+    {
+        $this->resetErrorBag('foto');
+        try {
+            $this->validate(self::REGRAS_FOTO, self::MENSAGENS_FOTO);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->foto = null;
+            throw $e;
+        }
+    }
+
+    public function cancelarFoto(): void
+    {
+        $this->foto = null;
+        $this->resetErrorBag('foto');
+    }
+
+    /**
+     * Envio manual de IMAGEM: mesma disciplina do texto (Sender modo manual —
+     * respeita tetos, ignora kill switch, janela de 24h no cloud). O texto
+     * digitado vira LEGENDA. Midia guardada no disco privado, por conta.
+     */
+    private function sendFoto(Sender $sender): void
+    {
+        if (! $this->foto || ! $this->selectedJid) {
+            return;
+        }
+        $this->validate(self::REGRAS_FOTO, self::MENSAGENS_FOTO);
+
+        $channel = $this->channel();
+        if (! $channel) {
+            $this->sendStatus = 'Sem canal configurado.';
+
+            return;
+        }
+
+        // Path POR CONTA (isolamento): media/{account}/{numero}/{uuid}.{ext}
+        $dir = 'media/' . $this->accountId() . '/' . $this->numberFromJid($this->selectedJid);
+        $nome = (string) Str::uuid() . '.' . strtolower($this->foto->getClientOriginalExtension());
+        $path = $this->foto->storeAs($dir, $nome, 'local');
+
+        $log = $sender->send('manual', $channel, $this->selectedJid, trim($this->body), media: [
+            'path' => $path,
+            'mime' => (string) $this->foto->getMimeType(),
+        ]);
+
+        $this->foto = null;
+        if ($log->status === 'sent') {
+            $this->body = '';
+            $this->sendStatus = null;
+            $this->dispatch('toast', message: 'Imagem enviada.');
+        } else {
+            $this->sendStatus = $log->status === 'blocked'
+                ? 'Bloqueado por freio: ' . $log->motivo
+                : 'Falha no envio da imagem.';
+        }
+    }
+
     /** Envio MANUAL (R1): respeita tetos protetivos, ignora kill switch. Envia de verdade. */
     public function sendManual(Sender $sender): void
     {
+        // Prompt 04: com anexo pendente, o Enviar manda a IMAGEM (texto = legenda).
+        if ($this->foto) {
+            $this->sendFoto($sender);
+
+            return;
+        }
+
         $body = trim($this->body);
         if ($body === '' || ! $this->selectedJid) {
             return;
@@ -364,6 +447,8 @@ class Conversas extends Component
                 'at' => $l->sent_at ?? $l->created_at,
                 'preview' => MessagePreview::plain($l->response_text),
                 'kind' => $l->mode === 'auto' ? 'out_bot' : 'out_manual',
+                // Prompt 04: imagem enviada renderiza na bolha (rota autenticada+escopada).
+                'media' => $l->media_path ? route('media.show', $l->id) : null,
             ];
         }
 

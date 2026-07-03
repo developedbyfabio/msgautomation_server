@@ -19,6 +19,8 @@ class AutoReplyLog extends Model
         'remote_jid',
         'mode',
         'response_text',
+        'media_path',  // Prompt 04: anexo enviado (disco 'local', media/{conta}/...)
+        'media_mime',
         'status',
         'motivo',
         'provider_message_id',

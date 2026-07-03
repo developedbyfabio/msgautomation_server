@@ -40,6 +40,7 @@ class Sender
         bool $fromMe = false,
         bool $flow = false,
         ?int $campaignId = null,
+        ?array $media = null, // Prompt 04: ['path' => relativo ao disco local, 'mime' => ...] — imagem
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
@@ -49,13 +50,13 @@ class Sender
         //    incoming (INICIA conversa): a idempotencia e do claim do TARGET.
         if (in_array($mode, ['auto', 'aprovacao'], true) && $incomingMessageId !== null) {
             try {
-                $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId, $campaignId));
+                $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, $incomingMessageId, $ruleId, $campaignId, $media));
             } catch (UniqueConstraintViolationException) {
                 // Ja existe resposta pra essa mensagem recebida -> nao reenvia.
                 return AutoReplyLog::where('incoming_message_id', $incomingMessageId)->first();
             }
         } else {
-            $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId, $campaignId));
+            $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId, $campaignId, $media));
         }
 
         // 2. freios (ruleId habilita o cooldown por regra — S2; flow isenta o intervalo
@@ -130,8 +131,19 @@ class Sender
         $replyTo = $incomingMessageId !== null
             ? \App\Models\IncomingMessage::withoutAccountScope()->whereKey($incomingMessageId)->value('evolution_message_id')
             : null;
+        //    Prompt 04: com anexo, o transporte e sendImage (caption = texto
+        //    resolvido); MESMOS freios/janela/log acima — anexo nao fura teto.
         try {
-            $sent = $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
+            $sent = $media !== null
+                ? $this->providers->for($channel)->sendImage(
+                    $channel,
+                    $jid,
+                    \Illuminate\Support\Facades\Storage::disk('local')->path($media['path']),
+                    (string) $media['mime'],
+                    $textoEnvio !== '' ? $textoEnvio : null,
+                    $replyTo,
+                )
+                : $this->providers->for($channel)->sendText($channel, $jid, $textoEnvio, $replyTo);
         } catch (WhatsappSendException) {
             $log->update(['status' => 'failed', 'motivo' => 'erro_envio']);
 
@@ -159,9 +171,11 @@ class Sender
         return $log;
     }
 
-    private function base(int $accountId, Channel $channel, string $jid, string $text, string $mode, ?int $incomingMessageId, ?int $ruleId, ?int $campaignId = null): array
+    private function base(int $accountId, Channel $channel, string $jid, string $text, string $mode, ?int $incomingMessageId, ?int $ruleId, ?int $campaignId = null, ?array $media = null): array
     {
         return [
+            'media_path' => $media['path'] ?? null,  // Prompt 04
+            'media_mime' => $media['mime'] ?? null,
             'account_id' => $accountId,
             'channel_id' => $channel->id,
             'incoming_message_id' => $incomingMessageId,

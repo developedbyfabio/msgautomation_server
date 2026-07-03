@@ -36,6 +36,15 @@ interface ChannelProvider
      */
     public function sendText(Channel $channel, string $to, string $text, ?string $replyTo = null): SentMessageData;
 
+    /**
+     * Prompt 04 — envia IMAGEM (transporte puro; freios no Sender, como o texto).
+     * $filePath e caminho ABSOLUTO local; $caption opcional. Cada provider tem a
+     * sua mecanica: Evolution manda base64 no sendMedia; Cloud API faz upload
+     * (/{phone_number_id}/media -> media_id) e envia a mensagem referenciando o id.
+     * Lanca WhatsappSendException em falha de transporte.
+     */
+    public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData;
+
     /** Valida a origem do webhook pro canal resolvido (token / HMAC no CH-2). */
     public function verifyWebhook(Request $request, Channel $channel): bool;
 

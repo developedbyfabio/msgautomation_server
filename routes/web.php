@@ -53,6 +53,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/perfil', \App\Livewire\Perfil::class)->name('perfil');
     // Prompt 02 — logs/eventos da conta (somente leitura; util mesmo desconectado).
     Route::get('/logs', \App\Livewire\Logs::class)->name('logs');
+    // Prompt 04 — serve a midia ENVIADA da conversa. Resolucao EXPLICITA dentro
+    // da closure (binding implicito rodaria antes do SetAccountContext): a query
+    // escopada por conta garante que midia de outra conta = 404, nunca vaza.
+    Route::get('/media/{logId}', function (int $logId) {
+        $log = \App\Models\AutoReplyLog::query()->findOrFail($logId);
+        abort_unless($log->media_path !== null, 404);
+
+        return \Illuminate\Support\Facades\Storage::disk('local')->response($log->media_path);
+    })->whereNumber('logId')->name('media.show');
     // Fluxos (construtor): config, editavel mesmo offline.
     Route::get('/fluxos', Fluxos::class)->name('fluxos');
     // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.

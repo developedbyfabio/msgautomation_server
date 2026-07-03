@@ -114,6 +114,46 @@ class EvolutionProvider implements ChannelProvider, WhatsappGateway
         );
     }
 
+    /**
+     * Prompt 04 — imagem pela Evolution v2.3.7: POST /message/sendMedia/{instance}
+     * com a midia em BASE64 (mediatype image). Transporte puro, como o sendText.
+     */
+    public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData
+    {
+        $c = $this->credentialsFor($channel);
+        $number = str_contains($to, '@') ? Str::before($to, '@') : $to;
+
+        $conteudo = @file_get_contents($filePath);
+        if ($conteudo === false) {
+            throw new WhatsappSendException('Evolution sendImage: arquivo de midia ilegivel.');
+        }
+
+        $resp = Http::baseUrl(rtrim($c['base_url'], '/'))
+            ->withHeaders(['apikey' => $c['apikey']])
+            ->acceptJson()
+            ->timeout(40)
+            ->post("/message/sendMedia/{$c['instance']}", [
+                'number' => $number,
+                'mediatype' => 'image',
+                'mimetype' => $mime,
+                'caption' => (string) $caption,
+                'media' => base64_encode($conteudo),
+                'fileName' => basename($filePath),
+            ]);
+
+        if ($resp->failed()) {
+            throw new WhatsappSendException("Evolution sendImage falhou (HTTP {$resp->status()}).");
+        }
+
+        $json = $resp->json() ?? [];
+
+        return new SentMessageData(
+            providerMessageId: data_get($json, 'key.id'),
+            status: $resp->status(),
+            raw: is_array($json) ? $json : [],
+        );
+    }
+
     // ---- webhook -------------------------------------------------------------------
 
     /** Evolution: a origem e o TOKEN por canal (MT-0). Comparacao em tempo constante. */

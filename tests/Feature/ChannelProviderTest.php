@@ -99,6 +99,11 @@ class ChannelProviderTest extends TestCase
                 return new SentMessageData(providerMessageId: 'FAKE1', status: 201, raw: []);
             }
 
+            public function sendImage(Channel $channel, string $to, string $filePath, string $mime, ?string $caption = null, ?string $replyTo = null): SentMessageData
+            {
+                return new SentMessageData(providerMessageId: 'FAKE-IMG', status: 201, raw: []);
+            }
+
             public function verifyWebhook(Request $request, Channel $channel): bool
             {
                 return true;

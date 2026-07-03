@@ -193,6 +193,13 @@
                             'rounded-2xl rounded-tl-sm' => ! $msg['grouped'] && $isIn,
                             'rounded-2xl rounded-tr-sm' => ! $msg['grouped'] && ! $isIn,
                         ])>
+                            @if (!empty($msg['media']))
+                                {{-- Prompt 04: imagem enviada (rota autenticada/escopada por conta) --}}
+                                <a href="{{ $msg['media'] }}" target="_blank" rel="noopener">
+                                    <img src="{{ $msg['media'] }}" alt="Imagem enviada" loading="lazy"
+                                        class="mb-1 max-h-64 max-w-full rounded-lg object-contain" />
+                                </a>
+                            @endif
                             <div class="whitespace-pre-wrap break-words"><x-msg-preview :preview="$msg['preview']" /></div>
                             <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                                 @if ($origLabel)
@@ -226,6 +233,23 @@
                 @if ($isGroup)
                     <div class="text-center text-xs text-zinc-400">Envio manual desabilitado para grupos.</div>
                 @else
+                    {{-- Prompt 04: erro de validacao do anexo + preview antes de enviar --}}
+                    @error('foto')
+                        <div class="mb-2 rounded-lg bg-red-100 px-3 py-1.5 text-xs text-red-800 dark:bg-red-950 dark:text-red-300">{{ $message }}</div>
+                    @enderror
+                    @if ($foto)
+                        <div class="mb-2 flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800">
+                            <img src="{{ $foto->temporaryUrl() }}" alt="Preview da imagem anexada" class="h-16 w-16 rounded-lg object-cover" />
+                            <div class="min-w-0 flex-1 text-xs text-zinc-500">
+                                <p class="font-medium text-zinc-700 dark:text-zinc-200">Imagem pronta pra enviar</p>
+                                <p>O texto digitado abaixo vai junto como legenda (opcional).</p>
+                            </div>
+                            <button type="button" wire:click="cancelarFoto"
+                                class="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-700">
+                                Cancelar
+                            </button>
+                        </div>
+                    @endif
                     {{-- Prompt 03 — composer: Enter ENVIA; Ctrl/Shift+Enter quebra linha;
                          textarea auto-crescente (ate ~8 linhas, depois scroll); emojis
                          (utf8mb4 ponta a ponta + seletor simples). So muda COMO dispara —
@@ -255,6 +279,15 @@
                                 $wire.sendManual().then(() => $nextTick(() => this.resize()));
                             },
                         }">
+                        {{-- Prompt 04: anexar imagem (clipe -> input escondido -> preview) --}}
+                        <input type="file" x-ref="arquivo" wire:model="foto" accept="image/jpeg,image/png,image/webp" class="hidden"
+                            aria-label="Escolher imagem pra anexar" />
+                        <button type="button" @click="$refs.arquivo.click()" wire:loading.attr="disabled" wire:target="foto"
+                            class="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
+                            aria-label="Anexar imagem" title="Anexar imagem">
+                            <flux:icon icon="paper-clip" variant="mini" wire:loading.remove wire:target="foto" />
+                            <flux:icon icon="arrow-path" variant="mini" class="animate-spin" wire:loading wire:target="foto" />
+                        </button>
                         <div class="relative">
                             <button type="button" @click="emojisAbertos = !emojisAbertos"
                                 class="inline-flex size-9 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
