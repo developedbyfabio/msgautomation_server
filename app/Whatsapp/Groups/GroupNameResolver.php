@@ -59,9 +59,16 @@ class GroupNameResolver
             return null;
         }
 
+        // Prompt 27 (Fatia 4): conta SEM canal -> no-op (nunca cair na instancia
+        // global do .env pra buscar metadado de grupo de outra conta).
+        $canal = \App\Models\Channel::defaultFor($accountId);
+        if ($canal === null) {
+            return null;
+        }
+
         try {
-            // MT-2: credenciais/instancia do CANAL da conta (fallback env dentro).
-            $resp = $this->provider->api(\App\Models\Channel::defaultFor($accountId))->groupInfo($jid);
+            // MT-2: credenciais/instancia do CANAL da conta.
+            $resp = $this->provider->api($canal)->groupInfo($jid);
             if (! $resp->successful()) {
                 return null;
             }

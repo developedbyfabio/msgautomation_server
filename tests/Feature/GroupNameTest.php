@@ -61,6 +61,7 @@ class GroupNameTest extends TestCase
     {
         Http::fake(['*group/findGroupInfos*' => Http::response(['subject' => 'Churras do Predio'], 200)]);
         $a = Account::create(['name' => 'T']);
+        Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
 
         (new ResolveGroupName($a->id, self::GJID))->handle(app(GroupNameResolver::class));
 
@@ -88,6 +89,7 @@ class GroupNameTest extends TestCase
     {
         Http::fake(['*group/findGroupInfos*' => Http::response(['subject' => 'Atualizado'], 200)]);
         $a = Account::create(['name' => 'T']);
+        Channel::create(['account_id' => $a->id, 'instance' => 'fabio-pessoal', 'status' => 'connected']);
         Group::create(['account_id' => $a->id, 'remote_jid' => self::GJID, 'subject' => 'Velho']);
 
         $nome = app(GroupNameResolver::class)->resolveNow($a->id, self::GJID);
@@ -111,5 +113,17 @@ class GroupNameTest extends TestCase
         // Cacheado -> nao dispara HTTP. Mostra o NOME do grupo como rotulo da conversa.
         // (O JID ainda aparece em wire:key/wire:click — atributos, nao o rotulo visivel.)
         Livewire::test(Conversas::class)->assertSee('Vizinhanca');
+    }
+
+    /** Prompt 27 (Fatia 4): conta SEM canal -> no-op gracioso, sem tocar a instancia global. */
+    public function test_resolve_now_sem_canal_e_noop(): void
+    {
+        Http::fake(); // qualquer chamada = falha o teste
+        $a = Account::create(['name' => 'Sem Canal']); // sem Channel
+
+        $nome = app(GroupNameResolver::class)->resolveNow($a->id, self::GJID);
+
+        $this->assertNull($nome);
+        Http::assertNothingSent(); // nao caiu na instancia global do .env
     }
 }
