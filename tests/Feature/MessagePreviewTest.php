@@ -40,6 +40,44 @@ class MessagePreviewTest extends TestCase
         $this->assertSame('[fooBarMessage]', $desc['label']); // fallback
     }
 
+    public function test_thumbnail_extrai_miniatura_embutida_do_payload(): void
+    {
+        // JPEG minimo (assinatura FF D8 FF ... FF D9) como array de bytes — a forma
+        // REAL que a Evolution/Baileys entrega no jpegThumbnail.
+        $bytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0xFF, 0xD9];
+        $b64 = base64_encode(implode('', array_map('chr', $bytes)));
+        $esperado = 'data:image/jpeg;base64,' . $b64;
+
+        // array de bytes puro
+        $this->assertSame($esperado, MessagePreview::thumbnail(
+            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => $bytes]]]]
+        ));
+
+        // Buffer serializado {type:'Buffer', data:[...]}
+        $this->assertSame($esperado, MessagePreview::thumbnail(
+            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => ['type' => 'Buffer', 'data' => $bytes]]]]]
+        ));
+
+        // node em data.0.message (variante do payload)
+        $this->assertSame($esperado, MessagePreview::thumbnail(
+            ['data' => [0 => ['message' => ['imageMessage' => ['jpegThumbnail' => $bytes]]]]]
+        ));
+
+        // string ja em base64 (fallback defensivo — confia)
+        $this->assertSame('data:image/jpeg;base64,QUJD', MessagePreview::thumbnail(
+            ['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => 'QUJD']]]]
+        ));
+
+        // sem thumbnail -> null (cai no rotulo)
+        $this->assertNull(MessagePreview::thumbnail(['data' => ['message' => ['imageMessage' => ['caption' => 'x']]]]));
+        // bytes sem assinatura JPEG -> null
+        $this->assertNull(MessagePreview::thumbnail(['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => [1, 2, 3, 4]]]]]));
+        // valor invalido (fora de 0..255) -> null
+        $this->assertNull(MessagePreview::thumbnail(['data' => ['message' => ['imageMessage' => ['jpegThumbnail' => [999, 1]]]]]));
+        // payload vazio -> null
+        $this->assertNull(MessagePreview::thumbnail([]));
+    }
+
     public function test_thread_mostra_label_e_emoji(): void
     {
         $account = Account::create(['name' => 'Teste']);

@@ -495,10 +495,14 @@ class Conversas extends Component
             if ($m->from_me && in_array($m->evolution_message_id, $providerIds, true)) {
                 continue;
             }
+            // Fatia 1 (midia recebida): so imagem, so a miniatura embutida no payload
+            // (jpegThumbnail) — sem baixar nada. Nao-imagem/sem thumb => null (cai no rotulo).
+            $ehImagem = in_array($m->type, ['imageMessage', 'image'], true);
             $items[] = [
                 'at' => $m->received_at,
                 'preview' => MessagePreview::for($m->type, $m->text, (array) $m->raw_payload),
                 'kind' => $m->from_me ? 'out_phone' : 'in',
+                'media_thumb' => $ehImagem ? MessagePreview::thumbnail((array) $m->raw_payload) : null,
             ];
         }
 

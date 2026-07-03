@@ -19,6 +19,55 @@ class MessagePreview
         return ['plain' => $text ?? '', 'icon' => null, 'emoji' => null, 'label' => null, 'caption' => null];
     }
 
+    /**
+     * Midia recebida — Fatia 1: miniatura JPEG EMBUTIDA no payload
+     * (Evolution: `imageMessage.jpegThumbnail`), devolvida como data URI.
+     * NAO baixa/descriptografa nada — so le o que o webhook ja trouxe.
+     *
+     * Best-effort: qualquer forma inesperada -> null (a bolha cai no rotulo).
+     * A Cloud API nao embute thumbnail no webhook, entao la retorna null e a
+     * imagem cheia fica pra Fatia 2 (download por media_id).
+     *
+     * Formas aceitas do jpegThumbnail:
+     *  - array de bytes puro `[255,216,255,...]` (Evolution/Baileys — o caso real);
+     *  - Buffer serializado `{type:'Buffer', data:[...]}`;
+     *  - string ja em base64 (fallback defensivo).
+     */
+    public static function thumbnail(array $raw): ?string
+    {
+        $t = data_get(self::msgNode($raw), 'imageMessage.jpegThumbnail');
+
+        // Ja veio base64 (serializacao alternativa) — confia e monta o data URI.
+        if (is_string($t)) {
+            return $t !== '' ? 'data:image/jpeg;base64,' . $t : null;
+        }
+
+        // Buffer serializado: {type:'Buffer', data:[...]}.
+        if (is_array($t) && isset($t['data']) && is_array($t['data'])) {
+            $t = $t['data'];
+        }
+
+        if (! is_array($t) || $t === []) {
+            return null;
+        }
+
+        // Reconstitui o binario de bytes (0..255). Qualquer coisa fora disso: aborta.
+        $bin = '';
+        foreach ($t as $b) {
+            if (! is_int($b) || $b < 0 || $b > 255) {
+                return null;
+            }
+            $bin .= chr($b);
+        }
+
+        // Confere a assinatura JPEG (FF D8 FF) — nao vira <img> quebrada com lixo.
+        if (strncmp($bin, "\xFF\xD8\xFF", 3) !== 0) {
+            return null;
+        }
+
+        return 'data:image/jpeg;base64,' . base64_encode($bin);
+    }
+
     public static function for(string $type, ?string $text, array $raw = []): array
     {
         $base = ['plain' => null, 'icon' => null, 'emoji' => null, 'label' => null, 'caption' => null];

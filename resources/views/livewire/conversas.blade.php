@@ -230,8 +230,26 @@
                                         <span class="truncate">{{ $msg['media_name'] ?: 'Documento' }}</span>
                                     </a>
                                 @endif
+                            @elseif (!empty($msg['media_thumb']))
+                                {{-- Prompt 12 (midia recebida, Fatia 1): miniatura embutida (jpegThumbnail
+                                     do payload), low-res, SEM download. A imagem em resolucao cheia vem
+                                     na Fatia 2. Tamanho contido pra caber no balao (desktop e mobile). --}}
+                                <div class="mb-1">
+                                    <img src="{{ $msg['media_thumb'] }}" alt="Previa da imagem recebida" loading="lazy"
+                                        class="max-h-48 max-w-full rounded-lg object-contain" />
+                                    <div class="mt-0.5 flex items-center gap-1 text-[10px] opacity-70">
+                                        <flux:icon icon="photo" variant="micro" class="size-3 shrink-0" />
+                                        <span>Previa (imagem completa em breve)</span>
+                                    </div>
+                                </div>
                             @endif
-                            <div class="whitespace-pre-wrap break-words"><x-msg-preview :preview="$msg['preview']" /></div>
+                            {{-- Texto/legenda. Com miniatura, o rotulo "Imagem" seria redundante embaixo
+                                 dela — mostra so a legenda (se houver). --}}
+                            @if (empty($msg['media_thumb']))
+                                <div class="whitespace-pre-wrap break-words"><x-msg-preview :preview="$msg['preview']" /></div>
+                            @elseif (!empty($msg['preview']['caption']))
+                                <div class="whitespace-pre-wrap break-words">{{ $msg['preview']['caption'] }}</div>
+                            @endif
                             <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                                 @if ($origLabel)
                                     <flux:tooltip content="Origem: {{ $origLabel }}">
