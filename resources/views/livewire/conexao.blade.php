@@ -64,5 +64,82 @@
             </button>
         </div>
         @endif
+
+        {{-- Prompt 24b — alternativa: canal oficial (Meta Cloud API) por credenciais. --}}
+        <div class="mt-6 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <button type="button" wire:click="abrirCloud"
+                class="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
+                <flux:icon icon="cloud" variant="micro" /> Conectar via API oficial (Cloud)
+            </button>
+        </div>
     </div>
+
+    {{-- MODAL: credenciais Cloud API --}}
+    @if ($showCloud)
+        <x-modal wireClose="fecharCloud" title="WhatsApp Cloud API (oficial)" maxWidth="lg">
+            @if ($cloudSalvo)
+                {{-- Pos-sucesso: configure na Meta. Segredos NUNCA em texto. --}}
+                <div class="space-y-3 text-sm">
+                    <div class="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        Credenciais salvas (cifradas). Access token: <strong>{{ $cloudTokenMasked }}</strong>.
+                    </div>
+                    <p class="text-zinc-500">No painel da Meta (WhatsApp &rarr; Configuration), configure o webhook:</p>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">Callback URL</label>
+                        <input type="text" readonly value="{{ $cloudCallbackUrl }}"
+                            class="w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">Verify token</label>
+                        <input type="text" readonly value="{{ $cloudVerifyShown }}"
+                            class="w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <p class="text-[11px] text-zinc-400">Assine o campo <strong>messages</strong>. Guarde o verify token: ele nao e exibido de novo.</p>
+                    <div class="flex justify-end pt-1">
+                        <button type="button" wire:click="fecharCloud" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Fechar</button>
+                    </div>
+                </div>
+            @else
+                <div class="space-y-3">
+                    @if ($cloudError)
+                        <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{{ $cloudError }}</div>
+                    @endif
+                    @if ($cloudWarning)
+                        <div class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-300">{{ $cloudWarning }}</div>
+                    @endif
+                    <div>
+                        <label class="block text-xs font-medium mb-1">phone_number_id <span class="text-zinc-400">(ID numerico do numero na Meta)</span></label>
+                        <input type="text" wire:model="cloudPhone" data-autofocus placeholder="so digitos"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">waba_id <span class="text-zinc-400">(WhatsApp Business Account id)</span></label>
+                        <input type="text" wire:model="cloudWaba"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">access_token <span class="text-zinc-400">(EAA…; secreto)</span></label>
+                        <input type="password" wire:model="cloudAccessToken" autocomplete="off"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">app_secret <span class="text-zinc-400">(App settings &gt; Basic; secreto)</span></label>
+                        <input type="password" wire:model="cloudAppSecret" autocomplete="off"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">verify_token <span class="text-zinc-400">(curto, voce inventa; vazio = gero um)</span></label>
+                        <input type="password" wire:model="cloudVerify" autocomplete="off"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                    <div class="flex justify-end gap-2 pt-1">
+                        <button type="button" wire:click="fecharCloud" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                        <button type="button" wire:click="salvarCloud" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                            <flux:icon icon="check" variant="micro" /> Salvar credenciais
+                        </button>
+                    </div>
+                </div>
+            @endif
+        </x-modal>
+    @endif
 </div>

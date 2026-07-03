@@ -48,6 +48,10 @@ return [
     'cloud_api' => [
         'graph_base' => env('CLOUD_API_GRAPH_BASE', 'https://graph.facebook.com'),
         'graph_version' => env('CLOUD_API_GRAPH_VERSION', 'v23.0'),
+        // Prompt 24b — base PUBLICA da Callback URL do webhook Cloud (subdominio proprio
+        // do webhook, != APP_URL do painel). Default = valor historico hardcoded, pra a
+        // URL nao mudar; fonte unica (comando + UI). Nao e segredo.
+        'webhook_base' => env('CLOUD_API_WEBHOOK_BASE', 'https://wa.nextgest.com.br'),
     ],
 
     // Prompt 13 — midia RECEBIDA (download best-effort em job separado). Desligado

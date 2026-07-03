@@ -45,6 +45,17 @@ class Channel extends Model
             ->first();
     }
 
+    /**
+     * Prompt 24b — Callback URL do webhook Cloud desta conta (base publica da config
+     * + token do canal). Fonte unica pro comando e pra UI. NAO usa route('webhook.cloud')
+     * de proposito: o webhook Cloud vive num subdominio proprio (!= APP_URL do painel).
+     */
+    public function cloudCallbackUrl(): string
+    {
+        return rtrim((string) config('services.cloud_api.webhook_base'), '/')
+            . '/webhook/cloud/' . $this->webhook_token;
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);

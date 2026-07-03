@@ -108,7 +108,7 @@ class ChannelCreateCloud extends Command
             : "Canal cloud_api criado: id {$channel->id} (conta {$account->id}). Credenciais CIFRADAS no banco.");
 
         $this->line('Configure/confira o webhook no app da Meta (produto WhatsApp > Configuration):');
-        $this->line('  Callback URL: https://wa.nextgest.com.br/webhook/cloud/' . $channel->webhook_token);
+        $this->line('  Callback URL: ' . $channel->cloudCallbackUrl());
         $this->line('  Verify token: ' . ($verifyGerado
             ? $credentials['verify_token'] . ' (GERADO agora — anote; e a unica exibicao)'
             : $this->mascarar($credentials['verify_token'])));

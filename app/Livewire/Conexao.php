@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Channels\CloudApi\SaveCloudChannel;
 use App\Channels\Evolution\ChannelProvisioner;
 use App\Channels\Evolution\EvolutionProvider;
 use App\Models\Account;
@@ -28,6 +29,22 @@ class Conexao extends Component
     // provisionamento); com canal, e o fluxo de QR/estado de sempre.
     public bool $temCanal = false;
     public ?string $provisionError = null;
+
+    // Prompt 24b — form de credenciais Cloud API (consome SaveCloudChannel). Sensiveis
+    // (access/app_secret/verify) com wire:model DEFERIDO (so vao ao servidor no salvar)
+    // e sao resetados apos usar — nunca ecoados de volta nem exibidos em texto.
+    public bool $showCloud = false;
+    public string $cloudPhone = '';
+    public string $cloudWaba = '';
+    public string $cloudAccessToken = '';
+    public string $cloudAppSecret = '';
+    public string $cloudVerify = '';
+    public ?string $cloudError = null;
+    public ?string $cloudWarning = null;
+    public ?string $cloudCallbackUrl = null;   // exibido apos salvar (base config + token)
+    public ?string $cloudVerifyShown = null;    // gerado = claro (1x); informado = mascarado
+    public ?string $cloudTokenMasked = null;    // "configurado (…1234)" — nunca o token cheio
+    public bool $cloudSalvo = false;
 
     public function mount(EvolutionProvider $provider)
     {
@@ -159,6 +176,90 @@ class Conexao extends Component
         }
 
         return null;
+    }
+
+    // ---- Prompt 24b: canal Cloud API pela UI (consome SaveCloudChannel) ----------
+
+    public function abrirCloud(): void
+    {
+        $this->reset([
+            'cloudPhone', 'cloudWaba', 'cloudAccessToken', 'cloudAppSecret', 'cloudVerify',
+            'cloudError', 'cloudWarning', 'cloudCallbackUrl', 'cloudVerifyShown', 'cloudTokenMasked', 'cloudSalvo',
+        ]);
+        // Pre-preenche SO nao-segredos (phone/waba) do canal cloud existente da conta.
+        $cloud = Channel::withoutAccountScope()->where('account_id', $this->accountId())
+            ->where('provider', 'cloud_api')->first();
+        if ($cloud !== null) {
+            $this->cloudPhone = (string) ($cloud->credentials['phone_number_id'] ?? $cloud->instance);
+            $this->cloudWaba = (string) ($cloud->credentials['waba_id'] ?? '');
+        }
+        $this->showCloud = true;
+    }
+
+    public function fecharCloud(): void
+    {
+        $this->showCloud = false;
+    }
+
+    public function salvarCloud(SaveCloudChannel $saver): void
+    {
+        $this->cloudError = null;
+        $this->cloudWarning = null;
+
+        $account = Account::find($this->accountId()); // SEMPRE a conta ativa
+        if ($account === null) {
+            $this->cloudError = 'Conta nao encontrada.';
+
+            return;
+        }
+
+        // update = ja existe canal cloud DESTA conta com esse phone_number_id.
+        $update = Channel::withoutAccountScope()->where('account_id', $account->id)
+            ->where('instance', trim($this->cloudPhone))->where('provider', 'cloud_api')->exists();
+
+        $r = $saver->handle($account, [
+            'phone_number_id' => $this->cloudPhone,
+            'waba_id' => $this->cloudWaba,
+            'access_token' => $this->cloudAccessToken,
+            'app_secret' => $this->cloudAppSecret,
+            'verify_token' => $this->cloudVerify,
+        ], $update);
+
+        $this->cloudWarning = $r->warning; // aviso nao bloqueante (access sem "EAA")
+
+        if (! $r->ok) {
+            $this->cloudError = $r->error; // inclui o anti-swap do verify "EAA"
+
+            return;
+        }
+
+        $ch = $r->channel;
+        $this->cloudCallbackUrl = $ch->cloudCallbackUrl();
+        // verify: gerado -> mostra 1x (pra colar na Meta); informado/mantido -> mascarado.
+        $this->cloudVerifyShown = $r->verifyGerado
+            ? (string) $ch->credentials['verify_token']
+            : $this->mascarar((string) $ch->credentials['verify_token']);
+        $this->cloudTokenMasked = 'configurado (…' . mb_substr((string) $ch->credentials['access_token'], -4) . ')';
+        $this->cloudSalvo = true;
+        $this->temCanal = true;
+
+        // Segredos digitados NUNCA persistem no estado do componente (nem no snapshot).
+        $this->reset(['cloudAccessToken', 'cloudAppSecret', 'cloudVerify']);
+
+        $this->dispatch('toast', message: $update ? 'Credenciais Cloud atualizadas.' : 'Canal Cloud criado.');
+    }
+
+    /** Mostra so as pontas (confere sem expor). */
+    private function mascarar(string $v): string
+    {
+        $len = mb_strlen($v);
+        if ($len === 0) {
+            return '(vazio)';
+        }
+
+        return $len <= 6
+            ? mb_substr($v, 0, 1) . str_repeat('*', $len - 1)
+            : mb_substr($v, 0, 3) . '…' . mb_substr($v, -2);
     }
 
     private function syncChannel(): void
