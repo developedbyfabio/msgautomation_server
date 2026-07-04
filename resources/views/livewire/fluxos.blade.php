@@ -240,6 +240,7 @@
                                 <select wire:model="nodeKind.{{ $node->id }}" class="rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
                                     <option value="menu">menu (espera opcao)</option>
                                     <option value="final">final (encerra)</option>
+                                    <option value="handoff">handoff (encerra e chama humano)</option>
                                 </select>
                             </div>
                             <div class="flex items-center gap-2">
@@ -261,7 +262,13 @@
                         </div>
                         <textarea wire:model="nodeMsg.{{ $node->id }}" rows="2" placeholder="Mensagem do no (placeholders e {senha:...} permitidos)" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
 
-                        @if (($nodeKind[$node->id] ?? $node->kind) !== 'final')
+                        @if (($nodeKind[$node->id] ?? $node->kind) === 'handoff')
+                            <div class="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                Ao chegar aqui o robo envia a mensagem acima, <strong>pausa as respostas automaticas</strong> pra esse contato e move o card pra <strong>Em atendimento</strong>. Terminal: sem opcoes.
+                            </div>
+                        @endif
+
+                        @if (! in_array($nodeKind[$node->id] ?? $node->kind, ['final', 'handoff'], true))
                             <div class="mt-2 space-y-1.5">
                                 @foreach ($node->options as $opt)
                                     <div wire:key="opt-{{ $opt->id }}" class="flex flex-wrap items-center gap-2 rounded-md bg-zinc-50 p-2 text-sm dark:bg-zinc-800/50 sm:flex-nowrap">
@@ -279,6 +286,7 @@
                                             <optgroup label="Criar e ligar">
                                                 <option value="novo_menu">+ novo sub-menu</option>
                                                 <option value="novo_final">+ nova resposta final</option>
+                                                <option value="novo_handoff">+ handoff (chamar atendente)</option>
                                             </optgroup>
                                         </select>
                                         <button type="button" wire:click="salvarOpcao({{ $opt->id }})" class="shrink-0 rounded bg-zinc-200 px-2 py-1 text-xs dark:bg-zinc-700">ok</button>
@@ -299,7 +307,7 @@
                     @foreach ($tree as $row)
                         @php $n = $row['node']; @endphp
                         <div style="margin-left: {{ min($row['depth'], 6) * 16 }}px" class="text-zinc-600 dark:text-zinc-300">
-                            <span class="text-zinc-400">{{ $n->kind === 'final' ? 'fim' : 'menu' }}:</span>
+                            <span class="text-zinc-400">{{ match ($n->kind) { 'final' => 'fim', 'handoff' => 'handoff', default => 'menu' } }}:</span>
                             {{ \Illuminate\Support\Str::limit(strip_tags($n->message), 50) }}
                             @foreach ($n->options as $opt)
                                 <div style="margin-left: 16px" class="text-zinc-400">{{ $opt->input }} -> {{ $opt->label ?: '(sem rotulo)' }} {{ $opt->next_node_id ? '[no #' . $opt->next_node_id . ']' : '[sem destino]' }}</div>

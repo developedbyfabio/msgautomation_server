@@ -286,8 +286,25 @@ class Fluxos extends Component
         if (! $node) {
             return;
         }
-        $kind = ($this->nodeKind[$nodeId] ?? 'menu') === 'final' ? 'final' : 'menu';
+        $kindBuf = (string) ($this->nodeKind[$nodeId] ?? 'menu');
+        $kind = in_array($kindBuf, ['final', 'handoff'], true) ? $kindBuf : 'menu';
         $mensagem = (string) ($this->nodeMsg[$nodeId] ?? '');
+
+        // Fatia 5b — handoff e TERMINAL (encerra e chama humano): nao pode ter opcoes,
+        // e a mensagem (a despedida enviada ao contato) e obrigatoria.
+        if ($kind === 'handoff') {
+            if ($node->options()->exists()) {
+                $this->nodeKind[$nodeId] = $node->kind; // reverte o select — o no NAO virou handoff
+                $this->dispatch('toast', message: 'Handoff e terminal: remova as opcoes deste no antes de troca-lo pra handoff.', type: 'error');
+
+                return;
+            }
+            if (trim($mensagem) === '') {
+                $this->dispatch('toast', message: 'Handoff exige mensagem (e o aviso enviado ao contato, ex.: "Um atendente vai te responder em breve").', type: 'error');
+
+                return;
+            }
+        }
         $node->update(['message' => $mensagem, 'kind' => $kind]);
 
         // V-1 — AVISO: placeholder desconhecido sairia CRU pro contato.
@@ -302,6 +319,12 @@ class Fluxos extends Component
     {
         $node = $this->ownNode($nodeId);
         if (! $node) {
+            return;
+        }
+        // Fatia 5b — handoff e terminal: sem opcoes (guarda server-side; a UI ja esconde).
+        if ($node->isHandoff()) {
+            $this->dispatch('toast', message: 'Handoff e terminal: nao aceita opcoes.', type: 'error');
+
             return;
         }
         $prox = (int) ($node->options()->max('ordem') ?? 0) + 1;
@@ -332,8 +355,8 @@ class Fluxos extends Component
     }
 
     /**
-     * Destino da opcao: id de nó existente, ou 'novo_menu'/'novo_final' (cria nó filho
-     * e liga). Vazio limpa o destino.
+     * Destino da opcao: id de nó existente, ou 'novo_menu'/'novo_final'/'novo_handoff'
+     * (cria nó filho e liga). Vazio limpa o destino.
      */
     public function definirDestino(int $optId, string $valor): void
     {
@@ -346,12 +369,16 @@ class Fluxos extends Component
             return;
         }
 
-        if ($valor === 'novo_menu' || $valor === 'novo_final') {
+        if (in_array($valor, ['novo_menu', 'novo_final', 'novo_handoff'], true)) {
             $novo = FlowNode::create([
                 'flow_id' => $node->flow_id,
                 'parent_node_id' => $node->id,
-                'kind' => $valor === 'novo_final' ? 'final' : 'menu',
-                'message' => $valor === 'novo_final' ? 'Resposta final...' : 'Sub-menu...',
+                'kind' => match ($valor) { 'novo_final' => 'final', 'novo_handoff' => 'handoff', default => 'menu' },
+                'message' => match ($valor) {
+                    'novo_final' => 'Resposta final...',
+                    'novo_handoff' => 'Um atendente vai te responder em breve.',
+                    default => 'Sub-menu...',
+                },
                 'ordem' => (int) (FlowNode::where('flow_id', $node->flow_id)->max('ordem') ?? 0) + 1,
             ]);
             $this->nodeMsg[$novo->id] = (string) $novo->message;
@@ -544,8 +571,15 @@ class Fluxos extends Component
         foreach ($tree as $row) {
             $node = $row['node'];
             $opts = $node->options;
-            if ($node->kind !== 'final' && $opts->isEmpty()) {
+            // Fatia 5b: handoff e terminal por natureza — sem opcao NAO e problema.
+            if (! in_array($node->kind, ['final', 'handoff'], true) && $opts->isEmpty()) {
                 $w[] = "No #{$node->id} e menu mas nao tem opcao — vai encerrar como resposta final.";
+            }
+            if ($node->kind === 'handoff' && $opts->isNotEmpty()) {
+                $w[] = "No #{$node->id} e handoff (terminal) mas tem opcoes — elas sao ignoradas na execucao.";
+            }
+            if ($node->kind === 'handoff' && trim((string) $node->message) === '') {
+                $w[] = "No #{$node->id} e handoff sem mensagem — o contato seria passado pro humano sem aviso.";
             }
             foreach ($opts as $opt) {
                 if (! $opt->next_node_id) {
