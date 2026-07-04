@@ -120,6 +120,17 @@
                 </span>
             @endif
             <span class="text-zinc-400">|</span>
+            {{-- Prompt 30: alternar tema claro/escuro. Reusa o appearance do Flux
+                 (localStorage['flux.appearance']; anti-flash pelo @fluxAppearance no head).
+                 'dark' e reativo (Alpine) e o setter $flux.appearance aplica+persiste. --}}
+            <button type="button" title="Alternar tema" aria-label="Alternar tema claro/escuro"
+                x-data="{ dark: document.documentElement.classList.contains('dark') }"
+                @click="dark = ! dark; $flux.appearance = dark ? 'dark' : 'light'"
+                class="inline-flex items-center rounded-md px-2 py-1 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+                <flux:icon icon="sun" variant="micro" x-show="dark" x-cloak />
+                <flux:icon icon="moon" variant="micro" x-show="! dark" x-cloak />
+            </button>
+            <span class="text-zinc-400">|</span>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" title="Sair">

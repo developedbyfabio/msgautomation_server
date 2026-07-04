@@ -78,6 +78,9 @@ class NavegacaoSidebarTest extends TestCase
         // Cluster preservado: robo ON/OFF e botao Sair continuam no header.
         $resp->assertSee('Robo:');
         $resp->assertSee('Sair');
+        // Prompt 30: toggle de tema presente no header (alterna via $flux.appearance).
+        $resp->assertSee('Alternar tema claro/escuro');
+        $resp->assertSee('$flux.appearance', false);
     }
 
     public function test_abas_do_menu_bloqueadas_sem_login(): void
