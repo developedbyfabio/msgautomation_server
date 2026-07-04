@@ -119,6 +119,12 @@
                     <span class="size-1.5 rounded-full bg-zinc-400"></span> OFF
                 </span>
             @endif
+            @auth
+                <span class="text-zinc-400">|</span>
+                {{-- Fatia 2: modo de operacao (Pessoal/Automatico) — Livewire, persiste
+                     SERVER-SIDE por conta (o pipeline le na Fatia 4; por ora so estado). --}}
+                <livewire:operation-mode-toggle />
+            @endauth
             <span class="text-zinc-400">|</span>
             {{-- Prompt 30: alternar tema claro/escuro. Reusa o appearance do Flux
                  (localStorage['flux.appearance']; anti-flash pelo @fluxAppearance no head).
