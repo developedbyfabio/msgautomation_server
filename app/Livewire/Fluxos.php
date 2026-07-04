@@ -82,6 +82,24 @@ class Fluxos extends Component
         $this->editar($flow->id);
     }
 
+    /**
+     * Fatia 7 — cria um fluxo REAL a partir de um template do catalogo (escopado
+     * a conta ativa) e ja abre no editor pro usuario revisar/ajustar.
+     */
+    public function usarTemplate(string $key): void
+    {
+        try {
+            $flow = app(\App\Whatsapp\Flows\InstantiateFlowTemplate::class)->handle($key, $this->accountId());
+        } catch (\InvalidArgumentException) {
+            $this->dispatch('toast', message: 'Modelo de fluxo desconhecido.', type: 'error');
+
+            return;
+        }
+
+        $this->editar($flow->id);
+        $this->dispatch('toast', message: 'Fluxo criado a partir do modelo — revise as mensagens e ajuste como quiser.');
+    }
+
     public function editar(int $flowId): void
     {
         $flow = Flow::query()->where('account_id', $this->accountId())->with(['triggers', 'contacts'])->findOrFail($flowId);
@@ -524,6 +542,9 @@ class Fluxos extends Component
         // C.2 — sobreposicao fluxo (entrada) × regra (o fluxo vence; aviso na lista).
         $flowConflicts = $this->editingFlowId ? [] : app(\App\Whatsapp\AutoReply\RuleConflictDetector::class)->flowRuleOverlaps($accountId)['flows'];
 
+        // Fatia 7 — catalogo de templates (so na lista; instanciar abre o editor).
+        $templates = $this->editingFlowId ? [] : app(\App\Whatsapp\Flows\FlowTemplateCatalog::class)->summaries();
+
         // C.1 — transcript do testador renderizado: placeholders + senha mascarada (ou revelada).
         $vault = app(SecretVault::class);
         $responder = app(\App\Whatsapp\AutoReply\RuleResponder::class);
@@ -558,6 +579,7 @@ class Fluxos extends Component
             'simView' => $simView,
             'flowConflicts' => $flowConflicts,
             'warnings' => $warnings,
+            'templates' => $templates,
         ]);
     }
 

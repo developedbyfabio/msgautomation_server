@@ -61,6 +61,31 @@
                     </div>
                 @endforelse
             </div>
+
+            {{-- Fatia 7 — comecar com um modelo pronto (instancia e abre no editor) --}}
+            @if (! empty($templates))
+                <div>
+                    <h2 class="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">Comecar com um modelo</h2>
+                    <p class="mb-2 text-xs text-zinc-500">
+                        Cria um fluxo pronto (menu com opcoes e "Falar com atendente") na sua conta — voce revisa e edita tudo em seguida.
+                    </p>
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        @foreach ($templates as $t)
+                            <div class="flex flex-col rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900" wire:key="tpl-{{ $t['key'] }}">
+                                <div class="mb-1 flex items-center gap-1.5 font-medium">
+                                    <flux:icon icon="sparkles" variant="micro" class="text-zinc-400" />
+                                    {{ $t['name'] }}
+                                </div>
+                                <p class="mb-3 flex-1 text-xs text-zinc-500">{{ $t['description'] }}</p>
+                                <button type="button" wire:click="usarTemplate('{{ $t['key'] }}')"
+                                    class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                                    <flux:icon icon="plus" variant="micro" /> Usar modelo
+                                </button>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         @else
             {{-- ===================== EDITOR ===================== --}}
             <div class="flex items-center justify-between gap-3">
