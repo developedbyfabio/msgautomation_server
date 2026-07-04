@@ -430,15 +430,55 @@ class Configuracoes extends Component
                     $fail('Fluxo invalido — escolha um fluxo habilitado da sua conta.');
                 }
             }],
+            // Fatia 6: maximos de SANIDADE (contra typo absurdo) + janela coerente.
+            // Nao mudam defaults nem a logica de throttle — so validacao de entrada.
             'window_start' => 'required|date_format:H:i',
-            'window_end' => 'required|date_format:H:i',
-            'min_interval_seconds' => 'required|integer|min:0',
-            'per_minute_cap' => 'required|integer|min:1',
-            'per_day_cap' => 'required|integer|min:1',
-            'contact_rate_seconds' => 'required|integer|min:0',
+            'window_end' => 'required|date_format:H:i|after:window_start',
+            'min_interval_seconds' => 'required|integer|min:0|max:3600',
+            'per_minute_cap' => 'required|integer|min:1|max:60',
+            'per_day_cap' => 'required|integer|min:1|max:5000',
+            'contact_rate_seconds' => 'required|integer|min:0|max:86400',
             'delay_min_seconds' => 'required|integer|min:0',
             'delay_max_seconds' => 'required|integer|min:0|gte:delay_min_seconds',
         ];
+    }
+
+    /**
+     * Fatia 6 — presets ANTI-BAN opt-in do modo automatico. Valores dentro das
+     * faixas aprovadas: Cloud (oficial, tolerante) 25/min e 750/dia; Evolution
+     * (WhatsApp Web, mais sujeito a ban) 9/min e 175/dia + warmup ligado. O preset
+     * GRAVA na conta ativa e os campos SEGUEM editaveis (ponto de partida, nao trava).
+     * Nota: warmup_enabled e flag DORMENTE hoje (sem leitor na logica) — gravada
+     * como intencao; a rampa e implementacao futura (registrado no relatorio).
+     */
+    public const ANTIBAN_PRESETS = [
+        'cloud' => [
+            'per_minute_cap' => 25, 'per_day_cap' => 750,
+            'min_interval_seconds' => 1, 'contact_rate_seconds' => 2,
+            'warmup_enabled' => false,
+        ],
+        'evolution' => [
+            'per_minute_cap' => 9, 'per_day_cap' => 175,
+            'min_interval_seconds' => 3, 'contact_rate_seconds' => 5,
+            'warmup_enabled' => true,
+        ],
+    ];
+
+    public function aplicarPreset(string $preset): void
+    {
+        $valores = self::ANTIBAN_PRESETS[$preset] ?? null;
+        if ($valores === null) {
+            return;
+        }
+
+        // Grava na conta ATIVA (mesmo resolver isolado) e sincroniza os inputs —
+        // que permanecem editaveis depois. Opt-in explicito: NADA muda ao ligar o toggle.
+        $this->settings()->update($valores);
+        foreach ($valores as $campo => $v) {
+            $this->{$campo} = $v;
+        }
+
+        $this->dispatch('toast', message: 'Preset aplicado: ' . ($preset === 'cloud' ? 'Cloud API (oficial)' : 'Evolution') . '. Ajuste os valores se quiser.');
     }
 
     public function save(): void
@@ -496,11 +536,17 @@ class Configuracoes extends Component
             ? \App\Models\Flow::query()->find($this->default_flow_id)
             : null;
 
+        // Fatia 6 (hint leve, nao-bloqueante): modo automatico ativo com tetos em
+        // patamar "pessoal-baixo" — sugere aplicar um preset. So aviso.
+        $tetosBaixosAuto = $this->settings()->operation_mode === \App\Enums\OperationMode::Auto
+            && (int) $this->per_day_cap <= 50;
+
         return view('livewire.configuracoes', [
             'footerPreview' => $responder->render($this->proactive_optout_footer),
             'canais' => $canais,
             'fluxosDisponiveis' => $fluxosDisponiveis,
             'fluxoAtualDesabilitado' => $fluxoAtualDesabilitado,
+            'tetosBaixosAuto' => $tetosBaixosAuto,
         ]);
     }
 }

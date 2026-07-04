@@ -323,6 +323,33 @@
                 </div>
             </div>
 
+            {{-- Fatia 6 — presets anti-ban do modo automatico (opt-in) + orientacao. --}}
+            <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <div class="mb-1 flex items-center gap-1">
+                    <label class="text-sm font-medium">Presets do modo automatico</label>
+                    <x-info-tip text="Aplicar um preset grava os tetos abaixo (que continuam editaveis). Os tetos valem pra CONTA inteira. Tetos mais altos = mais responsivo, porem maior risco de ban no Evolution." />
+                </div>
+                <p class="mb-2 text-xs text-zinc-500">
+                    <strong>Evolution</strong> e WhatsApp Web (nao-oficial) e <strong>mais sujeito a ban</strong> — valores conservadores.
+                    <strong>Cloud API</strong> e o canal oficial da Meta, tolerante — valores mais altos.
+                </p>
+                @if ($tetosBaixosAuto)
+                    <div class="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        Modo automatico ativo com tetos baixos (teto/dia &le; 50) — o atendimento pode calar no meio do dia. Considere aplicar um preset.
+                    </div>
+                @endif
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" wire:click="aplicarPreset('cloud')" wire:loading.attr="disabled"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        <flux:icon icon="cloud" variant="micro" /> Modo automatico — Cloud API (oficial)
+                    </button>
+                    <button type="button" wire:click="aplicarPreset('evolution')" wire:loading.attr="disabled"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        <flux:icon icon="device-phone-mobile" variant="micro" /> Modo automatico — Evolution
+                    </button>
+                </div>
+            </div>
+
             {{-- FREIOS-THROTTLE com toggle liga/desliga --}}
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 @foreach ([
