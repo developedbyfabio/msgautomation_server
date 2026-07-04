@@ -39,7 +39,8 @@ class OperationModeToggleTest extends TestCase
         $tela = Livewire::test(OperationModeToggle::class)->assertSet('auto', false);
 
         // liga: Personal -> Auto (persistido)
-        $tela->call('toggle')->assertSet('auto', true);
+        // Fatia 4b: LIGAR passa por confirmacao (desligar segue imediato).
+        $tela->call('toggle')->call('confirmarAtivacao')->assertSet('auto', true);
         $this->assertSame(
             OperationMode::Auto,
             AutoReplySetting::withoutAccountScope()->where('account_id', $a->id)->first()->operation_mode,
@@ -62,7 +63,7 @@ class OperationModeToggleTest extends TestCase
 
         // Contexto = conta A (o que o SetAccountContext daria pro usuario de A).
         app(AccountContext::class)->set($a->id);
-        Livewire::test(OperationModeToggle::class)->call('toggle')->assertSet('auto', true);
+        Livewire::test(OperationModeToggle::class)->call('toggle')->call('confirmarAtivacao')->assertSet('auto', true);
 
         // A virou Auto; B PERMANECE Personal (nunca tocada).
         $this->assertSame(OperationMode::Auto, AutoReplySetting::withoutAccountScope()->where('account_id', $a->id)->first()->operation_mode);
@@ -79,7 +80,7 @@ class OperationModeToggleTest extends TestCase
 
         Livewire::test(OperationModeToggle::class)
             ->assertSet('auto', false) // mount criou via firstOrCreate (default Personal)
-            ->call('toggle')->assertSet('auto', true);
+            ->call('toggle')->call('confirmarAtivacao')->assertSet('auto', true);
 
         // Criou/alterou SO a linha da conta ativa; B segue sem settings.
         $this->assertSame(OperationMode::Auto, AutoReplySetting::withoutAccountScope()->where('account_id', $a->id)->first()->operation_mode);
