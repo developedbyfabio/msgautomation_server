@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OperationMode;
 use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,8 @@ class AutoReplySetting extends Model
         'account_id',
         'enabled',
         'reply_policy',
+        'operation_mode',  // Fatia 1: pessoal|automatico (INERTE ate a fatia 4)
+        'default_flow_id', // Fatia 1: fluxo catch-all do modo automatico
         'window_start',
         'window_end',
         'min_interval_seconds',
@@ -53,6 +56,7 @@ class AutoReplySetting extends Model
     {
         return [
             'enabled' => 'boolean',
+            'operation_mode' => OperationMode::class,
             'skip_groups' => 'boolean',
             'media_autodownload' => 'boolean',
             'warmup_enabled' => 'boolean',
@@ -104,5 +108,11 @@ class AutoReplySetting extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    /** Fatia 1 — fluxo catch-all do modo automatico (INERTE ate a fatia 4). */
+    public function defaultFlow(): BelongsTo
+    {
+        return $this->belongsTo(Flow::class, 'default_flow_id');
     }
 }
