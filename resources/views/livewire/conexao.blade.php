@@ -23,6 +23,7 @@
                 <span wire:loading wire:target="conectar">Criando instancia...</span>
             </button>
         @else
+        {{-- Prompt 31: fundo minimo; o QR abre em MODAL por cima (abaixo). --}}
         @php
             [$cor, $rotulo] = match ($state) {
                 'connecting' => ['text-amber-600', 'conectando...'],
@@ -31,38 +32,8 @@
                 default => ['text-red-500', 'desconectado'],
             };
         @endphp
+        <p class="mt-2 text-sm text-zinc-500">Conecte seu WhatsApp pra ativar o canal.</p>
         <p class="mt-1 text-sm {{ $cor }}">Estado: {{ $rotulo }}</p>
-
-        <div class="mt-6 flex flex-col items-center gap-4">
-            @if ($qrError)
-                <div class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
-                    {{ $qrError }}
-                </div>
-            @elseif ($qr)
-                <img src="{{ $qr }}" alt="QR code do WhatsApp" class="size-64 rounded-xl bg-white p-2 ring-1 ring-zinc-200 dark:ring-zinc-700">
-                <ol class="space-y-1 text-left text-xs text-zinc-500">
-                    <li>1. Abra o WhatsApp no celular.</li>
-                    <li>2. Aparelhos conectados &rarr; Conectar um aparelho.</li>
-                    <li>3. Aponte a camera para este QR.</li>
-                </ol>
-            @else
-                <div class="flex size-64 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                    <flux:icon icon="arrow-path" class="size-6 animate-spin text-zinc-400" />
-                </div>
-                <p class="text-xs text-zinc-500">Carregando QR...</p>
-            @endif
-
-            <p class="text-[11px] text-zinc-400">
-                O QR expira rapido. Esta tela atualiza sozinha e segue pras conversas assim que conectar.
-            </p>
-
-            <button type="button" wire:click="gerarQr"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-                <flux:icon icon="arrow-path" variant="micro" wire:loading.remove wire:target="gerarQr" />
-                <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="gerarQr" />
-                Gerar novo QR
-            </button>
-        </div>
         @endif
 
         {{-- Prompt 24b — alternativa: canal oficial (Meta Cloud API) por credenciais. --}}
@@ -73,6 +44,17 @@
             </button>
         </div>
     </div>
+
+    {{-- Prompt 31 — QR em MODAL por cima (mesmo x-modal do /conversas), com o painel
+         unico <x-qr-panel>. Mandatorio enquanto ha canal e nao esta conectado — e o
+         destino do redirect de conta sem canal (fatia 27) continua valendo: o QR fica
+         acessivel aqui. wireClose="poll" = fechar re-checa o estado (segue aberto se
+         ainda nao conectou; redireciona pras conversas quando conectar). --}}
+    @if ($temCanal && ! in_array($state, ['open', 'verificando'], true))
+        <x-modal wireClose="poll" title="Conectar o WhatsApp (QR)">
+            <x-qr-panel :qr="$qr" :qr-error="$qrError" refresh-action="gerarQr" :lifetime="40" />
+        </x-modal>
+    @endif
 
     {{-- MODAL: credenciais Cloud API --}}
     @if ($showCloud)

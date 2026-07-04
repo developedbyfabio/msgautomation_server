@@ -51,26 +51,12 @@
     @endif
 
     @if ($showQr)
+        {{-- Prompt 31: mesmo painel UNICO de QR da /conexao (atualizar + countdown + auto-refresh). --}}
         <x-modal wireClose="fecharQr" title="Conectar numero (QR)">
-            <div class="flex flex-col items-center gap-3">
-                @if ($qrError)
-                    <p class="text-sm text-red-600 dark:text-red-400">{{ $qrError }}</p>
-                @elseif ($qr)
-                    <img src="{{ $qr }}" alt="QR code" class="size-64 rounded-lg bg-white p-2">
-                    <p class="text-center text-xs text-zinc-500">
-                        WhatsApp -> Aparelhos conectados -> Conectar um aparelho. O QR expira rapido;
-                        clique em Atualizar se precisar.
-                    </p>
-                @else
-                    <p class="text-sm text-zinc-500">Carregando QR...</p>
-                @endif
-
-                <div class="flex w-full justify-end gap-2 pt-2">
-                    <button type="button" wire:click="abrirQr"
-                        class="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700">Atualizar</button>
-                    <button type="button" wire:click="fecharQr" data-autofocus
-                        class="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Fechar</button>
-                </div>
+            <x-qr-panel :qr="$qr" :qr-error="$qrError" refresh-action="abrirQr" :lifetime="40" />
+            <div class="flex justify-end pt-3">
+                <button type="button" wire:click="fecharQr" data-autofocus
+                    class="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Fechar</button>
             </div>
         </x-modal>
     @endif
