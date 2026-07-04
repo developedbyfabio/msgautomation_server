@@ -353,7 +353,14 @@ class AntiBanGuard
             return GuardDecision::block('opt_out');
         }
 
-        $policy = $settings->reply_policy ?: 'allowlist';
+        // Fatia 4 — politica EFETIVA: modo AUTOMATICO atende desconhecidos ('all')
+        // em TODOS os caminhos que passam por este gate (regra, fluxo-de-entrada,
+        // catch-all e o re-check R2 do Sender via volatileRecheck). Mute ('off',
+        // acima) e tetos/throttle (fora deste gate) ficam intactos. Em personal,
+        // comportamento IDENTICO ao atual.
+        $policy = $settings->operation_mode === \App\Enums\OperationMode::Auto
+            ? 'all'
+            : ($settings->reply_policy ?: 'allowlist');
         if ($policy === 'allowlist' && $mode !== 'on') {
             return GuardDecision::block('nao_aprovado');
         }

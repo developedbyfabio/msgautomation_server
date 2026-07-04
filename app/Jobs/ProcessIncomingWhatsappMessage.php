@@ -335,9 +335,27 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
             return;
         }
 
-        // (3) Regras normais (inalterado). Sem regra que case -> IA (fallback) ou silencio.
+        // (3) Regras normais (inalterado). Sem regra que case -> catch-all (auto) / IA / silencio.
         $rule = $matcher->match($account->id, $channel->id, $data->text, $jid);
         if ($rule === null) {
+            // Fatia 4 — MODO AUTOMATICO: catch-all deterministico. SO dispara se
+            // operation_mode=auto E ha fluxo padrao valido/habilitado E o gate passa
+            // (politica efetiva 'all'; mute e tetos continuam valendo). Precede a IA
+            // (porta deterministica). Sem fluxo valido/gate: fall-through IDENTICO ao
+            // comportamento atual (degradacao graciosa). Settings da CONTA DO CANAL
+            // do payload (ingestao), nunca AccountContext de request.
+            $settings = $guard->settingsFor($account->id);
+            if ($settings->operation_mode === \App\Enums\OperationMode::Auto) {
+                $defaultFlow = $settings->defaultFlow; // FK da fatia 1 (posse validada na escrita, fatia 3)
+                if ($defaultFlow !== null && $defaultFlow->enabled && $guard->contactGatePasses($account->id, $jid)) {
+                    // MESMO padrao do passo (2)/fluxo-de-entrada: start + dispatchFlowReply
+                    // (o envio passa pelo Sender/freios/delay como qualquer fluxo).
+                    $this->dispatchFlowReply($account, $channel, $message, $flows->start($account->id, $defaultFlow, $jid), $guard);
+
+                    return;
+                }
+            }
+
             // (4) Camada 3 — FALLBACK: nada casou. Se a IA esta elegivel pro contato
             // (kill switch da IA ON + IA ligada no contato + portao passa), classifica
             // em job SEPARADO (a API tem latencia/429; nao trava o pipeline). Tudo OFF
