@@ -115,6 +115,84 @@ class BoardEngine
         });
     }
 
+    /**
+     * Fatia 5 — movimento DETERMINISTICO por acao de SISTEMA (handoff): mesma
+     * semantica do motor (board default, card por contato, no-op na mesma coluna,
+     * idempotencia por (card, event_type, event_ref), touch), enderecado por SLUG
+     * de coluna — nao depende de BoardRule por conta (regras sao dados por conta;
+     * o handoff precisa mover SEMPRE). Cria o card se nao existir (diferente do
+     * observador de regras: aqui a acao e do proprio sistema, nao observacao).
+     */
+    public function moveToColumnSlug(string $slug, int $accountId, string $remoteJid, string $eventType, int $eventRef): void
+    {
+        if (str_ends_with($remoteJid, '@g.us')) {
+            return; // Kanban e de conversas com pessoas
+        }
+
+        $this->context->runAs($accountId, function () use ($slug, $remoteJid, $eventType, $eventRef) {
+            $contact = Contact::query()->where('remote_jid', $remoteJid)->first();
+            if ($contact === null) {
+                return;
+            }
+
+            $board = Board::query()->where('is_default', true)->first();
+            $col = $board?->columns()->where('slug', $slug)->first();
+            if ($board === null || $col === null) {
+                return;
+            }
+
+            $card = Card::query()->where('board_id', $board->id)->where('contact_id', $contact->id)->first();
+
+            // Idempotencia de re-entrega: este evento ja moveu este card -> no-op.
+            if ($card !== null && CardTransition::query()
+                ->where('card_id', $card->id)
+                ->where('event_type', $eventType)
+                ->where('event_ref', $eventRef)
+                ->exists()) {
+                return;
+            }
+
+            $registrar = function (?int $de) use (&$card, $col, $eventType, $eventRef) {
+                try {
+                    CardTransition::create([
+                        'card_id' => $card->id,
+                        'from_column_id' => $de,
+                        'to_column_id' => $col->id,
+                        'cause' => 'handoff',
+                        'event_type' => $eventType,
+                        'event_ref' => $eventRef,
+                    ]);
+                } catch (UniqueConstraintViolationException) {
+                    // corrida de re-entrega: a transicao deste evento ja existe
+                }
+            };
+
+            if ($card === null) {
+                try {
+                    $card = Card::create(['board_id' => $board->id, 'contact_id' => $contact->id, 'column_id' => $col->id]);
+                    $registrar(null);
+                    $this->touch($card, null);
+
+                    return;
+                } catch (UniqueConstraintViolationException) {
+                    // corrida: outro job criou primeiro -> reusa e segue como movimento.
+                    $card = Card::query()->where('board_id', $board->id)->where('contact_id', $contact->id)->firstOrFail();
+                }
+            }
+
+            if ((int) $card->column_id === (int) $col->id) {
+                $this->touch($card, null);
+
+                return; // ja na coluna destino: sem transicao duplicada
+            }
+
+            $de = (int) $card->column_id;
+            $card->update(['column_id' => $col->id]);
+            $registrar($de);
+            $this->touch($card, null);
+        });
+    }
+
     /** Condicoes minimas (JSON) da regra contra o estado atual do card + meta do evento. */
     private function matches(BoardRule $rule, ?Card $card, array $meta = []): bool
     {

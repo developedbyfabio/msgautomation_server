@@ -36,6 +36,9 @@ class SendAutoReply implements ShouldQueue
         public readonly ?string $text = null,
         public readonly bool $flow = false,
         public readonly ?int $accountId = null,
+        // Fatia 5: despedida de handoff — isenta SO o gate de contato no envio
+        // (o 'off' e do proprio handoff); kill switch/janela/tetos valem.
+        public readonly bool $handoff = false,
     ) {
     }
 
@@ -94,6 +97,7 @@ class SendAutoReply implements ShouldQueue
             ruleId: $this->ruleId,
             fromMe: (bool) $incoming->from_me,
             flow: $this->flow,
+            handoff: $this->handoff,
         );
     }
 }

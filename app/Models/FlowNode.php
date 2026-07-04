@@ -24,4 +24,10 @@ class FlowNode extends Model
     {
         return $this->kind === 'final';
     }
+
+    /** Fatia 5 — no de HANDOFF pra humano (kind e string(16) no banco: aditivo, sem migration). */
+    public function isHandoff(): bool
+    {
+        return $this->kind === 'handoff';
+    }
 }

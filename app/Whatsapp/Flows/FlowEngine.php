@@ -170,14 +170,70 @@ class FlowEngine
 
     private function simEmit(FlowNode $node): array
     {
+        // Fatia 5: no simulador o handoff so mostra a mensagem/terminal — SEM efeitos
+        // colaterais (mute/kanban), como toda simulacao (dry-run).
+        if ($node->isHandoff()) {
+            return ['node_id' => $node->id, 'text' => (string) $node->message, 'status' => 'handed_off'];
+        }
+
         $encerra = $node->isFinal() || ! $node->options()->exists();
 
         return ['node_id' => $node->id, 'text' => (string) $node->message, 'status' => $encerra ? 'completed' : 'active'];
     }
 
+    /**
+     * Fatia 5 — no de HANDOFF: envia a mensagem do no, PAUSA o robo pro contato
+     * (MESMO mecanismo do mute da UI: Contact.auto_reply_mode='off'), move o card
+     * pro em_atendimento (BoardEngine) e encerra a sessao (terminal 'handed_off';
+     * string(16) comporta, aditivo). A despedida vai pelo MESMO caminho de dispatch
+     * (o status 'handed_off' na diretiva sinaliza a isencao do gate de contato no
+     * envio — o 'off' e do proprio handoff, nao pode bloquear a propria despedida).
+     */
+    private function emitHandoff(FlowSession $session, FlowNode $node): array
+    {
+        // 4) sessao terminal (activeSession so considera 'active').
+        $session->update([
+            'current_node_id' => $node->id,
+            'status' => 'handed_off',
+            'last_activity_at' => now(),
+        ]);
+
+        // 2) pausa o robo pro contato — mecanismo REUSADO do mute da UI
+        //    (Conversas::muteConfirmed usa exatamente este updateOrCreate).
+        \App\Models\Contact::query()->updateOrCreate(
+            ['account_id' => (int) $session->account_id, 'remote_jid' => (string) $session->remote_jid],
+            ['auto_reply_mode' => 'off'],
+        );
+
+        // 3) card -> em_atendimento (BoardEngine: mesmo motor de cards/transicoes,
+        //    idempotente por evento). Kanban e observador: erro dele NUNCA derruba o fluxo.
+        try {
+            app(\App\Kanban\BoardEngine::class)->moveToColumnSlug(
+                'em_atendimento', (int) $session->account_id, (string) $session->remote_jid,
+                'handoff', (int) $session->id,
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Handoff: falha isolada ao mover card (fluxo segue).', ['erro' => $e->getMessage()]);
+        }
+
+        // K-1: evento de dominio, como os demais nos.
+        event(new \App\Events\FlowNodeReached(
+            (int) $session->account_id, (int) $session->id, (string) $session->remote_jid,
+            (int) $node->id, 'handed_off',
+        ));
+
+        // 1) a mensagem do no segue pelo caminho normal (dispatchFlowReply -> Sender).
+        return ['text' => $node->message, 'status' => 'handed_off', 'session' => $session];
+    }
+
     /** Emite a diretiva pra um nó: menu -> espera; final (ou menu sem opcoes) -> encerra. */
     private function emit(FlowSession $session, Flow $flow, FlowNode $node): array
     {
+        // Fatia 5 — handoff tem execucao propria (mensagem + mute + kanban + terminal).
+        if ($node->isHandoff()) {
+            return $this->emitHandoff($session, $node);
+        }
+
         $temOpcoes = $node->options()->exists();
         $encerra = $node->isFinal() || ! $temOpcoes;
 

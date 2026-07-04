@@ -27,7 +27,7 @@ class AntiBanGuard
     {
     }
 
-    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null, bool $flow = false): GuardDecision
+    public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null, bool $flow = false, bool $handoff = false): GuardDecision
     {
         $settings = $this->settingsFor($accountId);
 
@@ -38,9 +38,14 @@ class AntiBanGuard
             if ($settings->skip_groups && $this->isGroup($jid)) {
                 return GuardDecision::block('grupo');
             }
-            $gate = $this->contactGate($accountId, $jid, $settings);
-            if (! $gate->allowed) {
-                return $gate;
+            // Fatia 5: a DESPEDIDA de handoff pula SO o gate de contato — o 'off' foi
+            // setado pelo proprio handoff e nao pode bloquear a propria mensagem.
+            // fromMe/grupo (acima) e kill switch/janela/tetos (abaixo) continuam valendo.
+            if (! $handoff) {
+                $gate = $this->contactGate($accountId, $jid, $settings);
+                if (! $gate->allowed) {
+                    return $gate;
+                }
             }
             if (! $settings->enabled) {
                 return GuardDecision::block('kill_switch');
@@ -157,6 +162,26 @@ class AntiBanGuard
         $gate = $this->contactGate($accountId, $jid, $settings);
         if (! $gate->allowed) {
             return $gate;
+        }
+        if (! $this->withinWindow($settings)) {
+            return GuardDecision::block('fora_da_janela');
+        }
+
+        return GuardDecision::allow();
+    }
+
+    /**
+     * Fatia 5 — R2 da DESPEDIDA de handoff: mesmo recheck volatil, MENOS o gate de
+     * contato (o 'off' acabou de ser setado pelo proprio handoff — nao pode barrar
+     * a propria mensagem). Kill switch e janela continuam valendo; tetos ja foram
+     * checados no check().
+     */
+    public function volatileRecheckHandoff(int $accountId): GuardDecision
+    {
+        $settings = $this->settingsFor($accountId);
+
+        if (! $settings->enabled) {
+            return GuardDecision::block('kill_switch');
         }
         if (! $this->withinWindow($settings)) {
             return GuardDecision::block('fora_da_janela');

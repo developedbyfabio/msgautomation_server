@@ -315,7 +315,8 @@ class AutoReplySendTest extends TestCase
         // Guard que LIBERA no check inicial mas BLOQUEIA no re-check volatil
         // (simula kill switch virando OFF entre o enfileiramento e o envio).
         $stubGuard = new class(app(Throttle::class)) extends AntiBanGuard {
-            public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null, bool $flow = false): GuardDecision
+            // Fatia 5: assinatura acompanha o pai (novo param $handoff, default false).
+            public function check(string $mode, int $accountId, string $jid, bool $fromMe = false, ?int $ruleId = null, bool $flow = false, bool $handoff = false): GuardDecision
             {
                 return GuardDecision::allow();
             }

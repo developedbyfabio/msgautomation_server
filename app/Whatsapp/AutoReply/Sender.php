@@ -41,6 +41,7 @@ class Sender
         bool $flow = false,
         ?int $campaignId = null,
         ?array $media = null, // Prompts 04/05/06: ['kind' => image|document|audio, 'path' => relativo ao disco local, 'mime', 'name' => nome original]
+        bool $handoff = false, // Fatia 5: despedida de handoff — isenta SO o gate de contato (o 'off' e do proprio handoff)
     ): AutoReplyLog {
         $accountId = $channel->account_id;
 
@@ -60,17 +61,21 @@ class Sender
         }
 
         // 2. freios (ruleId habilita o cooldown por regra — S2; flow isenta o intervalo
-        //    por contato durante a sessao — Fatia A)
-        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe, $ruleId, $flow);
+        //    por contato durante a sessao — Fatia A; handoff isenta SO o gate de contato
+        //    — Fatia 5: o 'off' e do proprio handoff, nao pode barrar a despedida)
+        $decision = $this->guard->check($mode, $accountId, $jid, $fromMe, $ruleId, $flow, $handoff);
         if (! $decision->allowed) {
             $log->update(['status' => 'blocked', 'motivo' => $decision->reason]);
 
             return $log;
         }
 
-        // 3. R2 — re-check volatil antes do POST (so auto)
+        // 3. R2 — re-check volatil antes do POST (so auto). Fatia 5: a despedida de
+        //    handoff usa a variante SEM o gate de contato (kill switch/janela valem).
         if ($mode === 'auto') {
-            $recheck = $this->guard->volatileRecheck($accountId, $jid);
+            $recheck = $handoff
+                ? $this->guard->volatileRecheckHandoff($accountId)
+                : $this->guard->volatileRecheck($accountId, $jid);
             if (! $recheck->allowed) {
                 $log->update(['status' => 'blocked', 'motivo' => $recheck->reason]);
 

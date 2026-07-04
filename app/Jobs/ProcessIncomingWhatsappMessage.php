@@ -403,7 +403,12 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         $min = (int) $settings->delay_min_seconds;
         $max = (int) max($min, $settings->delay_max_seconds);
 
-        SendAutoReply::dispatch($message->id, null, $text, true, accountId: $account->id)
+        // Fatia 5 — despedida de HANDOFF: o proprio handoff acabou de mutar o contato
+        // ('off'); sem esta flag, o gate de contato bloquearia a PROPRIA despedida no
+        // envio (check + recheck R2). Kill switch/janela/tetos continuam valendo.
+        $handoff = ($res['status'] ?? '') === 'handed_off';
+
+        SendAutoReply::dispatch($message->id, null, $text, true, accountId: $account->id, handoff: $handoff)
             ->delay(now()->addSeconds(random_int($min, $max)));
     }
 }
