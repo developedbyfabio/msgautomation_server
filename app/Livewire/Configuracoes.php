@@ -12,6 +12,10 @@ class Configuracoes extends Component
 {
     public bool $enabled = false;
     public string $reply_policy = 'allowlist';
+
+    // Fatia 3 — fluxo de atendimento padrao (usado pelo modo automatico na Fatia 4;
+    // por ora INERTE no robo: aqui so grava a escolha). null = nenhum.
+    public ?int $default_flow_id = null;
     public string $window_start = '08:00';
     public string $window_end = '20:00';
     public int $min_interval_seconds = 30;
@@ -76,6 +80,7 @@ class Configuracoes extends Component
         $s = $this->settings();
         $this->enabled = (bool) $s->enabled;
         $this->reply_policy = (string) $s->reply_policy;
+        $this->default_flow_id = $s->default_flow_id ? (int) $s->default_flow_id : null;
         $this->window_start = substr((string) $s->window_start, 0, 5);
         $this->window_end = substr((string) $s->window_end, 0, 5);
         $this->min_interval_seconds = (int) $s->min_interval_seconds;
@@ -404,6 +409,27 @@ class Configuracoes extends Component
     {
         return [
             'reply_policy' => 'required|in:allowlist,all',
+            // Fatia 3 — SEGURANCA: o flow_id do cliente NUNCA e confiado cru. So
+            // persiste fluxo DA CONTA ATIVA e HABILITADO (where account_id explicito
+            // + escopo BelongsToAccount). Excecao unica: manter o valor JA salvo
+            // (fluxo que foi desabilitado depois nao quebra o save da tela).
+            'default_flow_id' => ['nullable', 'integer', function ($attr, $value, $fail) {
+                if ($value === null || $value === '') {
+                    return;
+                }
+                $atual = $this->settings()->default_flow_id;
+                if ($atual !== null && (int) $value === (int) $atual) {
+                    return; // mantido — nao e escolha nova
+                }
+                $ok = \App\Models\Flow::query()
+                    ->where('account_id', app(\App\Tenancy\AccountContext::class)->id())
+                    ->where('enabled', true)
+                    ->whereKey((int) $value)
+                    ->exists();
+                if (! $ok) {
+                    $fail('Fluxo invalido — escolha um fluxo habilitado da sua conta.');
+                }
+            }],
             'window_start' => 'required|date_format:H:i',
             'window_end' => 'required|date_format:H:i',
             'min_interval_seconds' => 'required|integer|min:0',
@@ -421,6 +447,7 @@ class Configuracoes extends Component
 
         $this->settings()->update([
             'reply_policy' => $this->reply_policy,
+            'default_flow_id' => $this->default_flow_id ?: null, // 'Nenhum' grava null
             'window_start' => $this->window_start . ':00',
             'window_end' => $this->window_end . ':00',
             'min_interval_seconds' => $this->min_interval_seconds,
@@ -460,9 +487,20 @@ class Configuracoes extends Component
             return $c;
         });
 
+        // Fatia 3 — opcoes do fluxo padrao: SO fluxos HABILITADOS da conta ativa
+        // (Flow escopado por BelongsToAccount). Edge: se o default salvo aponta um
+        // fluxo desabilitado, exibe-o marcado "(desabilitado)" pra tela nao mentir
+        // nem quebrar (re-selecionar outro habilitado ou 'Nenhum' resolve).
+        $fluxosDisponiveis = \App\Models\Flow::query()->where('enabled', true)->orderBy('name')->get(['id', 'name']);
+        $fluxoAtualDesabilitado = ($this->default_flow_id && ! $fluxosDisponiveis->contains('id', $this->default_flow_id))
+            ? \App\Models\Flow::query()->find($this->default_flow_id)
+            : null;
+
         return view('livewire.configuracoes', [
             'footerPreview' => $responder->render($this->proactive_optout_footer),
             'canais' => $canais,
+            'fluxosDisponiveis' => $fluxosDisponiveis,
+            'fluxoAtualDesabilitado' => $fluxoAtualDesabilitado,
         ]);
     }
 }

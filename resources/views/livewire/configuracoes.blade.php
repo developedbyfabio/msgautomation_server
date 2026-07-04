@@ -281,6 +281,25 @@
                 @error('reply_policy') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
             </div>
 
+            {{-- Fatia 3 — fluxo de atendimento padrao (label NEUTRO: o robo so passa a
+                 usar isso na Fatia 4; aqui apenas grava a escolha). --}}
+            <div>
+                <div class="mb-1 flex items-center gap-1">
+                    <label class="text-sm font-medium">Fluxo de atendimento padrao</label>
+                    <x-info-tip text="Fluxo usado como porta de entrada no modo automatico. Lista so fluxos habilitados desta conta. 'Nenhum' desmarca." />
+                </div>
+                <select wire:model="default_flow_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    <option value="">Nenhum</option>
+                    @if ($fluxoAtualDesabilitado)
+                        <option value="{{ $fluxoAtualDesabilitado->id }}">{{ $fluxoAtualDesabilitado->name }} (desabilitado)</option>
+                    @endif
+                    @foreach ($fluxosDisponiveis as $f)
+                        <option value="{{ $f->id }}">{{ $f->name }}</option>
+                    @endforeach
+                </select>
+                @error('default_flow_id') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+            </div>
+
             {{-- JANELA DE HORARIO (com toggle) --}}
             <div @class(['rounded-lg border border-zinc-200 p-3 dark:border-zinc-800', 'opacity-50' => ! $window_enabled])>
                 <div class="mb-2 flex items-center justify-between">
