@@ -526,6 +526,10 @@ class Fluxos extends Component
         $accountId = $this->accountId();
         $flows = Flow::query()->where('account_id', $accountId)->withCount('nodes')->with('triggers')->orderBy('id')->get();
 
+        // Fatia 9 — badge "Padrao": qual fluxo e o default_flow_id da conta ativa
+        // (leitura apenas; a escrita segue em Configuracoes e no modal de ativacao).
+        $defaultFlowId = \App\Models\AutoReplySetting::query()->where('account_id', $accountId)->value('default_flow_id');
+
         $flow = $this->flow();
         $tree = $flow ? $this->treeOrdered($flow) : [];
         $warnings = $flow ? $this->flowWarnings($flow, $tree) : [];
@@ -571,6 +575,7 @@ class Fluxos extends Component
 
         return view('livewire.fluxos', [
             'flows' => $flows,
+            'defaultFlowId' => $defaultFlowId !== null ? (int) $defaultFlowId : null,
             'flow' => $flow,
             'tree' => $tree,
             'deleting' => $deleting,

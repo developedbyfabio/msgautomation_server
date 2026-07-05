@@ -22,7 +22,24 @@
                             <flux:icon icon="rectangle-stack" variant="micro" />
                         </div>
                         <div class="min-w-0 flex-1">
-                            <div class="truncate font-medium">{{ $f->name }}</div>
+                            <div class="flex items-center gap-2 font-medium">
+                                <span class="truncate">{{ $f->name }}</span>
+                                {{-- Fatia 9 — badge do fluxo PADRAO (default_flow_id da conta):
+                                     torna visivel a diferenca entre habilitado e padrao. Em tom
+                                     de atencao quando o padrao esta desabilitado (estado quebrado:
+                                     modo automatico nao responderia nada). --}}
+                                @if ($defaultFlowId === (int) $f->id)
+                                    @if ($f->enabled)
+                                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                                            <flux:icon icon="bolt" variant="micro" class="size-3" /> Padrao
+                                        </span>
+                                    @else
+                                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                            <flux:icon icon="exclamation-triangle" variant="micro" class="size-3" /> Padrao (desabilitado)
+                                        </span>
+                                    @endif
+                                @endif
+                            </div>
                             <div class="truncate text-xs text-zinc-500">
                                 {{ $f->nodes_count }} no(s) ·
                                 {{ $f->scope === 'contatos' ? 'contatos especificos' : 'todos os aprovados' }} ·
