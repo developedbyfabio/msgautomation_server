@@ -36,13 +36,25 @@
                                 <span class="rounded bg-zinc-100 px-1.5 text-[10px] text-zinc-500 dark:bg-zinc-800">{{ $s->categoria }}</span>
                             @endif
                         </div>
-                        <div class="font-mono text-sm text-zinc-500">
+                        {{-- Fatia 10 — botoes de revelar/ocultar com icone de olho (mesmo estilo dos
+                             botoes compactos do header). A MECANICA nao muda: o valor SO entra no
+                             HTML depois do confirmReveal (re-senha de login, server-side). --}}
+                        <div class="flex items-center gap-2 font-mono text-sm text-zinc-500">
                             @if ($revealedId === $s->id)
                                 <span class="select-all text-zinc-800 dark:text-zinc-100">{{ $revealedValue }}</span>
-                                <button type="button" wire:click="hideReveal" class="ml-2 text-xs text-zinc-400 hover:underline">ocultar</button>
+                                <button type="button" wire:click="hideReveal"
+                                    aria-label="Ocultar senha" title="Ocultar senha"
+                                    class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 font-sans text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                    <flux:icon icon="eye-slash" variant="micro" /> Ocultar
+                                </button>
                             @else
-                                ••••••••
-                                <button type="button" wire:click="askReveal({{ $s->id }})" class="ml-2 text-xs text-emerald-600 hover:underline">revelar</button>
+                                <span aria-hidden="true">••••••••</span>
+                                <button type="button" wire:click="askReveal({{ $s->id }})"
+                                    aria-label="Revelar senha" title="Revelar senha"
+                                    class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 font-sans text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 dark:border-zinc-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                    wire:loading.attr="disabled" wire:target="askReveal">
+                                    <flux:icon icon="eye" variant="micro" /> Revelar
+                                </button>
                             @endif
                         </div>
                         @if ($s->notes)

@@ -28,7 +28,8 @@
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
         ['perfil', 'Perfil', 'user-circle', 0],
     ];
-    // Breadcrumb "Menu > {aba}": item do menu que casa com a rota atual.
+    // Titulo do header: SO a aba atual (fatia 10 — o prefixo "Menu >" saiu; a
+    // navegacao vive na sidebar). "Menu" nunca foi link, era item decorativo.
     $navAtual = collect($nav)->first(fn ($item) => request()->routeIs($item[0]));
 @endphp
 <!DOCTYPE html>
@@ -84,12 +85,11 @@
          (conta ativa, conexao, robo ON/OFF, sair) — mesmo conteudo do cabecalho antigo. --}}
     <header data-flux-header class="[grid-area:header] z-10 flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900">
         <flux:sidebar.toggle class="-ms-1 lg:hidden" icon="bars-2" />
-        <flux:breadcrumbs>
-            <flux:breadcrumbs.item>Menu</flux:breadcrumbs.item>
-            @if ($navAtual)
+        @if ($navAtual)
+            <flux:breadcrumbs>
                 <flux:breadcrumbs.item>{{ $navAtual[1] }}</flux:breadcrumbs.item>
-            @endif
-        </flux:breadcrumbs>
+            </flux:breadcrumbs>
+        @endif
         <div class="ms-auto flex flex-wrap items-center gap-3 text-xs">
             {{-- MT-1: seletor de conta ativa (sessao) — invisivel com 1 conta --}}
             @auth

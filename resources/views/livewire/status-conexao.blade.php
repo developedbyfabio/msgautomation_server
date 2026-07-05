@@ -10,7 +10,15 @@
     @endphp
 
     <span class="inline-flex items-center gap-1.5">
-        <span class="size-2 rounded-full {{ $cor }}"></span>
+        {{-- Fatia 10 — pulso "sonar" (animate-ping) SO no estado conectado; motion-safe
+             respeita prefers-reduced-motion. Demais estados: dot estatico (sem animacao
+             enganosa). Logica de status/polling intocada. --}}
+        <span class="relative inline-flex size-2">
+            @if ($state === 'open')
+                <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-safe:animate-ping"></span>
+            @endif
+            <span class="relative inline-flex size-2 rounded-full {{ $cor }}"></span>
+        </span>
         <span class="text-zinc-500">{{ $rotulo }}</span>
     </span>
 

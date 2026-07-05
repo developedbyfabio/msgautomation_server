@@ -72,15 +72,27 @@ class NavegacaoSidebarTest extends TestCase
         // Sidebar Flux colapsavel presente (custom element do flux-lite).
         $resp->assertSee('<ui-sidebar', false);
         $resp->assertSee('collapsible', false);
-        // Breadcrumb "Menu > Conversas" no header slim.
+        // Fatia 10: o header mostra SO o titulo da aba atual — o prefixo "Menu >"
+        // saiu (nunca foi link; a navegacao vive na sidebar).
         $resp->assertSee('data-flux-breadcrumbs', false);
-        $resp->assertSee('Menu');
+        $resp->assertDontSee('Menu');
         // Cluster preservado: robo ON/OFF e botao Sair continuam no header.
         $resp->assertSee('Robo:');
         $resp->assertSee('Sair');
         // Prompt 30: toggle de tema presente no header (alterna via $flux.appearance).
         $resp->assertSee('Alternar tema claro/escuro');
         $resp->assertSee('$flux.appearance', false);
+    }
+
+    /** Fatia 10 — breadcrumb SO com o titulo da pagina, em todas as abas do menu. */
+    public function test_breadcrumb_mostra_so_o_titulo_sem_prefixo_menu(): void
+    {
+        $this->actingAs($this->operador());
+
+        // Amostra com paginas de conteudo variado (o rotulo aparece; "Menu" nao).
+        foreach (['regras' => 'Regras', 'senhas' => 'Senhas', 'configuracoes' => 'Configuracoes'] as $rota => $rotulo) {
+            $this->get(route($rota))->assertOk()->assertSee($rotulo)->assertDontSee('Menu');
+        }
     }
 
     public function test_abas_do_menu_bloqueadas_sem_login(): void

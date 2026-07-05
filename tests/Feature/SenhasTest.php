@@ -94,6 +94,33 @@ class SenhasTest extends TestCase
             ->assertSet('revealedValue', 'ValorRevelado9');
     }
 
+    /**
+     * Fatia 10 — BLINDAGEM do cofre: o valor do secret NAO existe no HTML
+     * renderizado antes da action de revelar (nem com o modal de re-senha
+     * aberto), aparece SO depois do confirmReveal, e some de novo ao ocultar.
+     * O ciclo inteiro sobre a MESMA instancia do componente.
+     */
+    public function test_blindagem_valor_fora_do_html_antes_de_revelar_e_some_ao_ocultar(): void
+    {
+        app(SecretVault::class)->put($this->account->id, 'wifi', 'ValorBlindado77');
+        $id = Secret::where('nome', 'wifi')->value('id');
+        $this->actingAs(User::create(['name' => 'Op', 'email' => 'op@x.local', 'password' => Hash::make('login-correta')]));
+
+        $tela = Livewire::test(Senhas::class)
+            ->assertSee('wifi')
+            ->assertDontSee('ValorBlindado77');   // lista mascarada: valor fora do HTML
+
+        $tela->call('askReveal', $id)
+            ->assertDontSee('ValorBlindado77');   // modal de re-senha aberto: ainda fora
+
+        $tela->set('revealPassword', 'login-correta')
+            ->call('confirmReveal')
+            ->assertSee('ValorBlindado77');       // so ENTRA no HTML apos a action
+
+        $tela->call('hideReveal')
+            ->assertDontSee('ValorBlindado77');   // ocultar: sai do HTML de novo
+    }
+
     public function test_excluir_confirma_e_apaga(): void
     {
         app(SecretVault::class)->put($this->account->id, 'wifi', 'x');
