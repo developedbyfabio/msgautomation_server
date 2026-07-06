@@ -247,16 +247,22 @@ class AiFallbackTest extends TestCase
         $this->assertDatabaseCount('ai_decisions', 0);
     }
 
-    public function test_ia_off_no_contato_nao_chama_driver(): void
+    /**
+     * Fatia 16 (ajuste deliberado): a IA foi CONSOLIDADA no global — o flag
+     * Contact.ai_enabled ficou DORMENTE e nao bloqueia mais (antes: 0 calls).
+     * Os bloqueios que restam sao o kill switch global (teste proprio) e o mute
+     * (test_contato_off/mute — intocados).
+     */
+    public function test_flag_de_ia_por_contato_e_dormente_nao_bloqueia_o_driver(): void
     {
         Contact::where('remote_jid', self::JID)->update(['ai_enabled' => false]);
-        $this->ruleHoras();
-        $fake = $this->bindAi(new AiClassification('x', 0.9, 1, true, false, 'ok'));
+        $rule = $this->ruleHoras();
+        $fake = $this->bindAi(new AiClassification('horario', 0.9, $rule->id, true, false, 'ok'));
 
         $im = $this->incoming('me fala a hora ai');
         $this->runJob($im->id);
 
-        $this->assertSame(0, $fake->calls);
+        $this->assertSame(1, $fake->calls); // global ON basta — flag individual ignorado
     }
 
     public function test_modo_rules_only_nao_chama_driver(): void

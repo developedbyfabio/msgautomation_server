@@ -497,7 +497,12 @@ class KnowledgeModeTest extends TestCase
         $this->assertDatabaseCount('ai_decisions', 0);
     }
 
-    public function test_ia_off_no_contato_base_nem_e_consultada(): void
+    /**
+     * Fatia 16 (ajuste deliberado): flag Contact.ai_enabled DORMENTE — nao
+     * bloqueia mais a consulta a base (antes: 0 answerCalls). Kill switch
+     * global e mute (testes vizinhos) seguem bloqueando.
+     */
+    public function test_flag_de_ia_por_contato_e_dormente_base_e_consultada(): void
     {
         Contact::where('id', $this->contact->id)->update(['ai_enabled' => false]);
         $this->kb('Horario', 'Atendemos das 8h as 18h.', 'low');
@@ -506,7 +511,7 @@ class KnowledgeModeTest extends TestCase
         $im = $this->incoming('que horas abre?');
         $this->runJob($im->id);
 
-        $this->assertSame(0, $fake->answerCalls);
+        $this->assertSame(1, $fake->answerCalls); // global ON basta — flag individual ignorado
     }
 
     public function test_contato_off_base_nem_e_consultada(): void

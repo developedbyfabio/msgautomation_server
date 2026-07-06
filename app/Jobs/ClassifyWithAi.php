@@ -502,5 +502,19 @@ class ClassifyWithAi implements ShouldQueue
             (string) $incoming->remote_jid,
             $incoming->text,
         );
+
+        // Fatia 16 (follow-up da 11) — o robo (via IA) NAO teve resposta: card ->
+        // 'aguardando' (pendencia humana). MESMO mecanismo best-effort do ingest:
+        // erro isolado (nunca derruba o job da IA), idempotente por
+        // (card, 'sem_resposta', incoming.id) — se o ingest ja moveu por esta
+        // mensagem, nao duplica transicao. Nenhuma decisao da IA muda.
+        try {
+            app(\App\Kanban\BoardEngine::class)->moveToColumnSlug(
+                'aguardando', (int) $incoming->account_id, (string) $incoming->remote_jid,
+                'sem_resposta', (int) $incoming->id, cause: 'sem_resposta',
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Kanban: falha isolada ao mover card (IA sem resposta); job segue.', ['erro' => $e->getMessage()]);
+        }
     }
 }

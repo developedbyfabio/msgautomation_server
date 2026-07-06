@@ -21,8 +21,6 @@ class Contatos extends Component
     public ?int $editingId = null;
     public string $editName = '';
     public string $editNotes = '';
-    public bool $editAiEnabled = false;
-    public string $editAiMode = 'intencao';
     public bool $editProactiveOptIn = false; // P-1: opt-in explicito (trilha auditada)
 
     public ?int $confirmingMuteId = null;
@@ -169,8 +167,6 @@ class Contatos extends Component
         $this->editingId = $contact->id;
         $this->editName = (string) $contact->push_name;
         $this->editNotes = (string) $contact->notes;
-        $this->editAiEnabled = (bool) $contact->ai_enabled;
-        $this->editAiMode = (string) ($contact->ai_mode ?: 'intencao');
         $this->editProactiveOptIn = (bool) $contact->proactive_opt_in;
     }
 
@@ -180,19 +176,16 @@ class Contatos extends Component
             return;
         }
 
-        $aiMode = in_array($this->editAiMode, ['rules_only', 'intencao', 'conhecimento', 'aprovacao'], true)
-            ? $this->editAiMode
-            : 'intencao';
-
         $contato = Contact::query()->where('account_id', $this->accountId())->find($this->editingId);
         $optInAnterior = (bool) $contato?->proactive_opt_in;
 
+        // Fatia 16 — IA consolidada no GLOBAL (Configuracoes): ai_enabled/ai_mode
+        // por contato sairam da UI e NAO sao mais escritos (colunas dormentes,
+        // padrao warmup_enabled). O mute (auto_reply_mode) segue INTOCADO.
         Contact::query()->where('id', $this->editingId)->where('account_id', $this->accountId())
             ->update([
                 'push_name' => $this->editName !== '' ? $this->editName : null,
                 'notes' => $this->editNotes !== '' ? $this->editNotes : null,
-                'ai_enabled' => $this->editAiEnabled,
-                'ai_mode' => $aiMode,
                 'proactive_opt_in' => $this->editProactiveOptIn,
             ]);
 
@@ -221,8 +214,6 @@ class Contatos extends Component
         $this->editingId = null;
         $this->editName = '';
         $this->editNotes = '';
-        $this->editAiEnabled = false;
-        $this->editAiMode = 'intencao';
     }
 
     // ---- T-1: gerenciar tags -------------------------------------------------

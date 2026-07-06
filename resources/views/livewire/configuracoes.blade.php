@@ -116,7 +116,8 @@
                     <p class="mt-1 max-w-md text-sm text-zinc-500">
                         Ultimo recurso, so quando nenhuma regra casa. A IA <strong>nao inventa resposta</strong>:
                         casa uma regra sua (com "IA casa parecidas" ligada) e usa a resposta da regra.
-                        Sensivel ou pouca certeza -> escala (nao envia). Precisa do robo ligado e do contato com IA ligada.
+                        Sensivel ou pouca certeza -> escala (nao envia). Liga/desliga pra conta INTEIRA
+                        (padrao: desligada); contatos silenciados continuam fora. Precisa do robo ligado.
                     </p>
                 </div>
                 <button type="button" wire:click="requestAiSwitch"

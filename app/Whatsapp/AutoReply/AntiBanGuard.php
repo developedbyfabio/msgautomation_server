@@ -303,9 +303,14 @@ class AntiBanGuard
 
     /**
      * A IA pode SEQUER classificar este contato? Pre-checagem barata ANTES de gastar
-     * chamada de API: kill switch da IA (global) + IA ligada no contato + nao-grupo +
-     * portao de contato (allowlist/on/off). Nao substitui os freios de ENVIO — a
-     * resposta ainda passa pelo Sender (todos os freios + R2).
+     * chamada de API: kill switch da IA (GLOBAL, por conta) + nao-grupo + portao de
+     * contato (allowlist/on/off — o mute continua vetando). Nao substitui os freios
+     * de ENVIO — a resposta ainda passa pelo Sender (todos os freios + R2).
+     *
+     * Fatia 16 — CONSOLIDACAO: o flag por contato (Contact.ai_enabled) saiu da
+     * composicao (pedido do dono: IA liga/desliga NO GERAL). A coluna fica
+     * DORMENTE (padrao warmup_enabled) — nao removida, nao mais lida/escrita.
+     * Impacto medido em producao antes da mudanca: 0 contatos com o flag ligado.
      */
     public function aiEligible(int $accountId, string $jid): bool
     {
@@ -317,20 +322,8 @@ class AntiBanGuard
         if ($this->isGroup($jid)) {
             return false;
         }
-        if (! $this->aiContactEnabled($accountId, $jid)) {
-            return false;
-        }
 
         return $this->contactGate($accountId, $jid, $settings)->allowed;
-    }
-
-    public function aiContactEnabled(int $accountId, string $jid): bool
-    {
-        // MT-0: API por parametro — bypass nomeado + WHERE explicito (ver settingsFor).
-        return (bool) (Contact::withoutAccountScope()
-            ->where('account_id', $accountId)
-            ->where('remote_jid', $jid)
-            ->value('ai_enabled') ?? false);
     }
 
     public function aiConfidenceThreshold(int $accountId): float
