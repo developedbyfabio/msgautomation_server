@@ -1,7 +1,7 @@
 <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-4xl p-6 space-y-4">
         <div class="flex items-center justify-between gap-3">
-            <h1 class="text-xl font-semibold">Contatos / Agenda</h1>
+            <h1 class="text-xl font-semibold">Clientes</h1>
             <div class="flex items-center gap-2">
                 <div class="relative w-64">
                     <span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-zinc-400">
@@ -35,7 +35,8 @@
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-medium">{{ $c->push_name ?: 'Sem nome' }}</div>
-                        <div class="truncate text-xs text-zinc-500">{{ $c->remote_jid }}</div>
+                        {{-- Fatia 23: identificador tecnico vira telefone amigavel (so exibicao). --}}
+                        <div class="truncate text-xs text-zinc-500">{{ $c->displayPhone() }}</div>
                         @if ($c->notes)
                             <div class="truncate text-xs text-zinc-400">{{ $c->notes }}</div>
                         @endif

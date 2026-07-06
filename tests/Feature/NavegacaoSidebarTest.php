@@ -18,19 +18,20 @@ class NavegacaoSidebarTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Mesmos itens (rota => rotulo) do $nav do layout — ordem do menu. */
+    /** Mesmos itens (rota => rotulo) do $nav do layout — ordem do menu.
+     *  Fatia 23 (ajuste deliberado): rotulos de NEGOCIO — as ROTAS sao as mesmas. */
     private const MENU = [
-        'painel' => 'Painel',
-        'conversas' => 'Conversas',
+        'painel' => 'Inicio',
+        'conversas' => 'Atendimento',
         'kanban' => 'Kanban',
-        'contatos' => 'Contatos',
-        'senhas' => 'Senhas',
-        'variaveis' => 'Variaveis',
-        'regras' => 'Regras',
-        'fluxos' => 'Fluxos',
-        'conhecimento' => 'Conhecimento',
-        'revisao' => 'Revisao',
+        'contatos' => 'Clientes',
         'campanhas' => 'Campanhas',
+        'regras' => 'Respostas automaticas',
+        'fluxos' => 'Menus de atendimento',
+        'conhecimento' => 'Informacoes do negocio',
+        'variaveis' => 'Variaveis',
+        'revisao' => 'Sugestoes da IA',
+        'senhas' => 'Senhas',
         'logs' => 'Logs',
         'configuracoes' => 'Configuracoes',
         'perfil' => 'Perfil',
@@ -73,9 +74,11 @@ class NavegacaoSidebarTest extends TestCase
         $resp->assertSee('<ui-sidebar', false);
         $resp->assertSee('collapsible', false);
         // Fatia 10: o header mostra SO o titulo da aba atual — o prefixo "Menu >"
-        // saiu (nunca foi link; a navegacao vive na sidebar).
+        // saiu (nunca foi link; a navegacao vive na sidebar). Fatia 23 (ajuste
+        // deliberado): o assert virou 'Menu >' — o rotulo novo "Menus de
+        // atendimento" contem "Menu" legitimamente.
         $resp->assertSee('data-flux-breadcrumbs', false);
-        $resp->assertDontSee('Menu');
+        $resp->assertDontSee('Menu >');
         // Cluster preservado: robo ON/OFF e botao Sair continuam no header.
         $resp->assertSee('Robo:');
         $resp->assertSee('Sair');
@@ -90,8 +93,10 @@ class NavegacaoSidebarTest extends TestCase
         $this->actingAs($this->operador());
 
         // Amostra com paginas de conteudo variado (o rotulo aparece; "Menu" nao).
-        foreach (['regras' => 'Regras', 'senhas' => 'Senhas', 'configuracoes' => 'Configuracoes'] as $rota => $rotulo) {
-            $this->get(route($rota))->assertOk()->assertSee($rotulo)->assertDontSee('Menu');
+        // Fatia 23 (ajuste deliberado): rotulos de negocio; 'regras' saiu da
+        // amostra ("Menus de atendimento" contem "Menu" — rotulo legitimo).
+        foreach (['senhas' => 'Senhas', 'configuracoes' => 'Configuracoes', 'kanban' => 'Kanban'] as $rota => $rotulo) {
+            $this->get(route($rota))->assertOk()->assertSee($rotulo)->assertDontSee('Menu >');
         }
     }
 

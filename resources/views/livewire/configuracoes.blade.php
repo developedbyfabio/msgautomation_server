@@ -1,6 +1,6 @@
 <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-3xl p-6 space-y-6">
-        <h1 class="text-xl font-semibold">Configuracoes / Freios</h1>
+        <h1 class="text-xl font-semibold">Configuracoes — Seguranca e controle</h1>
 
         {{-- CANAIS (CH-2: a conta lista TODOS — Evolution + Cloud API) --}}
         @foreach ($canais as $canal)

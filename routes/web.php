@@ -88,16 +88,17 @@ Route::middleware('auth')->group(function () {
         return \Illuminate\Support\Facades\Storage::disk('local')
             ->response($msg->media_path, $msg->media_name, ['Content-Type' => $msg->media_mime ?: 'application/octet-stream']);
     })->whereNumber('id')->name('media.incoming');
-    // Fatia 22: areas de CONFIGURACAO da automacao -> OWNER-only (default seguro;
-    // relaxar pra "operador visualiza" e decisao futura do dono, registrada).
+    // Fatia 22/23: engenharia ESTRUTURAL da automacao -> OWNER-only (operador
+    // nem ve — inalterado). Conhecimento saiu do grupo na Fatia 23 (decisao do
+    // dono: operador VE; a escrita e barrada pelos gates de acao).
     Route::middleware('account.role:owner')->group(function () {
         // Fluxos (construtor): config, editavel mesmo offline.
         Route::get('/fluxos', Fluxos::class)->name('fluxos');
-        // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.
-        Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
         // Variaveis (V-1): placeholders configuraveis; config, editavel offline.
         Route::get('/variaveis', \App\Livewire\Variaveis::class)->name('variaveis');
     });
+    // Base de conhecimento da IA (Fatia 2): operador VE (Fatia 23); escrita = owner (gate).
+    Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
 
     // Prompt 22 — administracao de tenants (super-admin da plataforma). UNICO ponto
     // cross-tenant; fora do gate de conexao (nao depende de canal/WhatsApp do tenant).
@@ -115,11 +116,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/contatos', Contatos::class)->name('contatos');
         // Fila de aprovacao da IA (Fatia 3): envia mensagens -> atras do gate de conexao.
         Route::get('/revisao', Revisao::class)->name('revisao');
+        // Campanhas proativas (P-2): operador VE (Fatia 23); escrita = owner (gate).
+        Route::get('/campanhas', \App\Livewire\Campanhas::class)->name('campanhas');
         // Fatia 22: automacao/config -> OWNER-only (enforcement server-side).
         Route::middleware('account.role:owner')->group(function () {
             Route::get('/regras', Regras::class)->name('regras');
-            // Campanhas proativas (P-2): gate humano draft->preview->aprovar (disparo = P-3).
-            Route::get('/campanhas', \App\Livewire\Campanhas::class)->name('campanhas');
             Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
         });
     });

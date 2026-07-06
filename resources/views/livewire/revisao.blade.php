@@ -1,7 +1,7 @@
 <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-4xl p-6 space-y-4">
         <div class="flex items-center justify-between gap-3">
-            <h1 class="text-xl font-semibold">Revisao (fila de aprovacao da IA)</h1>
+            <h1 class="text-xl font-semibold">Sugestoes da IA (aprovacao)</h1>
         </div>
 
         <p class="text-sm text-zinc-500">

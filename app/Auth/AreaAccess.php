@@ -36,16 +36,29 @@ class AreaAccess
         'revisao' => 'operador',
         'perfil' => 'operador',
         'conexao' => 'operador',
-        // Gestao/tecnico (owner+):
+        // Fatia 23 — VIEW-ONLY do operador (decisao do dono): operador VE
+        // campanhas e conhecimento (rota liberada); a ESCRITA e barrada pelo
+        // EDIT_MAP + gates de acao (authorizeEditAction).
+        'campanhas' => 'operador',
+        'conhecimento' => 'operador',
+        // Gestao/tecnico (owner+; regras/fluxos/variaveis = engenharia
+        // estrutural — operador nem ve, inalterado da Fatia 22):
         'senhas' => 'owner',
         'variaveis' => 'owner',
         'regras' => 'owner',
         'fluxos' => 'owner',
-        'conhecimento' => 'owner',
-        'campanhas' => 'owner',
         'logs' => 'owner',
         'configuracoes' => 'owner',
         // /admin/*: fora deste mapa — continua com platform.admin + 2FA (Prompts 22/29).
+    ];
+
+    /**
+     * Fatia 23 — areas com distincao VER x EDITAR: o papel minimo pra ESCREVER.
+     * Áreas fora deste mapa: editar = mesmo papel de acessar (MAP).
+     */
+    public const EDIT_MAP = [
+        'campanhas' => 'owner',
+        'conhecimento' => 'owner',
     ];
 
     /** O usuario pode acessar uma area com este papel minimo, NA conta dada? */
@@ -89,5 +102,50 @@ class AreaAccess
         }
 
         abort_unless(self::allows($user, $accountId, 'owner'), 403, 'Acao restrita ao dono da conta.');
+    }
+
+    // ---- Fatia 23: ver x editar (campanhas/conhecimento) ----------------------
+
+    /** O usuario pode EDITAR a area (nao so ver)? */
+    public static function canEdit(?User $user, int $accountId, string $area): bool
+    {
+        return self::allows($user, $accountId, self::EDIT_MAP[$area] ?? self::MAP[$area] ?? 'operador');
+    }
+
+    /**
+     * Versao de UI/componente (usuario + conta ATUAIS): esconde botoes de
+     * escrita pro operador (cosmetico — a barreira real e o gate abaixo).
+     * Sem usuario/contexto (suite legada): true, como no authorizeOwnerAction.
+     */
+    public static function canEditArea(string $area): bool
+    {
+        $user = auth()->user();
+        if ($user === null) {
+            return true;
+        }
+        try {
+            $accountId = app(AccountContext::class)->id();
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            return true;
+        }
+
+        return self::canEdit($user, $accountId, $area);
+    }
+
+    /** Gate de ESCRITA por area — rejeita operador MESMO com a acao forjada. */
+    public static function authorizeEditAction(string $area): void
+    {
+        $user = auth()->user();
+        if ($user === null) {
+            return;
+        }
+
+        try {
+            $accountId = app(AccountContext::class)->id();
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            abort(403, 'Somente leitura para o seu perfil.');
+        }
+
+        abort_unless(self::canEdit($user, $accountId, $area), 403, 'Somente leitura para o seu perfil.');
     }
 }

@@ -2,7 +2,7 @@
     <div class="mx-auto max-w-4xl space-y-4 p-6">
         <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-1">
-                <h1 class="text-xl font-semibold">Variaveis (placeholders)</h1>
+                <h1 class="text-xl font-semibold">Variaveis (textos dinamicos)</h1>
                 <x-info-tip text="Placeholders configuraveis, resolvidos SO no envio, em todo lugar onde placeholder ja funciona (regras, fluxos, campanhas, base da IA, edicao de pendencia). Variavel e pra conteudo NAO-sensivel — senha/PIX e assunto do cofre (/senhas)." />
             </div>
             <button type="button" wire:click="novo"

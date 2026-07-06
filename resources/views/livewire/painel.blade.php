@@ -17,7 +17,7 @@
     <div class="mx-auto max-w-4xl space-y-4 p-6">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-1">
-                <h1 class="text-xl font-semibold">Painel</h1>
+                <h1 class="text-xl font-semibold">Inicio</h1>
                 <x-info-tip text="Numeros que o sistema ja registra (logs de envio, decisoes da IA, sessoes de fluxo, Kanban, proativas), agregados por periodo no fuso de Sao Paulo. Leitura pura com cache de 60s — use Atualizar pra forcar." />
             </div>
             <div class="flex items-center gap-2">

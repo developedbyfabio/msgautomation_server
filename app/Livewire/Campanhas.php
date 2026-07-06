@@ -62,6 +62,9 @@ class Campanhas extends Component
      */
     public function usarTemplate(string $key): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         try {
             $nova = app(\App\Whatsapp\Proactive\InstantiateCampaignTemplate::class)->handle($key, $this->accountId());
         } catch (\InvalidArgumentException) {
@@ -124,6 +127,9 @@ class Campanhas extends Component
      */
     public function duplicate(int $id): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($id);
         if (! $c) {
             return;
@@ -160,6 +166,9 @@ class Campanhas extends Component
 
     public function save(SecretVault $vault, \App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $this->validate([
             'cName' => 'required|string|max:120',
             'cMessage' => 'required|string|max:4000',
@@ -242,6 +251,9 @@ class Campanhas extends Component
     /** Abre o preview: re-resolve o publico AGORA (retrato) e marca previewed. */
     public function openPreview(int $id): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($id);
         if (! $c || ! in_array($c->status, ['draft', 'previewed'], true)) {
             return;
@@ -278,6 +290,9 @@ class Campanhas extends Component
      */
     public function approveConfirmed(AudienceResolver $resolver, AgendaBuilder $agenda): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($this->confirmingApproveId);
         $this->confirmingApproveId = null;
         if (! $c || $c->status !== 'previewed') {
@@ -338,6 +353,9 @@ class Campanhas extends Component
 
     public function cancelConfirmed(): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($this->confirmingCancelId);
         $this->confirmingCancelId = null;
         if (! $c || $c->status === 'cancelled') {
@@ -365,6 +383,9 @@ class Campanhas extends Component
     /** Des-aprovar: SO sem target enviado (P-2: sempre). Apaga pendentes e libera edicao. */
     public function unapproveConfirmed(): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($this->confirmingUnapproveId);
         $this->confirmingUnapproveId = null;
         if (! $c || $c->status !== 'approved') {
@@ -401,6 +422,9 @@ class Campanhas extends Component
 
     public function pauseConfirmed(): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($this->confirmingPauseId);
         $this->confirmingPauseId = null;
         if ($c && in_array($c->status, ['approved', 'running'], true)) {
@@ -412,6 +436,9 @@ class Campanhas extends Component
     /** Retomar: volta pra running e RECALCULA scheduled_at dos vencidos (janela+jitter). */
     public function resume(int $id, AgendaBuilder $agenda): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+
         $c = $this->find($id);
         if (! $c || $c->status !== 'paused') {
             return;
@@ -492,6 +519,9 @@ class Campanhas extends Component
         }
 
         return view('livewire.campanhas', [
+            // Fatia 23 — view-only do operador: esconde botoes de escrita (cosmetico;
+            // a barreira real sao os gates authorizeEditAction nas acoes).
+            'podeEditar' => \App\Auth\AreaAccess::canEditArea('campanhas'),
             // Fatia 14 — catalogo de templates (padrao da Fatia 7).
             'templates' => $this->showForm ? [] : app(\App\Whatsapp\Proactive\CampaignTemplateCatalog::class)->summaries(),
             'campanhas' => $campanhas,

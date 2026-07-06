@@ -259,7 +259,7 @@ class PainelTest extends TestCase
         $this->assertNull($d['resumo']['mediana_primeira_resposta']);
 
         Livewire::test(Painel::class)
-            ->assertSee('Painel')
+            ->assertSee('Inicio') // Fatia 23 (ajuste deliberado): h1 em linguagem de negocio
             ->assertSee('mediana 1a resposta')
             ->assertSee('Nenhuma atividade proativa');
     }

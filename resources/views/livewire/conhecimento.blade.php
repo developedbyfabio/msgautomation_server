@@ -1,11 +1,13 @@
 <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-4xl p-6 space-y-4">
         <div class="flex items-center justify-between gap-3">
-            <h1 class="text-xl font-semibold">Base de conhecimento (IA)</h1>
+            <h1 class="text-xl font-semibold">Informacoes do negocio</h1>
+            @if ($podeEditar)
             <button type="button" wire:click="novo"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
                 <flux:icon icon="plus" variant="micro" /> Nova entrada
             </button>
+            @endif
         </div>
 
         <p class="text-sm text-zinc-500">
@@ -65,6 +67,8 @@
                         'bg-zinc-200 text-zinc-500 dark:bg-zinc-800' => ! $k->active,
                     ])>{{ $k->active ? 'ativa' : 'inativa' }}</span>
 
+                    {{-- Fatia 23: operador ve; escrita so pra quem edita (gates = barreira real). --}}
+                    @if ($podeEditar)
                     <flux:dropdown position="bottom" align="end">
                         <button type="button" class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Acoes">
                             <flux:icon icon="ellipsis-vertical" variant="micro" />
@@ -78,6 +82,7 @@
                             <flux:menu.item wire:click="confirmDelete({{ $k->id }})" icon="trash" variant="danger">Excluir</flux:menu.item>
                         </flux:menu>
                     </flux:dropdown>
+                    @endif
                 </div>
             @empty
                 <div class="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
@@ -88,7 +93,7 @@
         </div>
 
         {{-- Fatia 14 — comecar com um modelo (instancia e abre no form) --}}
-        @if (! empty($templates))
+        @if ($podeEditar && ! empty($templates))
             <div>
                 <h2 class="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">Comecar com um modelo</h2>
                 <p class="mb-2 text-xs text-zinc-500">

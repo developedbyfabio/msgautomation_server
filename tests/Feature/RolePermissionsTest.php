@@ -55,14 +55,18 @@ class RolePermissionsTest extends TestCase
 
     public function test_operador_barrado_por_url_nas_areas_owner(): void
     {
-        foreach (['configuracoes', 'senhas', 'logs', 'regras', 'fluxos', 'variaveis', 'conhecimento', 'campanhas'] as $rota) {
+        // Fatia 23 (ajuste deliberado): campanhas/conhecimento sairam desta lista
+        // — operador passou a VER (decisao do dono); a escrita segue barrada por
+        // gate (ViewOnlyNavigationTest cobre). Estruturais seguem owner-only.
+        foreach (['configuracoes', 'senhas', 'logs', 'regras', 'fluxos', 'variaveis'] as $rota) {
             $this->como($this->operador)->get(route($rota))->assertForbidden();
         }
     }
 
     public function test_operador_acessa_a_operacao_do_dia_a_dia(): void
     {
-        foreach (['painel', 'conversas', 'kanban', 'contatos', 'revisao', 'perfil', 'conexao'] as $rota) {
+        // Fatia 23: + campanhas/conhecimento em modo leitura.
+        foreach (['painel', 'conversas', 'kanban', 'contatos', 'revisao', 'perfil', 'conexao', 'campanhas', 'conhecimento'] as $rota) {
             $this->como($this->operador)->get(route($rota))->assertOk();
         }
     }
@@ -144,14 +148,18 @@ class RolePermissionsTest extends TestCase
     {
         // Rotulos SEM homonimo no conteudo/header ('Configuracoes' aparece num
         // link de hint do header do robo — legitimo: a ROTA protege, clicar da 403).
+        // Fatia 23 (ajuste deliberado): rotulos de negocio; conhecimento agora
+        // VISIVEL pro operador (view-only) — a ocultacao vale pros estruturais.
         $resp = $this->como($this->operador)->get(route('kanban'))->assertOk();
         $resp->assertDontSee('Variaveis');
-        $resp->assertDontSee('Conhecimento');
-        $resp->assertSee('Contatos'); // dia a dia continua no menu
+        $resp->assertDontSee('Respostas automaticas');
+        $resp->assertDontSee('Menus de atendimento');
+        $resp->assertSee('Clientes');                 // dia a dia continua no menu
+        $resp->assertSee('Informacoes do negocio');   // view-only VISIVEL
 
         $ok = $this->como($this->owner)->get(route('kanban'))->assertOk();
         $ok->assertSee('Variaveis');
-        $ok->assertSee('Conhecimento');
+        $ok->assertSee('Respostas automaticas');
     }
 
     // ---- Fail-safe: auto-rebaixamento COM outro owner (o lado que faltava) ---------

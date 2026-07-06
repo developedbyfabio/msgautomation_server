@@ -12,25 +12,34 @@
     $kanbanNovo = \App\Models\Card::query()
         ->whereHas('column', fn ($q) => $q->where('slug', 'novo'))
         ->count();
-    $nav = [
-        ['painel', 'Painel', 'chart-bar', 0],
-        ['conversas', 'Conversas', 'chat-bubble-left-right', 0],
-        ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
-        ['contatos', 'Contatos', 'users', 0],
-        ['senhas', 'Senhas', 'key', 0],
-        ['variaveis', 'Variaveis', 'variable', 0],
-        ['regras', 'Regras', 'bolt', 0],
-        ['fluxos', 'Fluxos', 'rectangle-stack', 0],
-        ['conhecimento', 'Conhecimento', 'book-open', 0],
-        ['revisao', 'Revisao', 'inbox', $pendencias],
-        ['campanhas', 'Campanhas', 'megaphone', 0],
-        ['logs', 'Logs', 'document-text', 0],
-        ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
-        ['perfil', 'Perfil', 'user-circle', 0],
+    // Fatia 23 — navegacao REAGRUPADA em linguagem de negocio (rotulos de UI;
+    // rotas/URLs identicas — so a arvore do menu mudou). "Senhas" NAO renomeado
+    // aqui (Fatia 24). Grupo 'Automacao' junta a engenharia do atendimento.
+    $navGrupos = [
+        ['heading' => null, 'items' => [
+            ['painel', 'Inicio', 'chart-bar', 0],
+            ['conversas', 'Atendimento', 'chat-bubble-left-right', 0],
+            ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
+            ['contatos', 'Clientes', 'users', 0],
+            ['campanhas', 'Campanhas', 'megaphone', 0],
+        ]],
+        ['heading' => 'Automacao', 'items' => [
+            ['regras', 'Respostas automaticas', 'bolt', 0],
+            ['fluxos', 'Menus de atendimento', 'rectangle-stack', 0],
+            ['conhecimento', 'Informacoes do negocio', 'book-open', 0],
+            ['variaveis', 'Variaveis', 'variable', 0],
+            ['revisao', 'Sugestoes da IA', 'inbox', $pendencias],
+        ]],
+        ['heading' => null, 'items' => [
+            ['senhas', 'Senhas', 'key', 0],
+            ['logs', 'Logs', 'document-text', 0],
+            ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
+            ['perfil', 'Perfil', 'user-circle', 0],
+        ]],
     ];
     // Fatia 22 — ocultacao COSMETICA por papel (a protecao real e o middleware
     // account.role nas rotas + gates de acao): itens que o papel nao acessa
-    // somem do menu. Fonte unica: AreaAccess::MAP. Sem reagrupar (Fatia 23).
+    // somem do menu. Fonte unica: AreaAccess::MAP. Grupo sem itens some junto.
     $navPapelOk = function (string $rota): bool {
         $u = auth()->user();
         if ($u === null) {
@@ -44,7 +53,14 @@
 
         return \App\Auth\AreaAccess::allows($u, $aid, \App\Auth\AreaAccess::MAP[$rota] ?? 'operador');
     };
-    $nav = array_values(array_filter($nav, fn ($item) => $navPapelOk($item[0])));
+    $navGrupos = array_values(array_filter(array_map(function ($g) use ($navPapelOk) {
+        $g['items'] = array_values(array_filter($g['items'], fn ($item) => $navPapelOk($item[0])));
+
+        return $g;
+    }, $navGrupos), fn ($g) => $g['items'] !== []));
+
+    // Lista PLANA (breadcrumb do header usa; mesmas rotas de sempre).
+    $nav = array_merge(...array_map(fn ($g) => $g['items'], $navGrupos));
 
     // Titulo do header: SO a aba atual (fatia 10 — o prefixo "Menu >" saiu; a
     // navegacao vive na sidebar). "Menu" nunca foi link, era item decorativo.
@@ -81,20 +97,41 @@
         </flux:sidebar.header>
 
         <flux:sidebar.nav>
-            @foreach ($nav as [$route, $label, $icon, $badge])
-                <flux:sidebar.item
-                    :icon="$icon"
-                    :href="route($route)"
-                    wire:navigate
-                    :badge="$badge > 0 ? ($badge > 99 ? '99+' : (string) $badge) : null"
-                    badge:color="amber"
-                    badge:variant="solid"
-                    :icon-dot="$badge > 0"
-                >{{ $label }}</flux:sidebar.item>
+            {{-- Fatia 23 — arvore reagrupada (mesmas rotas; grupo com heading vira
+                 flux:sidebar.group expansivel; grupos sem heading rendem soltos). --}}
+            @foreach ($navGrupos as $gi => $grupo)
+                @if ($grupo['heading'] !== null)
+                    <flux:sidebar.group expandable :heading="$grupo['heading']" wire:key="navg-{{ $gi }}">
+                        @foreach ($grupo['items'] as [$route, $label, $icon, $badge])
+                            <flux:sidebar.item
+                                :icon="$icon"
+                                :href="route($route)"
+                                wire:navigate
+                                :badge="$badge > 0 ? ($badge > 99 ? '99+' : (string) $badge) : null"
+                                badge:color="amber"
+                                badge:variant="solid"
+                                :icon-dot="$badge > 0"
+                            >{{ $label }}</flux:sidebar.item>
+                        @endforeach
+                    </flux:sidebar.group>
+                @else
+                    @foreach ($grupo['items'] as [$route, $label, $icon, $badge])
+                        <flux:sidebar.item
+                            :icon="$icon"
+                            :href="route($route)"
+                            wire:navigate
+                            :badge="$badge > 0 ? ($badge > 99 ? '99+' : (string) $badge) : null"
+                            badge:color="amber"
+                            badge:variant="solid"
+                            :icon-dot="$badge > 0"
+                        >{{ $label }}</flux:sidebar.item>
+                    @endforeach
+                @endif
             @endforeach
-            {{-- Prompt 22: administracao de tenants — SO pro super-admin da plataforma. --}}
+            {{-- Prompt 22: administracao de tenants — SO pro super-admin da plataforma.
+                 Fatia 23: rotulo de negocio 'Empresas' (rota identica). --}}
             @if (auth()->user()?->is_platform_admin)
-                <flux:sidebar.item icon="building-office-2" :href="route('admin.tenants')" wire:navigate>Tenants</flux:sidebar.item>
+                <flux:sidebar.item icon="building-office-2" :href="route('admin.tenants')" wire:navigate>Empresas</flux:sidebar.item>
             @endif
         </flux:sidebar.nav>
     </flux:sidebar>

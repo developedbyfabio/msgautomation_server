@@ -45,4 +45,19 @@ class Contact extends Model
             ->withPivot(['origin', 'origin_ref'])
             ->withTimestamps();
     }
+
+    /**
+     * Fatia 23 — exibicao AMIGAVEL do identificador (SO view: o remote_jid
+     * armazenado e o matching ficam intactos). Numero BR vira telefone
+     * formatado; fora do padrao, cai no numero cru sem o sufixo tecnico.
+     */
+    public function displayPhone(): string
+    {
+        $num = \Illuminate\Support\Str::before((string) $this->remote_jid, '@');
+        if (preg_match('/^55(\d{2})(\d{4,5})(\d{4})$/', $num, $m)) {
+            return "+55 ({$m[1]}) {$m[2]}-{$m[3]}";
+        }
+
+        return $num !== '' ? $num : (string) $this->remote_jid;
+    }
 }

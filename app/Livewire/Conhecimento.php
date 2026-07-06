@@ -62,6 +62,9 @@ class Conhecimento extends Component
      */
     public function usarTemplate(string $key): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('conhecimento');
+
         try {
             $k = app(\App\Ai\InstantiateKnowledgeTemplate::class)->handle($key, $this->accountId());
         } catch (\InvalidArgumentException) {
@@ -106,6 +109,9 @@ class Conhecimento extends Component
 
     public function save(\App\Ai\KnowledgeWriter $writer): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('conhecimento');
+
         $this->validate();
 
         // Fatia 4: guardas + persistencia no KnowledgeWriter (caminho OFICIAL,
@@ -136,6 +142,9 @@ class Conhecimento extends Component
 
     public function toggle(int $id): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('conhecimento');
+
         $k = $this->query()->find($id);
         if ($k) {
             $k->update(['active' => ! $k->active]);
@@ -155,6 +164,9 @@ class Conhecimento extends Component
 
     public function deleteConfirmed(): void
     {
+        // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
+        \App\Auth\AreaAccess::authorizeEditAction('conhecimento');
+
         if ($this->confirmingDeleteId) {
             // Exclusao escopada por account; o pivo cai por cascade. O historico em
             // ai_decisions (knowledge_ids, sem FK dura) permanece.
@@ -205,6 +217,8 @@ class Conhecimento extends Component
             : $contacts;
 
         return view('livewire.conhecimento', [
+            // Fatia 23 — view-only do operador (cosmetico; gates = barreira real).
+            'podeEditar' => \App\Auth\AreaAccess::canEditArea('conhecimento'),
             // Fatia 14 — catalogo de templates (padrao da Fatia 7).
             'templates' => $this->showForm ? [] : app(\App\Ai\KnowledgeTemplateCatalog::class)->summaries(),
             'entries' => $entries,
