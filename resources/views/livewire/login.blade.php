@@ -3,8 +3,10 @@
         <div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-emerald-600 text-white">
             <flux:icon icon="chat-bubble-left-right" />
         </div>
-        <h1 class="text-lg font-semibold">msgautomation</h1>
-        <p class="text-sm text-zinc-500">Acesso restrito. Entre para continuar.</p>
+        {{-- Fatia 21: texto FORA do card fica sobre o overlay escuro do fundo —
+             claro nos dois temas (contraste garantido sobre qualquer imagem). --}}
+        <h1 class="text-lg font-semibold text-white drop-shadow-sm">msgautomation</h1>
+        <p class="text-sm text-zinc-200 drop-shadow-sm">Acesso restrito. Entre para continuar.</p>
     </div>
 
     <form wire:submit="login" class="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

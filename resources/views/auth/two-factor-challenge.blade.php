@@ -6,9 +6,10 @@
             <div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-emerald-600 text-white">
                 <flux:icon icon="shield-check" />
             </div>
-            <h1 class="text-lg font-semibold">Verificação em duas etapas</h1>
-            <p class="text-sm text-zinc-500" x-show="!recovery">Digite o código de 6 dígitos do seu app autenticador.</p>
-            <p class="text-sm text-zinc-500" x-show="recovery" x-cloak>Digite um dos seus códigos de recuperação.</p>
+            {{-- Fatia 21: texto fora do card sobre o overlay escuro — claro nos dois temas. --}}
+            <h1 class="text-lg font-semibold text-white drop-shadow-sm">Verificação em duas etapas</h1>
+            <p class="text-sm text-zinc-200 drop-shadow-sm" x-show="!recovery">Digite o código de 6 dígitos do seu app autenticador.</p>
+            <p class="text-sm text-zinc-200 drop-shadow-sm" x-show="recovery" x-cloak>Digite um dos seus códigos de recuperação.</p>
         </div>
 
         <form method="POST" action="{{ route('two-factor.login.store') }}"
@@ -42,7 +43,7 @@
             </button>
         </form>
 
-        <p class="mt-4 text-center text-xs text-zinc-400">
+        <p class="mt-4 text-center text-xs text-zinc-200 drop-shadow-sm">
             <a href="{{ route('login') }}" class="hover:underline">Voltar pro login</a>
         </p>
     </div>
