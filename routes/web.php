@@ -53,12 +53,21 @@ Route::post('/logout', function () {
 Route::get('/email/verify', fn () => view('auth.verificar-email'))
     ->middleware('auth')->name('verification.notice');
 
+// Fatia 26 — billing/assinatura: owner-only e FORA do gate 'account.operational'
+// (e o UNICO destino que a conta suspensa alcanca: pagar/reativar). O pagamento
+// em si e HOSPEDADO no Asaas — nenhum dado de cartao passa por aqui.
+Route::middleware(['auth', 'verified', 'account.role:owner'])->group(function () {
+    Route::get('/assinatura', \App\Livewire\Billing::class)->name('billing');
+});
+
 // UI (Camada 4) — toda atras de auth. /conexao mostra o QR quando a sessao cai;
 // as demais paginas exigem o WhatsApp conectado (gate whatsapp.connected).
 // Fatia 25: 'verified' no grupo inteiro — usuario de CADASTRO PUBLICO so entra
 // no painel depois de confirmar o e-mail (usuarios criados por console/admin
 // nascem verificados por construcao; backfill cobriu os pre-existentes).
-Route::middleware(['auth', 'verified'])->group(function () {
+// Fatia 26: 'account.operational' — conta suspensa/cancelada por billing nao
+// opera o painel (owner e redirecionado pra /assinatura; operador ve 403).
+Route::middleware(['auth', 'verified', 'account.operational'])->group(function () {
     Route::redirect('/', '/conversas');
     Route::get('/conexao', Conexao::class)->name('conexao');
     // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).
@@ -154,3 +163,10 @@ Route::post('/webhook/evolution/{token}', EvolutionWebhookController::class)
 Route::match(['get', 'post'], '/webhook/cloud/{token}', \App\Http\Controllers\ChannelWebhookController::class)
     ->middleware('webhook.secret')
     ->name('webhook.cloud');
+
+// Fatia 26 — webhook de COBRANCA do Asaas: token proprio validado no controller
+// (header asaas-access-token, 401 se invalido), dedup por event id, 200 + job.
+// CSRF isento pelo prefixo webhook/* (bootstrap). Tunnel/nginx intocados: a
+// rota e da aplicacao e o dominio ja e exposto.
+Route::post('/webhook/asaas', \App\Http\Controllers\AsaasWebhookController::class)
+    ->name('webhook.asaas');

@@ -32,6 +32,7 @@
         ]],
         ['heading' => null, 'items' => [
             ['senhas', 'Cofre de credenciais', 'key', 0], // Fatia 24: rotulo; rota/chave 'senhas' intocadas
+            ['billing', 'Assinatura', 'credit-card', 0], // Fatia 26: billing (owner-only via MAP)
             ['logs', 'Logs', 'document-text', 0],
             ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
             ['perfil', 'Perfil', 'user-circle', 0],

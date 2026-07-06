@@ -20,13 +20,28 @@ class Account extends Model
     /**
      * Fatia 25 — estado de assinatura. 'active' = contas legadas/criadas pelo
      * admin (default da coluna); 'trial' = cadastro publico (trial_ends_at =
-     * +7d). Esta fatia SO grava o marco; o corte no vencimento e da Fatia 26
-     * (que adiciona os demais estados junto do gateway). Perfil PF/PJ e trial
-     * entram por forceFill no RegisterTenant — fora do $fillable de proposito.
+     * +7d). Fatia 26 completou a maquina: trial -> active -> overdue ->
+     * suspended -> canceled, dirigida pelos webhooks de COBRANCA do Asaas
+     * (App\Billing\BillingState) + sweep diario do corte de trial. Perfil
+     * PF/PJ, trial e ids do Asaas entram por forceFill — fora do $fillable.
      */
     protected function casts(): array
     {
-        return ['trial_ends_at' => 'datetime'];
+        return [
+            'trial_ends_at' => 'datetime',
+            'overdue_since' => 'datetime',
+            'suspended_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Fatia 26 — gate de OPERACAO: conta suspensa/cancelada NAO opera (bot nao
+     * responde; painel so na billing). NADA e apagado — reversivel: pagamento
+     * confirmado no webhook volta pra 'active' e tudo religa.
+     */
+    public function podeOperar(): bool
+    {
+        return ! in_array($this->subscription_status, ['suspended', 'canceled'], true);
     }
 
     /**

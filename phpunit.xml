@@ -35,5 +35,9 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Fatia 26: Asaas FAKE na suite inteira - teste NUNCA enxerga chave real nem sai pra rede (Http::fake nos testes de checkout). -->
+        <env name="ASAAS_API_KEY" value="chave-fake-de-teste"/>
+        <env name="ASAAS_BASE_URL" value="https://api-sandbox.asaas.com"/>
+        <env name="ASAAS_WEBHOOK_TOKEN" value="token-webhook-de-teste-0123456789abcdef"/>
     </php>
 </phpunit>

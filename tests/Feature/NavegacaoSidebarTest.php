@@ -32,6 +32,7 @@ class NavegacaoSidebarTest extends TestCase
         'variaveis' => 'Variaveis',
         'revisao' => 'Sugestoes da IA',
         'senhas' => 'Cofre de credenciais', // Fatia 24 (ajuste deliberado): rotulo; rota identica
+        'billing' => 'Assinatura', // Fatia 26 (ajuste deliberado): item NOVO do menu
         'logs' => 'Logs',
         'configuracoes' => 'Configuracoes',
         'perfil' => 'Perfil',

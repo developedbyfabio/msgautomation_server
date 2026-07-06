@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform.admin' => \App\Http\Middleware\EnsurePlatformAdmin::class, // Prompt 22
             'require.2fa.admin' => \App\Http\Middleware\EnsureTwoFactorForPlatformAdmin::class, // Prompt 29
             'account.role' => \App\Http\Middleware\EnsureAccountRole::class, // Fatia 22: papel por conta
+            'account.operational' => \App\Http\Middleware\EnsureAccountOperational::class, // Fatia 26: conta suspensa -> so billing
         ]);
 
         // MT-0 — contexto de conta em todo request web (fase 1: conta unica;

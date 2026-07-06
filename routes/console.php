@@ -17,3 +17,8 @@ Illuminate\Support\Facades\Schedule::command('proactive:tick')->everyMinute();
 
 // MATCH-1 — retencao do log de sem-match (30 dias; leve, roda de madrugada).
 Illuminate\Support\Facades\Schedule::command('unmatched:prune')->dailyAt('03:10');
+
+// Fatia 26 — corte de trial/inadimplencia (diario): trial vencido -> overdue;
+// overdue alem da carencia -> suspended. Reversivel (webhook de pagamento
+// reativa); contas legacy sao imunes por construcao. NADA e apagado.
+Illuminate\Support\Facades\Schedule::command('billing:sweep')->dailyAt('03:20');

@@ -51,6 +51,10 @@ class AppServiceProvider extends ServiceProvider
         // profundidade; sem pagina liberada o nao-verificado nem tem snapshot).
         \Livewire\Livewire::addPersistentMiddleware([\Illuminate\Auth\Middleware\EnsureEmailIsVerified::class]);
 
+        // Fatia 26 — idem para o gate de conta suspensa (billing): snapshot de
+        // pagina antiga nao continua operando depois da suspensao.
+        \Livewire\Livewire::addPersistentMiddleware([\App\Http\Middleware\EnsureAccountOperational::class]);
+
         // Fatia 25 — e-mail de verificacao em pt-BR (o cliente final le isto).
         // So o TEXTO: o link assinado/expiracao/throttle seguem nativos.
         \Illuminate\Auth\Notifications\VerifyEmail::toMailUsing(function ($notifiable, string $url) {

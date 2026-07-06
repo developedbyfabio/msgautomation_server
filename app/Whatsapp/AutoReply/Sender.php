@@ -60,6 +60,19 @@ class Sender
             $log = AutoReplyLog::create($this->base($accountId, $channel, $jid, $text, $mode, null, $ruleId, $campaignId, $media));
         }
 
+        // 1b. Fatia 26 — gate de OPERACAO (billing), no mesmo espirito do kill
+        //     switch: conta suspensa/cancelada NAO envia NADA (auto/manual/
+        //     aprovacao/proactive/handoff). A decisao de matching/fluxo chegou
+        //     intacta ate aqui e e BARRADA no funil unico de envio, auditada no
+        //     log ('conta_suspensa'). NADA e apagado: pagamento confirmado
+        //     (webhook) volta pra 'active' e este gate libera sozinho.
+        $conta = \App\Models\Account::query()->find($accountId);
+        if ($conta !== null && ! $conta->podeOperar()) {
+            $log->update(['status' => 'blocked', 'motivo' => 'conta_suspensa']);
+
+            return $log;
+        }
+
         // 2. freios (ruleId habilita o cooldown por regra — S2; flow isenta o intervalo
         //    por contato durante a sessao — Fatia A; handoff isenta SO o gate de contato
         //    — Fatia 5: o 'off' e do proprio handoff, nao pode barrar a despedida)
