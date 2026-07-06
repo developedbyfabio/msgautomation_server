@@ -87,7 +87,7 @@ class RuleResponder
             'hora' => $now->format('H:i'),
         ];
 
-        return preg_replace_callback('/\{(\w+)\}/u', function ($m) use ($valores, $custom, $now) {
+        $texto = preg_replace_callback('/\{(\w+)\}/u', function ($m) use ($valores, $custom, $now) {
             $chave = mb_strtolower($m[1], 'UTF-8');
 
             if (array_key_exists($chave, $valores)) {
@@ -105,6 +105,45 @@ class RuleResponder
 
             return $m[0];
         }, $template);
+
+        // Fatia 15 — {kb:slug}: conteudo de conhecimento REFERENCIAVEL da conta
+        // do contexto (mesmo escopo das custom). Passe SEPARADO ({kb:...} tem ':'
+        // e nao casa \w+) e DEPOIS do principal: o conteudo inserido e LITERAL —
+        // {refs} dentro dele NAO resolvem (mesma filosofia sem-recursao do
+        // VariableWriter). Orfao/sensivel/restrito/com-senha = STRING VAZIA +
+        // warning (token literal NUNCA vaza pro contato; envio nunca quebra).
+        return preg_replace_callback(
+            '/\{kb:([a-z0-9_-]+)\}/iu',
+            fn ($m) => $this->conteudoKb(mb_strtolower($m[1], 'UTF-8')),
+            $texto,
+        );
+    }
+
+    /** Fatia 15 — conteudo do conhecimento referenciavel, ou '' (orfao logado). */
+    private function conteudoKb(string $slug): string
+    {
+        try {
+            $accountId = app(\App\Tenancy\AccountContext::class)->id();
+        } catch (\App\Tenancy\MissingAccountContextException) {
+            \Illuminate\Support\Facades\Log::warning('{kb:} sem contexto de conta — substituido por vazio.', ['slug' => $slug]);
+
+            return '';
+        }
+
+        $kb = \App\Models\Knowledge::query()->referenciavel($accountId)->where('slug', $slug)->first();
+
+        // Guarda de segredo (coerente com S5): conteudo com {senha:...} seria
+        // resolvido DEPOIS pelo Sender e vazaria por caminho nao-escopado — trata
+        // como orfao. Inexistente/desativado/sensivel/restrito idem.
+        if ($kb === null || app(\App\Whatsapp\Secrets\SecretVault::class)->hasRef((string) $kb->content)) {
+            \Illuminate\Support\Facades\Log::warning('{kb:' . $slug . '} nao resolvido (inexistente, inativo, sensivel, restrito ou com segredo) — substituido por vazio.', [
+                'account_id' => $accountId,
+            ]);
+
+            return '';
+        }
+
+        return (string) $kb->content;
     }
 
     /** Fallback historico da saudacao (conta sem a variavel de sistema seeded). */

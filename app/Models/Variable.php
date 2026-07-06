@@ -76,17 +76,35 @@ class Variable extends Model
     {
         preg_match_all('/\{(\w+)\}/u', $texto, $m);
         $refs = array_unique(array_map(fn ($r) => mb_strtolower($r, 'UTF-8'), $m[1] ?? []));
-        if ($refs === []) {
-            return [];
-        }
 
         $nativas = ['nome', 'saudacao', 'data', 'hora', 'palavra_sair'];
-        $ativas = self::withoutAccountScope()
-            ->where('account_id', $accountId)
-            ->where('active', true)
-            ->pluck('name')
-            ->all();
+        $ativas = $refs !== []
+            ? self::withoutAccountScope()
+                ->where('account_id', $accountId)
+                ->where('active', true)
+                ->pluck('name')
+                ->all()
+            : [];
+        $desconhecidas = array_values(array_diff($refs, $nativas, $ativas));
 
-        return array_values(array_diff($refs, $nativas, $ativas));
+        // Fatia 15 — {kb:slug} tambem e validado (mesma elegibilidade do
+        // resolver: referenciavel E sem {senha:} no conteudo — o que nao
+        // resolveria no envio vira aviso aqui, como 'kb:slug').
+        preg_match_all('/\{kb:([a-z0-9_-]+)\}/iu', $texto, $mkb);
+        $kbRefs = array_unique(array_map(fn ($r) => mb_strtolower($r, 'UTF-8'), $mkb[1] ?? []));
+        if ($kbRefs !== []) {
+            $vault = app(\App\Whatsapp\Secrets\SecretVault::class);
+            $resolviveis = Knowledge::query()->referenciavel($accountId)
+                ->whereIn('slug', $kbRefs)
+                ->get(['slug', 'content'])
+                ->filter(fn ($k) => ! $vault->hasRef((string) $k->content))
+                ->pluck('slug')
+                ->all();
+            foreach (array_diff($kbRefs, $resolviveis) as $slug) {
+                $desconhecidas[] = 'kb:' . $slug;
+            }
+        }
+
+        return $desconhecidas;
     }
 }

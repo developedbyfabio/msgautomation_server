@@ -298,6 +298,17 @@
                                         </flux:menu>
                                     </flux:dropdown>
                                 @endif
+                                {{-- Fatia 15: inserir {kb:slug} — titulos dos conhecimentos referenciaveis da conta. --}}
+                                @if ($kbOptions->isNotEmpty())
+                                    <flux:dropdown position="bottom" align="end">
+                                        <button type="button" class="inline-flex items-center gap-1 text-xs text-sky-600 hover:underline"><flux:icon icon="book-open" variant="micro" /> conhecimento</button>
+                                        <flux:menu>
+                                            @foreach ($kbOptions as $kb)
+                                                <flux:menu.item wire:click="inserirConhecimentoNo({{ $node->id }}, '{{ $kb->slug }}')">{{ $kb->title }}</flux:menu.item>
+                                            @endforeach
+                                        </flux:menu>
+                                    </flux:dropdown>
+                                @endif
                                 <button type="button" wire:click="salvarNo({{ $node->id }})" class="rounded-lg bg-zinc-900 px-2 py-1 text-xs font-medium text-white dark:bg-white dark:text-zinc-900">Salvar no</button>
                                 @unless ($isRoot)
                                     <button type="button" wire:click="removerNo({{ $node->id }})" class="text-zinc-400 hover:text-red-500" aria-label="Remover no"><flux:icon icon="trash" variant="micro" /></button>

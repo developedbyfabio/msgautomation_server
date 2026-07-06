@@ -323,6 +323,25 @@ class Fluxos extends Component
         $this->nodeMsg[$nodeId] = $atual === '' ? $ref : $atual . ' ' . $ref;
     }
 
+    /**
+     * Fatia 15 — insere {kb:slug} na mensagem do no (mesmo padrao do
+     * inserirSenhaNo: no FIM do campo — escolha registrada; cursor exigiria JS
+     * fora do padrao do editor). So slugs REFERENCIAVEIS da conta ativa.
+     */
+    public function inserirConhecimentoNo(int $nodeId, string $slug): void
+    {
+        if (! isset($this->nodeMsg[$nodeId])) {
+            return;
+        }
+        // Posse/elegibilidade server-side (acao Livewire e forjavel).
+        if (! \App\Models\Knowledge::query()->referenciavel($this->accountId())->where('slug', $slug)->exists()) {
+            return;
+        }
+        $atual = trim((string) $this->nodeMsg[$nodeId]);
+        $ref = '{kb:' . $slug . '}';
+        $this->nodeMsg[$nodeId] = $atual === '' ? $ref : $atual . ' ' . $ref;
+    }
+
     public function salvarNo(int $nodeId): void
     {
         $node = $this->ownNode($nodeId);
@@ -568,6 +587,19 @@ class Fluxos extends Component
 
         $secretNames = $flow ? app(SecretVault::class)->names($accountId) : [];
 
+        // Fatia 15 — conhecimentos REFERENCIAVEIS ({kb:slug}) pro dropdown do
+        // editor: ativos, 'low', sem restricao de contatos e sem {senha:} no
+        // conteudo (mesma elegibilidade do resolver — o dropdown nunca oferece
+        // o que nao resolveria no envio).
+        $kbOptions = collect();
+        if ($flow) {
+            $vault = app(SecretVault::class);
+            $kbOptions = \App\Models\Knowledge::query()->referenciavel($accountId)
+                ->orderBy('title')->get(['slug', 'title', 'content'])
+                ->filter(fn ($k) => ! $vault->hasRef((string) $k->content))
+                ->values();
+        }
+
         // C.2 — sobreposicao fluxo (entrada) × regra (o fluxo vence; aviso na lista).
         $flowConflicts = $this->editingFlowId ? [] : app(\App\Whatsapp\AutoReply\RuleConflictDetector::class)->flowRuleOverlaps($accountId)['flows'];
 
@@ -606,6 +638,7 @@ class Fluxos extends Component
             'deleting' => $deleting,
             'contacts' => $contacts,
             'secretNames' => $secretNames,
+            'kbOptions' => $kbOptions,
             'simView' => $simView,
             'flowConflicts' => $flowConflicts,
             'warnings' => $warnings,

@@ -28,6 +28,7 @@ class Knowledge extends Model
     protected $fillable = [
         'account_id',
         'title',
+        'slug',        // Fatia 15: identidade ESTAVEL do token {kb:slug}
         'content',
         'sensitivity', // low | medium | high
         'active',
@@ -38,6 +39,49 @@ class Knowledge extends Model
         return [
             'active' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Fatia 15 — slug gerado na CRIACAO (choke point unico: cobre writer,
+        // seed e qualquer caminho de criacao) e IMUTAVEL depois: renomear o
+        // titulo NUNCA quebra um {kb:slug} ja usado em mensagem. Unico por conta.
+        static::creating(function (self $k) {
+            if (trim((string) $k->slug) === '') {
+                $k->slug = self::uniqueSlugFor((int) $k->account_id, (string) $k->title);
+            }
+        });
+    }
+
+    /** Slug unico POR CONTA a partir do titulo (colisao sufixa -2, -3...). */
+    public static function uniqueSlugFor(int $accountId, string $title): string
+    {
+        $base = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::limit($title, 70, ''), '-') ?: 'conhecimento';
+        $slug = $base;
+        $n = 2;
+        while (self::withoutAccountScope()->where('account_id', $accountId)->where('slug', $slug)->exists()) {
+            $slug = "{$base}-{$n}";
+            $n++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Fatia 15 — entradas REFERENCIAVEIS por {kb:slug} em mensagem automatica:
+     * ativas, sensitivity 'low' (medium/high vao no maximo ao MODELO da IA,
+     * nunca direto pro contato) e SEM restricao de contatos (mensagem de fluxo/
+     * regra vai pra qualquer contato — entrada restrita nao pode vazar). A
+     * guarda extra de {senha:} no conteudo fica nos consumidores (via hasRef).
+     */
+    public function scopeReferenciavel(Builder $query, int $accountId): Builder
+    {
+        return $query
+            ->withoutGlobalScopes()
+            ->where('account_id', $accountId)
+            ->where('active', true)
+            ->where('sensitivity', 'low')
+            ->whereDoesntHave('contacts');
     }
 
     public function account(): BelongsTo
