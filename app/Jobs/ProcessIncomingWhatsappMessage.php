@@ -137,6 +137,20 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
         // Kanban K-1 — evento de dominio (listener em fila; observador puro).
         // So mensagens INDIVIDUAIS recebidas (popularContato ja exclui fromMe/grupo).
         if ($contato !== null) {
+            // Fatia 20 — mensagem do CONTATO devolve o card ao fluxo automatico:
+            // solta o pin de movimento manual e DESARQUIVA (auto-restauracao).
+            // ANTES do evento (a propria mensagem que libera ja pode acionar a
+            // transicao normal). Best-effort: erro de Kanban NUNCA derruba o
+            // pipeline (padrao K). Nenhuma decisao de resposta muda.
+            try {
+                \App\Models\Card::withoutAccountScope()
+                    ->where('contact_id', $contato->id)
+                    ->where(fn ($q) => $q->where('pinned_until_reply', true)->orWhereNotNull('archived_at'))
+                    ->update(['pinned_until_reply' => false, 'archived_at' => null]);
+            } catch (\Throwable $e) {
+                Log::error('Kanban: falha isolada ao soltar pin/desarquivar no inbound; pipeline segue.', ['erro' => $e->getMessage()]);
+            }
+
             // CH-2 — janela de 24h POR CONTATO+CANAL: todo inbound re-abre a
             // janela DESTE canal (a Evolution nem consulta; o cloud_api sim).
             \App\Models\ContactChannelWindow::touchWindow(

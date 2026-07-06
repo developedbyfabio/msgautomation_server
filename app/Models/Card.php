@@ -22,12 +22,18 @@ class Card extends Model
         'contact_id',
         'column_id',
         'last_interaction_at',
-        'last_direction', // in | out
+        'last_direction',      // in | out
+        'pinned_until_reply',  // Fatia 20: movido por humano — automatico nao mexe ate o contato responder
+        'archived_at',         // Fatia 20: arquivado (reversivel; nunca delete fisico)
     ];
 
     protected function casts(): array
     {
-        return ['last_interaction_at' => 'datetime'];
+        return [
+            'last_interaction_at' => 'datetime',
+            'pinned_until_reply' => 'boolean',
+            'archived_at' => 'datetime',
+        ];
     }
 
     public function board(): BelongsTo

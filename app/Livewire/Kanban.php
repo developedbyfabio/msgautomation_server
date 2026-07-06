@@ -96,6 +96,63 @@ class Kanban extends Component
         return array_key_exists($col->slug, BoardProvisioner::DEFAULT_COLUMNS);
     }
 
+    // ---- Fatia 20: arquivar parados (reversivel — NUNCA delete fisico) ------------
+
+    public ?int $archivingColumnId = null;
+
+    public int $archiveDays = 30; // X configuravel no dialogo (default 30)
+
+    public function confirmArchive(int $columnId): void
+    {
+        // Posse: coluna do board DA CONTA (acao Livewire e forjavel).
+        if (! $this->board()->columns()->whereKey($columnId)->exists()) {
+            return;
+        }
+        $this->archiveDays = 30;
+        $this->archivingColumnId = $columnId;
+    }
+
+    public function cancelArchive(): void
+    {
+        $this->archivingColumnId = null;
+    }
+
+    /**
+     * Arquiva SOMENTE os cards DESTA coluna, DESTA conta, inativos ha mais de
+     * X dias (last_interaction_at). Soft e reversivel (archived_at) — JAMAIS
+     * delete fisico, JAMAIS a coluna inteira. O contato escrever DESARQUIVA
+     * (auto-restauracao no inbound do pipeline).
+     */
+    public function archiveConfirmed(): void
+    {
+        $col = $this->archivingColumnId ? $this->board()->columns()->whereKey($this->archivingColumnId)->first() : null;
+        if (! $col) {
+            $this->archivingColumnId = null;
+
+            return;
+        }
+
+        $n = $this->elegiveisParaArquivar($col->id)->update(['archived_at' => now()]);
+
+        $this->archivingColumnId = null;
+        $this->dispatch('toast', message: $n > 0
+            ? "{$n} card(s) parado(s) ha mais de {$this->archiveDays} dias arquivado(s). Voltam sozinhos se o contato escrever."
+            : 'Nenhum card parado ha tanto tempo — nada arquivado.');
+    }
+
+    /** Query dos elegiveis: coluna + conta + ativos + inativos ha > X dias (null = nao elegivel). */
+    private function elegiveisParaArquivar(int $columnId)
+    {
+        $dias = max(1, min(365, (int) $this->archiveDays));
+
+        return Card::query()
+            ->where('board_id', $this->board()->id)
+            ->where('column_id', $columnId)
+            ->whereNull('archived_at')
+            ->whereNotNull('last_interaction_at')
+            ->where('last_interaction_at', '<', now()->subDays($dias));
+    }
+
     // ---- movimento manual --------------------------------------------------------
 
     public function moveCard(int $cardId, int $columnId): void
@@ -113,7 +170,10 @@ class Kanban extends Component
         }
 
         $de = (int) $card->column_id;
-        $card->update(['column_id' => $col->id, 'last_interaction_at' => now()]);
+        // Fatia 20 — movimento HUMANO (3 pontinhos OU drag, mesma action) FIXA o
+        // card: as transicoes automaticas nao mexem ate a proxima mensagem do
+        // contato (release no inbound do pipeline).
+        $card->update(['column_id' => $col->id, 'last_interaction_at' => now(), 'pinned_until_reply' => true]);
         CardTransition::create([
             'card_id' => $card->id,
             'from_column_id' => $de,
@@ -121,7 +181,7 @@ class Kanban extends Component
             'cause' => 'manual',
         ]);
 
-        $this->dispatch('toast', message: 'Card movido para "' . $col->name . '".');
+        $this->dispatch('toast', message: 'Card movido para "' . $col->name . '" (o robo nao altera ate a proxima mensagem do contato).');
     }
 
     public function showHistory(int $cardId): void
@@ -532,6 +592,7 @@ class Kanban extends Component
         $busca = mb_strtolower(trim($this->search), 'UTF-8');
         $cards = Card::query()
             ->where('board_id', $board->id)
+            ->whereNull('archived_at') // Fatia 20: arquivado some do board (reversivel)
             ->with(['contact:id,push_name,remote_jid', 'contact.tags:id,name,color'])
             ->orderByDesc('last_interaction_at')
             ->limit(500)
@@ -563,6 +624,16 @@ class Kanban extends Component
 
         $rules = $this->showRules ? $board->rules()->with(['toColumn', 'tag'])->get() : collect();
 
+        // Fatia 20 — modal de arquivar: coluna + elegiveis calculados AO VIVO
+        // (o input de dias atualiza contagem/lista antes de confirmar).
+        $archiving = null;
+        if ($this->archivingColumnId && ($colArq = $board->columns()->whereKey($this->archivingColumnId)->first())) {
+            $archiving = [
+                'column' => $colArq,
+                'cards' => $this->elegiveisParaArquivar($colArq->id)->with('contact:id,push_name,remote_jid')->orderBy('last_interaction_at')->get(),
+            ];
+        }
+
         return view('livewire.kanban', [
             'allTags' => \App\Models\Tag::query()->orderBy('name')->get(),
             'board' => $board,
@@ -571,6 +642,7 @@ class Kanban extends Component
             'history' => $history,
             'colLabels' => $colNames,
             'rules' => $rules,
+            'archiving' => $archiving,
         ]);
     }
 }

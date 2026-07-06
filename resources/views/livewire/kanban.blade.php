@@ -34,23 +34,40 @@
 
     {{-- BOARD: colunas lado a lado, scroll horizontal; corpo de cada coluna com scroll proprio --}}
     <div class="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-4">
-        <div class="flex h-full items-stretch gap-3">
+        {{-- Fatia 20: id + data-attrs pro drag-and-drop (SortableJS lazy via app.js).
+             O drop chama a MESMA action moveCard dos 3 pontinhos (que permanecem). --}}
+        <div id="kanban-board" class="flex h-full items-stretch gap-3">
             @foreach ($columns as $col)
                 @php $cards = $cardsByColumn->get($col->id, collect()); @endphp
                 <div class="flex h-full w-72 shrink-0 flex-col rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60" wire:key="col-{{ $col->id }}">
                     {{-- header FIXO da coluna --}}
                     <div class="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
                         <span class="truncate text-sm font-semibold">{{ $col->name }}</span>
-                        <span class="shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ $cards->count() }}</span>
+                        <span class="flex shrink-0 items-center gap-1">
+                            <span class="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ $cards->count() }}</span>
+                            {{-- Fatia 20: arquivar SO os parados ha +X dias (reversivel). --}}
+                            <button type="button" wire:click="confirmArchive({{ $col->id }})"
+                                aria-label="Arquivar parados de {{ $col->name }}" title="Arquivar cards parados ha muito tempo (reversivel)"
+                                class="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+                                <flux:icon icon="archive-box-arrow-down" variant="micro" class="size-3.5" />
+                            </button>
+                        </span>
                     </div>
-                    {{-- corpo com scroll interno --}}
-                    <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+                    {{-- corpo com scroll interno (container de drop do SortableJS) --}}
+                    <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2" data-kanban-col="{{ $col->id }}">
                         @forelse ($cards as $card)
                             @php $nome = $card->contact?->push_name ?: \Illuminate\Support\Str::before((string) $card->contact?->remote_jid, '@'); @endphp
-                            <div class="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900" wire:key="card-{{ $card->id }}">
+                            <div class="cursor-grab rounded-lg border border-zinc-200 bg-white p-2.5 shadow-sm active:cursor-grabbing dark:border-zinc-700 dark:bg-zinc-900" wire:key="card-{{ $card->id }}" data-card-id="{{ $card->id }}">
                                 <div class="flex items-start gap-2">
                                     <a href="{{ route('conversas', ['jid' => $card->contact?->remote_jid]) }}" wire:navigate class="min-w-0 flex-1 hover:opacity-80" title="Abrir conversa">
-                                        <div class="truncate text-sm font-medium">{{ $nome }}</div>
+                                        <div class="flex items-center gap-1 text-sm font-medium">
+                                            <span class="truncate">{{ $nome }}</span>
+                                            @if ($card->pinned_until_reply)
+                                                {{-- Fatia 20: fixado por movimento manual (o #nome acompanha o icone). --}}
+                                                <flux:icon icon="lock-closed" variant="micro" class="size-3 shrink-0 text-amber-500"
+                                                    title="Movido manualmente — o robo nao altera ate a proxima mensagem do contato" />
+                                            @endif
+                                        </div>
                                         <div class="mt-0.5 flex items-center gap-1.5 text-[11px] text-zinc-400">
                                             @if ($card->last_direction === 'in')
                                                 <flux:icon icon="arrow-down-left" variant="micro" class="size-3 text-emerald-500" title="Ultima: contato falou" />
@@ -97,6 +114,46 @@
             @endforeach
         </div>
     </div>
+
+    {{-- Fatia 20 — MODAL: arquivar parados (reversivel; NUNCA apaga). --}}
+    @if ($archiving)
+        <x-modal wireClose="cancelArchive" title="Arquivar parados — {{ $archiving['column']->name }}">
+            <div class="space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-medium">Parados ha mais de</label>
+                    <input type="number" min="1" max="365" wire:model.live="archiveDays"
+                        class="w-20 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    <span class="text-xs">dias (sem nenhuma interacao)</span>
+                </div>
+
+                @if ($archiving['cards']->isEmpty())
+                    <p class="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-800/60">
+                        Nenhum card desta coluna esta parado ha mais de {{ $archiveDays }} dias — nada sera arquivado.
+                    </p>
+                @else
+                    <p class="text-xs">
+                        <strong>{{ $archiving['cards']->count() }} card(s)</strong> serao arquivados (somem do quadro,
+                        <strong>nada e apagado</strong> — voltam sozinhos se o contato escrever):
+                    </p>
+                    <ul class="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-zinc-50 px-3 py-2 text-xs dark:bg-zinc-800/60">
+                        @foreach ($archiving['cards'] as $c)
+                            <li wire:key="arq-{{ $c->id }}" class="flex items-center justify-between gap-2">
+                                <span class="truncate">{{ $c->contact?->push_name ?: \Illuminate\Support\Str::before((string) $c->contact?->remote_jid, '@') }}</span>
+                                <span class="shrink-0 text-zinc-400">{{ $c->last_interaction_at?->diffForHumans() }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelArchive" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="archiveConfirmed" @disabled($archiving['cards']->isEmpty())
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900">
+                    <flux:icon icon="archive-box-arrow-down" variant="micro" /> Arquivar {{ $archiving['cards']->count() }} card(s)
+                </button>
+            </div>
+        </x-modal>
+    @endif
 
     {{-- MODAL: historico do card --}}
     @if ($history)

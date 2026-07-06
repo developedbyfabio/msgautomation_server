@@ -64,3 +64,41 @@ window.addEventListener('fluxograma-render', async (event) => {
         console.error('fluxograma:', e);
     }
 });
+
+// Fatia 20 — DRAG-AND-DROP do Kanban (SortableJS via npm, bundle LOCAL, lazy:
+// o chunk so baixa quando a pagina do Kanban esta aberta). O drop chama a MESMA
+// action Livewire moveCard dos 3 pontinhos (posse ja validada server-side) —
+// nenhuma rota de escrita nova. Estrategia anti-conflito com o morph do
+// Livewire: no onEnd o DOM volta ao estado ORIGINAL e o re-render do moveCard
+// posiciona o card (sucesso = card na coluna nova; falha = permanece onde
+// estava — "reverter" e o proprio morph com a verdade do servidor).
+async function initKanbanDnd() {
+    const board = document.getElementById('kanban-board');
+    if (!board || board.dataset.dndReady) return;
+    board.dataset.dndReady = '1';
+
+    const { default: Sortable } = await import('sortablejs');
+    board.querySelectorAll('[data-kanban-col]').forEach((el) => {
+        new Sortable(el, {
+            group: 'kanban-cards',
+            animation: 150,
+            draggable: '[data-card-id]',
+            onEnd(evt) {
+                const cardId = parseInt(evt.item?.dataset?.cardId ?? '');
+                const colId = parseInt(evt.to?.dataset?.kanbanCol ?? '');
+                const fromId = parseInt(evt.from?.dataset?.kanbanCol ?? '');
+                // Devolve o DOM ao estado pre-drag (o servidor decide o final).
+                if (evt.from !== evt.to) {
+                    evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex] ?? null);
+                }
+                if (!cardId || !colId || colId === fromId) return;
+                const wireEl = board.closest('[wire\\:id]');
+                if (wireEl && window.Livewire) {
+                    window.Livewire.find(wireEl.getAttribute('wire:id')).call('moveCard', cardId, colId);
+                }
+            },
+        });
+    });
+}
+document.addEventListener('livewire:navigated', initKanbanDnd);
+document.addEventListener('DOMContentLoaded', initKanbanDnd);

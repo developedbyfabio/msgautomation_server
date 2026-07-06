@@ -147,6 +147,14 @@ class BoardEngine
 
             $card = Card::query()->where('board_id', $board->id)->where('contact_id', $contact->id)->first();
 
+            // Fatia 20 — card FIXADO por movimento humano: o move deterministico
+            // (handoff/sem_resposta) tambem respeita — so toca a interacao.
+            if ($card !== null && $card->pinned_until_reply) {
+                $this->touch($card, null);
+
+                return;
+            }
+
             // Idempotencia de re-entrega: este evento ja moveu este card -> no-op.
             if ($card !== null && CardTransition::query()
                 ->where('card_id', $card->id)
@@ -259,6 +267,14 @@ class BoardEngine
     /** Cria o card no destino ou move o existente, registrando a transicao com causa. */
     private function moveOrCreate(int $boardId, int $contactId, ?Card $card, BoardRule $rule, string $eventType, int $eventRef): Card
     {
+        // Fatia 20 — card FIXADO por movimento humano: a transicao automatica
+        // NAO sobrescreve (fica onde o humano pos). O pin e solto no inbound do
+        // contato ANTES deste apply rodar — a propria mensagem que libera ja
+        // aciona a transicao normal.
+        if ($card !== null && $card->pinned_until_reply) {
+            return $card;
+        }
+
         if ($card === null) {
             try {
                 $card = Card::create([
