@@ -53,6 +53,31 @@ class FlowNode extends Model
         return self::IDENTITY_COLORS[(max(1, (int) $this->display_number) - 1) % count(self::IDENTITY_COLORS)];
     }
 
+    /**
+     * Fatia 18 — HEX da mesma paleta/ciclo (tom 500 do Tailwind), pro stroke dos
+     * nos no fluxograma Mermaid. Mesmo indice do identityColor(): as tres visoes
+     * (editar, arvore, fluxograma) mostram a MESMA cor pro mesmo no.
+     */
+    public const IDENTITY_HEX = [
+        '#ef4444', // red-500
+        '#f97316', // orange-500
+        '#f59e0b', // amber-500
+        '#84cc16', // lime-500
+        '#22c55e', // green-500
+        '#14b8a6', // teal-500
+        '#06b6d4', // cyan-500
+        '#3b82f6', // blue-500
+        '#6366f1', // indigo-500
+        '#8b5cf6', // violet-500
+        '#d946ef', // fuchsia-500
+        '#f43f5e', // rose-500
+    ];
+
+    public function identityHex(): string
+    {
+        return self::IDENTITY_HEX[(max(1, (int) $this->display_number) - 1) % count(self::IDENTITY_HEX)];
+    }
+
     public function flow(): BelongsTo
     {
         return $this->belongsTo(Flow::class);

@@ -37,3 +37,30 @@ window.emojiCategorias = [
         '🇧🇷 brasil bandeira', '🇵🇹 portugal bandeira', '🇦🇷 argentina bandeira', '🇺🇾 uruguai bandeira', '🇵🇾 paraguai bandeira', '🇨🇱 chile bandeira', '🇧🇴 bolivia bandeira', '🇵🇪 peru bandeira', '🇨🇴 colombia bandeira', '🇻🇪 venezuela bandeira', '🇪🇨 equador bandeira', '🇲🇽 mexico bandeira', '🇺🇸 estados unidos eua bandeira', '🇨🇦 canada bandeira', '🇬🇧 reino unido inglaterra bandeira', '🇮🇪 irlanda bandeira', '🇫🇷 franca bandeira', '🇪🇸 espanha bandeira', '🇮🇹 italia bandeira', '🇩🇪 alemanha bandeira', '🇳🇱 holanda paises baixos bandeira', '🇧🇪 belgica bandeira', '🇨🇭 suica bandeira', '🇦🇹 austria bandeira', '🇸🇪 suecia bandeira', '🇳🇴 noruega bandeira', '🇩🇰 dinamarca bandeira', '🇫🇮 finlandia bandeira', '🇵🇱 polonia bandeira', '🇷🇺 russia bandeira', '🇺🇦 ucrania bandeira', '🇬🇷 grecia bandeira', '🇹🇷 turquia bandeira', '🇮🇱 israel bandeira', '🇸🇦 arabia saudita bandeira', '🇦🇪 emirados arabes bandeira', '🇮🇳 india bandeira', '🇨🇳 china bandeira', '🇯🇵 japao bandeira', '🇰🇷 coreia do sul bandeira', '🇦🇺 australia bandeira', '🇳🇿 nova zelandia bandeira', '🇿🇦 africa do sul bandeira', '🇦🇴 angola bandeira', '🇲🇿 mocambique bandeira', '🇨🇻 cabo verde bandeira', '🏳️ bandeira branca rendicao', '🏴 bandeira preta', '🏁 bandeira quadriculada chegada corrida', '🚩 bandeira vermelha alerta', '🏳️‍🌈 bandeira arco iris orgulho', '🎌 bandeiras cruzadas japao',
     ] },
 ];
+
+// Fatia 18 — FLUXOGRAMA do editor de fluxos (Mermaid, bundle LOCAL via npm).
+// Lazy: o chunk do mermaid so baixa no PRIMEIRO acesso a aba (dynamic import =
+// code-splitting do Vite); o resto do painel nao paga o peso. A DSL e gerada
+// SERVER-SIDE (FlowMermaidBuilder, labels sanitizados) e chega pelo evento
+// Livewire 'fluxograma-render'; o container e wire:ignore (SVG fora do morph).
+// securityLevel 'strict' SEMPRE (texto de no e conteudo de usuario). Tema segue
+// o painel no momento do render (alternar tema: reabrir a aba re-renderiza).
+window.addEventListener('fluxograma-render', async (event) => {
+    const el = document.getElementById('fluxograma-canvas');
+    const dsl = event.detail?.dsl ?? event.detail?.[0]?.dsl;
+    if (!el || !dsl) return;
+
+    try {
+        const { default: mermaid } = await import('mermaid');
+        mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+        });
+        const { svg } = await mermaid.render('fluxograma-svg-' + Date.now(), dsl);
+        el.innerHTML = svg;
+    } catch (e) {
+        el.textContent = 'Nao foi possivel renderizar o fluxograma.';
+        console.error('fluxograma:', e);
+    }
+});

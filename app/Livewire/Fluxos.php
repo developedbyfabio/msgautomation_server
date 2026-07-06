@@ -22,8 +22,28 @@ class Fluxos extends Component
 {
     public ?int $editingFlowId = null;
 
-    // Fatia 17 — alternancia "Editar | Arvore" (arvore e READ-ONLY na v1).
-    public bool $treeView = false;
+    // Fatia 17/18 — alternancia "Editar | Arvore | Fluxograma" (arvore ganhou o
+    // modal de edicao rapida na 18; fluxograma e READ-ONLY na v1).
+    public string $viewMode = 'editar';
+
+    // Fatia 18 — modal de edicao rapida a partir da ARVORE (texto apenas:
+    // message + rotulos das opcoes; estrutura fica no modo Editar).
+    public ?int $treeEditNodeId = null;
+
+    /** Troca a visao; ao abrir o Fluxograma, manda a DSL fresca pro JS (re-render). */
+    public function setView(string $mode): void
+    {
+        $this->viewMode = in_array($mode, ['editar', 'arvore', 'fluxograma'], true) ? $mode : 'editar';
+        $this->treeEditNodeId = null;
+
+        if ($this->viewMode === 'fluxograma' && ($flow = $this->flow())) {
+            // Evento Livewire -> browser: o JS (wire:ignore + dynamic import do
+            // mermaid) renderiza. Toda ABERTURA da aba re-renderiza — como o
+            // fluxograma e read-only, edicao exige sair dele, entao o estado e
+            // sempre fresco ao voltar.
+            $this->dispatch('fluxograma-render', dsl: app(\App\Whatsapp\Flows\FlowMermaidBuilder::class)->build($flow));
+        }
+    }
 
     // Config do fluxo (modo edicao).
     public string $name = '';
@@ -132,7 +152,8 @@ class Fluxos extends Component
     {
         $flow = Flow::query()->where('account_id', $this->accountId())->with(['triggers', 'contacts'])->findOrFail($flowId);
         $this->editingFlowId = $flow->id;
-        $this->treeView = false;
+        $this->viewMode = 'editar';
+        $this->treeEditNodeId = null;
         $this->name = (string) $flow->name;
         $this->enabled = (bool) $flow->enabled;
         $this->scope = $flow->scope ?: 'global';
@@ -154,7 +175,53 @@ class Fluxos extends Component
     public function voltar(): void
     {
         $this->editingFlowId = null;
-        $this->treeView = false;
+        $this->viewMode = 'editar';
+        $this->treeEditNodeId = null;
+    }
+
+    // ---- Fatia 18: edicao rapida a partir da arvore (modal) ------------------
+    // NAO cria rota de escrita nova: salva pelas MESMAS actions da 5b
+    // (salvarNo/salvarOpcao, com ownNode/ownOption e validacoes intactas).
+
+    public function abrirEdicaoNo(int $nodeId): void
+    {
+        // Posse server-side no novo entry point (acao Livewire e forjavel).
+        if ($this->ownNode($nodeId) === null) {
+            return;
+        }
+        $this->treeEditNodeId = $nodeId;
+    }
+
+    public function fecharEdicaoNo(): void
+    {
+        $this->treeEditNodeId = null;
+    }
+
+    public function salvarEdicaoNo(): void
+    {
+        $node = $this->treeEditNodeId ? $this->ownNode($this->treeEditNodeId) : null;
+        if ($node === null) {
+            $this->treeEditNodeId = null;
+
+            return;
+        }
+
+        // Validacoes existentes valem intactas (ex.: handoff sem message):
+        // se o salvarNo rejeitar, o modal FICA aberto (o toast de erro ja saiu).
+        if (! $this->salvarNo($node->id)) {
+            return;
+        }
+        foreach ($node->options()->pluck('id') as $optId) {
+            $this->salvarOpcao((int) $optId);
+        }
+        $this->treeEditNodeId = null;
+    }
+
+    /** Ponte "Edicao completa": alterna pro modo Editar (foco no card: ver relatorio). */
+    public function edicaoCompleta(): void
+    {
+        $this->treeEditNodeId = null;
+        $this->viewMode = 'editar';
     }
 
     public function toggleFluxo(int $id): void
@@ -347,11 +414,12 @@ class Fluxos extends Component
         $this->nodeMsg[$nodeId] = $atual === '' ? $ref : $atual . ' ' . $ref;
     }
 
-    public function salvarNo(int $nodeId): void
+    /** Fatia 18: retorna bool (false = validacao rejeitou) pro modal da arvore saber; blade ignora. */
+    public function salvarNo(int $nodeId): bool
     {
         $node = $this->ownNode($nodeId);
         if (! $node) {
-            return;
+            return false;
         }
         $kindBuf = (string) ($this->nodeKind[$nodeId] ?? 'menu');
         $kind = in_array($kindBuf, ['final', 'handoff'], true) ? $kindBuf : 'menu';
@@ -364,12 +432,12 @@ class Fluxos extends Component
                 $this->nodeKind[$nodeId] = $node->kind; // reverte o select — o no NAO virou handoff
                 $this->dispatch('toast', message: 'Handoff e terminal: remova as opcoes deste no antes de troca-lo pra handoff.', type: 'error');
 
-                return;
+                return false;
             }
             if (trim($mensagem) === '') {
                 $this->dispatch('toast', message: 'Handoff exige mensagem (e o aviso enviado ao contato, ex.: "Um atendente vai te responder em breve").', type: 'error');
 
-                return;
+                return false;
             }
         }
         $node->update(['message' => $mensagem, 'kind' => $kind]);
@@ -380,6 +448,8 @@ class Fluxos extends Component
             $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) no no: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa, sai cru.', type: 'error');
         }
         $this->dispatch('toast', message: 'No salvo.');
+
+        return true;
     }
 
     public function addOpcao(int $nodeId): void
@@ -626,9 +696,12 @@ class Fluxos extends Component
         $warnings = $flow ? $this->flowWarnings($flow, $tree) : [];
 
         // Fatia 17 — numero de exibicao por id (rotulos de destino) e a arvore
-        // read-only (so montada quando a aba Arvore esta ativa).
+        // (so montada quando a aba Arvore esta ativa).
         $numById = $flow ? collect($tree)->mapWithKeys(fn ($r) => [(int) $r['node']->id => (int) $r['node']->display_number])->all() : [];
-        $arvoreFluxo = ($flow && $this->treeView) ? $this->buildFlowTree($flow) : null;
+        $arvoreFluxo = ($flow && $this->viewMode === 'arvore') ? $this->buildFlowTree($flow) : null;
+
+        // Fatia 18 — no do modal de edicao rapida (posse ja validada no abrir).
+        $treeEditNode = ($flow && $this->treeEditNodeId) ? $this->ownNode($this->treeEditNodeId)?->load('options') : null;
         $deleting = $this->confirmingDeleteFlowId ? $flows->firstWhere('id', $this->confirmingDeleteFlowId) : null;
 
         $contacts = ($flow && $this->scope === 'contatos')
@@ -697,6 +770,7 @@ class Fluxos extends Component
             'templates' => $templates,
             'numById' => $numById,
             'arvoreFluxo' => $arvoreFluxo,
+            'treeEditNode' => $treeEditNode,
         ]);
     }
 

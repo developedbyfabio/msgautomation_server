@@ -24,6 +24,11 @@
                 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' => ! in_array($node->kind, ['final', 'handoff'], true),
             ])>{{ $node->kind }}</span>
             <span class="min-w-0 truncate text-xs text-zinc-500">{{ \Illuminate\Support\Str::limit(strip_tags((string) $node->message), 80) }}</span>
+            {{-- Fatia 18: edicao rapida (modal) — so em nos expandidos, nao em referencias ↩. --}}
+            <button type="button" wire:click="abrirEdicaoNo({{ $node->id }})" aria-label="Editar no #{{ $node->display_number }}" title="Editar texto"
+                class="shrink-0 rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+                <flux:icon icon="pencil-square" variant="micro" class="size-3.5" />
+            </button>
         </div>
 
         @if (! empty($ramo['opcoes']))

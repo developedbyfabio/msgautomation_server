@@ -32,17 +32,21 @@ class FlowTreeViewTest extends TestCase
         app(AccountContext::class)->set($this->account->id);
     }
 
+    // Fatia 18 (ajuste deliberado): a alternancia virou viewMode de 3 estados
+    // (editar|arvore|fluxograma) — o bool treeView da 17 deixou de existir.
     private function abrirArvore(int $flowId)
     {
-        return Livewire::test(Fluxos::class)->call('editar', $flowId)->set('treeView', true);
+        return Livewire::test(Fluxos::class)->call('editar', $flowId)->call('setView', 'arvore');
     }
 
     public function test_arvore_renderiza_estrutura_do_template_com_rotulos_badges_e_trechos(): void
     {
         $flow = app(InstantiateFlowTemplate::class)->handle('clinica', $this->account->id);
 
+        // Fatia 18 (ajuste deliberado): o titulo perdeu o "(somente leitura)" —
+        // a arvore ganhou edicao rapida via modal (a estrutura segue read-only).
         $this->abrirArvore($flow->id)
-            ->assertSee('Arvore do fluxo (somente leitura)')
+            ->assertSee('Arvore do fluxo')
             ->assertSee('no #1')                 // raiz numerada
             ->assertSee('Agendar consulta')      // rotulo de opcao
             ->assertSee('handoff')               // badge do kind terminal

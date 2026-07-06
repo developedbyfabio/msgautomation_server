@@ -121,18 +121,23 @@
                 </button>
             </div>
 
-            {{-- Fatia 17 — alternancia Editar | Arvore (arvore READ-ONLY). --}}
+            {{-- Fatia 17/18 — alternancia Editar | Arvore | Fluxograma. --}}
             <div class="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm dark:border-zinc-700">
-                <button type="button" wire:click="$set('treeView', false)" @class([
+                <button type="button" wire:click="setView('editar')" @class([
                     'inline-flex items-center gap-1 rounded-md px-3 py-1',
-                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => ! $treeView,
-                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => $treeView,
+                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => $viewMode === 'editar',
+                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => $viewMode !== 'editar',
                 ])><flux:icon icon="pencil-square" variant="micro" /> Editar</button>
-                <button type="button" wire:click="$set('treeView', true)" @class([
+                <button type="button" wire:click="setView('arvore')" @class([
                     'inline-flex items-center gap-1 rounded-md px-3 py-1',
-                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => $treeView,
-                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => ! $treeView,
+                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => $viewMode === 'arvore',
+                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => $viewMode !== 'arvore',
                 ])><flux:icon icon="share" variant="micro" /> Arvore</button>
+                <button type="button" wire:click="setView('fluxograma')" @class([
+                    'inline-flex items-center gap-1 rounded-md px-3 py-1',
+                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => $viewMode === 'fluxograma',
+                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => $viewMode !== 'fluxograma',
+                ])><flux:icon icon="squares-2x2" variant="micro" /> Fluxograma</button>
             </div>
 
             @if (! empty($warnings))
@@ -154,9 +159,23 @@
                     </div>
                     <div class="flex items-center gap-2">
                         @if ($simOpen)
-                            <button type="button" wire:click="toggleSimReveal" class="text-xs text-zinc-500 hover:underline">{{ $simReveal ? 'mascarar senha' : 'revelar senha' }}</button>
-                            <button type="button" wire:click="iniciarSim" class="text-xs text-emerald-600 hover:underline">reiniciar</button>
-                            <button type="button" wire:click="fecharSim" class="text-xs text-zinc-400 hover:underline">fechar</button>
+                            {{-- Fatia 18: controles viram BOTOES de verdade (padrao dos botoes
+                                 compactos da fatia 10) — comportamento intocado. --}}
+                            <button type="button" wire:click="toggleSimReveal"
+                                aria-label="{{ $simReveal ? 'Mascarar senha' : 'Revelar senha' }}" title="{{ $simReveal ? 'Mascarar senha' : 'Revelar senha' }}"
+                                class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                <flux:icon icon="{{ $simReveal ? 'eye-slash' : 'eye' }}" variant="micro" /> {{ $simReveal ? 'mascarar senha' : 'revelar senha' }}
+                            </button>
+                            <button type="button" wire:click="iniciarSim"
+                                aria-label="Reiniciar simulacao" title="Reiniciar simulacao"
+                                class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 dark:border-zinc-700 dark:text-emerald-400 dark:hover:bg-emerald-950">
+                                <flux:icon icon="arrow-path" variant="micro" /> reiniciar
+                            </button>
+                            <button type="button" wire:click="fecharSim"
+                                aria-label="Fechar simulacao" title="Fechar simulacao"
+                                class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                <flux:icon icon="x-mark" variant="micro" /> fechar
+                            </button>
                         @else
                             <button type="button" wire:click="iniciarSim" class="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                                 <flux:icon icon="play" variant="micro" /> Iniciar simulacao
@@ -189,11 +208,22 @@
                 @endif
             </div>
 
-            @if ($treeView)
-                {{-- Fatia 17 — VISUALIZACAO EM ARVORE (read-only): lacos como
-                     referencias ↩ (expand-once), orfaos em secao separada. --}}
+            @if ($viewMode === 'fluxograma')
+                {{-- Fatia 18 — FLUXOGRAMA (read-only): Mermaid bundlado local,
+                     lazy-loaded (dynamic import); DSL gerada server-side pelo
+                     FlowMermaidBuilder e entregue via evento Livewire->JS. O
+                     container e wire:ignore (o SVG vive fora do morph). --}}
                 <div class="rounded-xl border border-zinc-200 bg-white p-5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-                    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Arvore do fluxo (somente leitura)</div>
+                    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Fluxograma (somente leitura)</div>
+                    <div wire:ignore id="fluxograma-canvas" class="overflow-x-auto text-xs text-zinc-400">
+                        Gerando fluxograma...
+                    </div>
+                </div>
+            @elseif ($viewMode === 'arvore')
+                {{-- Fatia 17/18 — ARVORE: lacos como referencias ↩ (expand-once),
+                     orfaos em secao separada; edicao rapida via modal (lapis). --}}
+                <div class="rounded-xl border border-zinc-200 bg-white p-5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Arvore do fluxo</div>
                     @if ($arvoreFluxo && $arvoreFluxo['raiz'])
                         @include('livewire.partials.flow-tree-node', ['ramo' => $arvoreFluxo['raiz']])
                     @else
@@ -212,12 +242,67 @@
                                         <span class="font-mono">no #{{ $orfao->display_number }}</span>
                                         <span class="rounded bg-zinc-100 px-1 text-[10px] dark:bg-zinc-800">{{ $orfao->kind }}</span>
                                         <span class="truncate">{{ \Illuminate\Support\Str::limit(strip_tags((string) $orfao->message), 80) }}</span>
+                                        {{-- Fatia 18: edicao rapida tambem nos orfaos. --}}
+                                        <button type="button" wire:click="abrirEdicaoNo({{ $orfao->id }})" aria-label="Editar no #{{ $orfao->display_number }}" title="Editar texto"
+                                            class="shrink-0 rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+                                            <flux:icon icon="pencil-square" variant="micro" class="size-3.5" />
+                                        </button>
                                     </div>
                                 @endforeach
                             </div>
                         </div>
                     @endif
                 </div>
+
+                {{-- Fatia 18 — MODAL de edicao rapida (texto apenas): message do no +
+                     rotulos das opcoes. Salva pelas MESMAS actions da 5b (salvarNo/
+                     salvarOpcao) — nenhuma rota de escrita nova; validacoes intactas
+                     (handoff sem message: o modal fica aberto e o toast avisa).
+                     Estrutura (destino/kind/opcoes) e na "Edicao completa". --}}
+                @if ($treeEditNodeId && $treeEditNode)
+                    <x-modal wireClose="fecharEdicaoNo" maxWidth="lg">
+                        <div class="mb-3 flex items-center gap-2">
+                            <span class="size-2.5 shrink-0 rounded-full {{ $treeEditNode->identityColor() }}"></span>
+                            <span class="font-mono text-sm font-semibold">no #{{ $treeEditNode->display_number }}</span>
+                            <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ $treeEditNode->kind }}</span>
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="mb-1 block text-xs font-medium">Mensagem do no</label>
+                                <textarea wire:model="nodeMsg.{{ $treeEditNode->id }}" rows="3" data-autofocus
+                                    class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+                            </div>
+                            @if (! in_array($treeEditNode->kind, ['final', 'handoff'], true) && $treeEditNode->options->isNotEmpty())
+                                <div>
+                                    <label class="mb-1 block text-xs font-medium">Rotulos das opcoes</label>
+                                    <div class="space-y-1.5">
+                                        @foreach ($treeEditNode->options as $opt)
+                                            <div class="flex items-center gap-2" wire:key="tem-{{ $opt->id }}">
+                                                <span class="w-10 shrink-0 rounded bg-zinc-100 px-1.5 py-1 text-center font-mono text-xs text-zinc-500 dark:bg-zinc-800">{{ $opt->input }}</span>
+                                                <input type="text" wire:model="optBuf.{{ $opt->id }}.label"
+                                                    class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <p class="mt-1 text-[11px] text-zinc-400">Destinos, tipos e adicionar/remover opcao ficam na Edicao completa.</p>
+                                </div>
+                            @endif
+                        </div>
+                        <div class="flex items-center justify-between gap-2 pt-4">
+                            <button type="button" wire:click="edicaoCompleta"
+                                class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:underline">
+                                <flux:icon icon="arrow-top-right-on-square" variant="micro" /> Edicao completa
+                            </button>
+                            <div class="flex gap-2">
+                                <button type="button" wire:click="fecharEdicaoNo" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                                <button type="button" wire:click="salvarEdicaoNo"
+                                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                                    <flux:icon icon="check" variant="micro" /> Salvar
+                                </button>
+                            </div>
+                        </div>
+                    </x-modal>
+                @endif
             @else
             {{-- CONFIG --}}
             <div class="rounded-xl border border-zinc-200 bg-white p-5 space-y-4 dark:border-zinc-800 dark:bg-zinc-900">
