@@ -48,11 +48,13 @@ Route::middleware('auth')->group(function () {
     Route::redirect('/', '/conversas');
     Route::get('/conexao', Conexao::class)->name('conexao');
     // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).
-    Route::get('/senhas', Senhas::class)->name('senhas');
+    // Fatia 22: OWNER-only (enforcement server-side; menu escondido e so cosmetica).
+    Route::get('/senhas', Senhas::class)->middleware('account.role:owner')->name('senhas');
     // Prompt 01 — perfil do usuario logado (email/senha/2FA); fora do gate de conexao.
     Route::get('/perfil', \App\Livewire\Perfil::class)->name('perfil');
     // Prompt 02 — logs/eventos da conta (somente leitura; util mesmo desconectado).
-    Route::get('/logs', \App\Livewire\Logs::class)->name('logs');
+    // Fatia 22: tecnico -> OWNER-only.
+    Route::get('/logs', \App\Livewire\Logs::class)->middleware('account.role:owner')->name('logs');
     // Prompt 04 — serve a midia ENVIADA da conversa. Resolucao EXPLICITA dentro
     // da closure (binding implicito rodaria antes do SetAccountContext): a query
     // escopada por conta garante que midia de outra conta = 404, nunca vaza.
@@ -86,12 +88,16 @@ Route::middleware('auth')->group(function () {
         return \Illuminate\Support\Facades\Storage::disk('local')
             ->response($msg->media_path, $msg->media_name, ['Content-Type' => $msg->media_mime ?: 'application/octet-stream']);
     })->whereNumber('id')->name('media.incoming');
-    // Fluxos (construtor): config, editavel mesmo offline.
-    Route::get('/fluxos', Fluxos::class)->name('fluxos');
-    // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.
-    Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
-    // Variaveis (V-1): placeholders configuraveis; config, editavel offline.
-    Route::get('/variaveis', \App\Livewire\Variaveis::class)->name('variaveis');
+    // Fatia 22: areas de CONFIGURACAO da automacao -> OWNER-only (default seguro;
+    // relaxar pra "operador visualiza" e decisao futura do dono, registrada).
+    Route::middleware('account.role:owner')->group(function () {
+        // Fluxos (construtor): config, editavel mesmo offline.
+        Route::get('/fluxos', Fluxos::class)->name('fluxos');
+        // Base de conhecimento da IA (Fatia 2): config, editavel mesmo offline.
+        Route::get('/conhecimento', Conhecimento::class)->name('conhecimento');
+        // Variaveis (V-1): placeholders configuraveis; config, editavel offline.
+        Route::get('/variaveis', \App\Livewire\Variaveis::class)->name('variaveis');
+    });
 
     // Prompt 22 — administracao de tenants (super-admin da plataforma). UNICO ponto
     // cross-tenant; fora do gate de conexao (nao depende de canal/WhatsApp do tenant).
@@ -107,12 +113,15 @@ Route::middleware('auth')->group(function () {
         // Kanban K-2: board de conversas (observador puro; mover card e acao humana).
         Route::get('/kanban', \App\Livewire\Kanban::class)->name('kanban');
         Route::get('/contatos', Contatos::class)->name('contatos');
-        Route::get('/regras', Regras::class)->name('regras');
         // Fila de aprovacao da IA (Fatia 3): envia mensagens -> atras do gate de conexao.
         Route::get('/revisao', Revisao::class)->name('revisao');
-        // Campanhas proativas (P-2): gate humano draft->preview->aprovar (disparo = P-3).
-        Route::get('/campanhas', \App\Livewire\Campanhas::class)->name('campanhas');
-        Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
+        // Fatia 22: automacao/config -> OWNER-only (enforcement server-side).
+        Route::middleware('account.role:owner')->group(function () {
+            Route::get('/regras', Regras::class)->name('regras');
+            // Campanhas proativas (P-2): gate humano draft->preview->aprovar (disparo = P-3).
+            Route::get('/campanhas', \App\Livewire\Campanhas::class)->name('campanhas');
+            Route::get('/configuracoes', Configuracoes::class)->name('configuracoes');
+        });
     });
 });
 

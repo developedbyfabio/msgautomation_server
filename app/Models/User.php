@@ -40,4 +40,17 @@ class User extends Authenticatable
         return $this->belongsToMany(\App\Models\Account::class, 'account_user')
             ->withPivot('role')->withTimestamps();
     }
+
+    /** Fatia 22 — papel do usuario NA conta (por conta; null = sem vinculo). */
+    public function roleIn(int $accountId): ?string
+    {
+        $pivot = $this->accounts()->whereKey($accountId)->first()?->pivot;
+
+        return $pivot?->role !== null && $pivot->role !== '' ? (string) $pivot->role : null;
+    }
+
+    public function isOwnerOf(int $accountId): bool
+    {
+        return $this->roleIn($accountId) === 'owner';
+    }
 }

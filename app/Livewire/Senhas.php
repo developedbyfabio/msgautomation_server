@@ -132,6 +132,10 @@ class Senhas extends Component
 
     public function confirmReveal(SecretVault $vault): void
     {
+        // Fatia 22 — defesa em profundidade: revelar segredo exige OWNER da conta
+        // ativa (a rota ja barra o operador; acao Livewire e forjavel).
+        \App\Auth\AreaAccess::authorizeOwnerAction();
+
         $user = Auth::user();
         if (! $user || ! Hash::check($this->revealPassword, (string) $user->password)) {
             $this->addError('revealPassword', 'Senha de login incorreta.');

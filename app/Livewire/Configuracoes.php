@@ -483,6 +483,10 @@ class Configuracoes extends Component
 
     public function save(): void
     {
+        // Fatia 22 — defesa em profundidade: config tecnica/freios exige OWNER
+        // da conta ativa (a rota ja barra; acao Livewire e forjavel).
+        \App\Auth\AreaAccess::authorizeOwnerAction();
+
         $this->validate();
 
         $this->settings()->update([

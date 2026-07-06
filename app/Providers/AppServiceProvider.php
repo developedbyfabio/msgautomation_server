@@ -39,6 +39,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Fatia 22 — o middleware de PAPEL e persistente do Livewire: os updates
+        // de componente (POST /livewire/update) nao passam pela rota da pagina —
+        // sem isto, uma acao Livewire forjada driblaria o enforcement da rota.
+        // O Livewire re-aplica o middleware (com os parametros originais da rota)
+        // em todo request subsequente do componente.
+        \Livewire\Livewire::addPersistentMiddleware([\App\Http\Middleware\EnsureAccountRole::class]);
+
         // MT-0 — higiene do worker: NENHUM job herda contexto de conta do anterior
         // (worker e processo longevo; cada job define o proprio contexto no handle).
         // push/pop (pilha) em vez de clear: com fila SYNC, um listener/job aninhado

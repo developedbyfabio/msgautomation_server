@@ -28,6 +28,24 @@
         ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
         ['perfil', 'Perfil', 'user-circle', 0],
     ];
+    // Fatia 22 — ocultacao COSMETICA por papel (a protecao real e o middleware
+    // account.role nas rotas + gates de acao): itens que o papel nao acessa
+    // somem do menu. Fonte unica: AreaAccess::MAP. Sem reagrupar (Fatia 23).
+    $navPapelOk = function (string $rota): bool {
+        $u = auth()->user();
+        if ($u === null) {
+            return true;
+        }
+        try {
+            $aid = app(\App\Tenancy\AccountContext::class)->id();
+        } catch (\Throwable) {
+            return true;
+        }
+
+        return \App\Auth\AreaAccess::allows($u, $aid, \App\Auth\AreaAccess::MAP[$rota] ?? 'operador');
+    };
+    $nav = array_values(array_filter($nav, fn ($item) => $navPapelOk($item[0])));
+
     // Titulo do header: SO a aba atual (fatia 10 — o prefixo "Menu >" saiu; a
     // navegacao vive na sidebar). "Menu" nunca foi link, era item decorativo.
     $navAtual = collect($nav)->first(fn ($item) => request()->routeIs($item[0]));
