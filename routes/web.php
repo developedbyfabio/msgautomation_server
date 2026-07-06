@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('guest')->group(function () {
     Route::get('/login', Login::class)->name('login');
 
+    // Fatia 25 — cadastro publico PF/PJ (self-signup): provisiona tenant em
+    // trial via RegisterTenant (transacao atomica) com rate limiting proprio.
+    Route::get('/cadastro', \App\Livewire\Cadastro::class)->name('cadastro');
+
     // Prompt 01 — 2FA: tela do desafio. O POST e do Fortify (two-factor.login.store,
     // throttle 'two-factor'). Sem desafio pendente na sessao, volta pro login.
     Route::get('/two-factor-challenge', fn () => session()->has('login.id')
@@ -42,9 +46,19 @@ Route::post('/logout', function () {
     return redirect()->route('login');
 })->middleware('auth')->name('logout');
 
+// Fatia 25 — aviso "confirme seu e-mail": atras de auth mas FORA do gate
+// 'verified' (e a UNICA pagina que o recem-cadastrado ve antes de confirmar).
+// O GET verify/{id}/{hash} (link assinado) e o POST verification-notification
+// (reenvio, throttle 6/min) sao do Fortify (Features::emailVerification).
+Route::get('/email/verify', fn () => view('auth.verificar-email'))
+    ->middleware('auth')->name('verification.notice');
+
 // UI (Camada 4) — toda atras de auth. /conexao mostra o QR quando a sessao cai;
 // as demais paginas exigem o WhatsApp conectado (gate whatsapp.connected).
-Route::middleware('auth')->group(function () {
+// Fatia 25: 'verified' no grupo inteiro — usuario de CADASTRO PUBLICO so entra
+// no painel depois de confirmar o e-mail (usuarios criados por console/admin
+// nascem verificados por construcao; backfill cobriu os pre-existentes).
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::redirect('/', '/conversas');
     Route::get('/conexao', Conexao::class)->name('conexao');
     // Cofre de senhas: atras de auth, mas fora do gate de conexao (gerenciavel mesmo offline).

@@ -46,6 +46,24 @@ class AppServiceProvider extends ServiceProvider
         // em todo request subsequente do componente.
         \Livewire\Livewire::addPersistentMiddleware([\App\Http\Middleware\EnsureAccountRole::class]);
 
+        // Fatia 25 — mesmo raciocinio para o gate de e-mail verificado: updates
+        // de componente re-aplicam o 'verified' das rotas de origem (defesa em
+        // profundidade; sem pagina liberada o nao-verificado nem tem snapshot).
+        \Livewire\Livewire::addPersistentMiddleware([\Illuminate\Auth\Middleware\EnsureEmailIsVerified::class]);
+
+        // Fatia 25 — e-mail de verificacao em pt-BR (o cliente final le isto).
+        // So o TEXTO: o link assinado/expiracao/throttle seguem nativos.
+        \Illuminate\Auth\Notifications\VerifyEmail::toMailUsing(function ($notifiable, string $url) {
+            return (new \Illuminate\Notifications\Messages\MailMessage)
+                ->subject('Confirme seu e-mail — ' . config('app.name'))
+                ->greeting('Ola, ' . $notifiable->name . '!')
+                ->line('Confirme seu e-mail para ativar sua conta e comecar seu teste gratis de '
+                    . config('billing.trial_days', 7) . ' dias.')
+                ->action('Confirmar e-mail', $url)
+                ->line('Se voce nao criou uma conta, ignore esta mensagem.')
+                ->salutation('— ' . config('app.name'));
+        });
+
         // MT-0 — higiene do worker: NENHUM job herda contexto de conta do anterior
         // (worker e processo longevo; cada job define o proprio contexto no handle).
         // push/pop (pilha) em vez de clear: com fila SYNC, um listener/job aninhado

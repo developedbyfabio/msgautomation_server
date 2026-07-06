@@ -33,5 +33,10 @@
             <flux:icon icon="arrow-path" variant="micro" class="animate-spin" wire:loading wire:target="login" />
             Entrar
         </button>
+
+        {{-- Fatia 25 — cadastro publico com trial. --}}
+        <p class="text-center text-xs text-zinc-500 dark:text-zinc-400">
+            Nao tem conta? <a href="{{ route('cadastro') }}" class="font-medium text-emerald-600 hover:underline dark:text-emerald-400">Criar conta gratis</a>
+        </p>
     </form>
 </div>

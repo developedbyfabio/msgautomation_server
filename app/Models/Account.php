@@ -18,6 +18,18 @@ class Account extends Model
     protected $fillable = ['name'];
 
     /**
+     * Fatia 25 — estado de assinatura. 'active' = contas legadas/criadas pelo
+     * admin (default da coluna); 'trial' = cadastro publico (trial_ends_at =
+     * +7d). Esta fatia SO grava o marco; o corte no vencimento e da Fatia 26
+     * (que adiciona os demais estados junto do gateway). Perfil PF/PJ e trial
+     * entram por forceFill no RegisterTenant — fora do $fillable de proposito.
+     */
+    protected function casts(): array
+    {
+        return ['trial_ends_at' => 'datetime'];
+    }
+
+    /**
      * Kanban K-1: toda conta NOVA nasce com o board default (colunas D4 + regras
      * minimas). Contas existentes foram provisionadas pela migration 000026.
      */

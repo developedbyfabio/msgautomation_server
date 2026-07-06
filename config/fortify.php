@@ -146,12 +146,18 @@ return [
     // Prompt 01 — SO o 2FA fica com o Fortify: registro/reset ficam FORA (app
     // single-user com criacao por comando; email/senha trocam na pagina /perfil
     // do proprio app). confirm=true exige um codigo valido antes de LIGAR o 2FA.
+    // Fatia 25 — verificacao de e-mail TAMBEM e do Fortify (mesmo desenho do
+    // 2FA: views proprias, pipeline dele): registra GET email/verify/{id}/{hash}
+    // (signed + throttle) e POST email/verification-notification (throttle 6/1).
+    // A tela de aviso (verification.notice) e nossa, em routes/web.php — o
+    // registro publico continua FORA do Fortify (Livewire\Cadastro + RegisterTenant).
     'features' => [
         Features::twoFactorAuthentication([
             'confirm' => true,
             'confirmPassword' => true,
             // 'window' => 0,
         ]),
+        Features::emailVerification(),
     ],
 
 ];
