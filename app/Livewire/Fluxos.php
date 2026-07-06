@@ -100,6 +100,31 @@ class Fluxos extends Component
         $this->dispatch('toast', message: 'Fluxo criado a partir do modelo — revise as mensagens e ajuste como quiser.');
     }
 
+    /**
+     * Fatia 13 — duplicar fluxo (deep copy remapeado, enabled=false, nome
+     * sufixado) e abrir a COPIA no editor (mesmo redirect do usarTemplate).
+     * Posse dupla: find escopado aqui + firstOrFail por conta no servico.
+     */
+    public function duplicar(int $flowId): void
+    {
+        if (! Flow::query()->where('account_id', $this->accountId())->whereKey($flowId)->exists()) {
+            $this->dispatch('toast', message: 'Fluxo nao encontrado.', type: 'error');
+
+            return;
+        }
+
+        try {
+            $copia = app(\App\Whatsapp\Flows\DuplicateFlow::class)->handle($flowId, $this->accountId());
+        } catch (\RuntimeException $e) {
+            $this->dispatch('toast', message: $e->getMessage(), type: 'error');
+
+            return;
+        }
+
+        $this->editar($copia->id);
+        $this->dispatch('toast', message: 'Fluxo duplicado (desligado) — edite e ligue quando quiser.');
+    }
+
     public function editar(int $flowId): void
     {
         $flow = Flow::query()->where('account_id', $this->accountId())->with(['triggers', 'contacts'])->findOrFail($flowId);

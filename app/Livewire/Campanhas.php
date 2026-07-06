@@ -95,6 +95,50 @@ class Campanhas extends Component
         $this->resetValidation();
     }
 
+    /**
+     * Fatia 13 — duplicar campanha como RASCUNHO LIMPO: copia conteudo + publico
+     * (name sufixado, message, optout_footer, audience_type, audience_config) e
+     * ZERA todo estado de execucao (status=draft, start_at/approved_at/approved_by
+     * null; targets — snapshot congelado da aprovacao — NAO sao copiados).
+     * NUNCA dispara/agenda nada. Qualquer status pode ser duplicado (ate enviada).
+     * Posse: find() escopado por conta. Abre a copia no form de edicao (draft).
+     */
+    public function duplicate(int $id): void
+    {
+        $c = $this->find($id);
+        if (! $c) {
+            return;
+        }
+
+        $nova = ProactiveCampaign::create([
+            'name' => $this->uniqueName($c->name . ' (copia)'),
+            'message' => $c->message,
+            'optout_footer' => $c->optout_footer,
+            'audience_type' => $c->audience_type,
+            'audience_config' => $c->audience_config,
+            'status' => 'draft',
+            'start_at' => null,
+            'approved_at' => null,
+            'approved_by' => null,
+        ]);
+
+        $this->edit($nova->id);
+        $this->dispatch('toast', message: 'Campanha duplicada como rascunho — revise o publico e a agenda antes de aprovar.');
+    }
+
+    /** Fatia 13 — mesmo mecanismo de sufixo da Fatia 7 (" (2)", " (3)"... em colisao). */
+    private function uniqueName(string $base): string
+    {
+        $nome = $base;
+        $n = 2;
+        while (ProactiveCampaign::query()->where('name', $nome)->exists()) {
+            $nome = "{$base} ({$n})";
+            $n++;
+        }
+
+        return $nome;
+    }
+
     public function save(SecretVault $vault, \App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
     {
         $this->validate([

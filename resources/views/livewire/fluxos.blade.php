@@ -66,6 +66,8 @@
                             </button>
                             <flux:menu>
                                 <flux:menu.item wire:click="editar({{ $f->id }})" icon="pencil-square">Editar</flux:menu.item>
+                                {{-- Fatia 13: deep copy (nasce desligada; abre no editor). --}}
+                                <flux:menu.item wire:click="duplicar({{ $f->id }})" icon="document-duplicate">Duplicar</flux:menu.item>
                                 <flux:menu.separator />
                                 <flux:menu.item wire:click="confirmDeleteFlow({{ $f->id }})" icon="trash" variant="danger">Excluir</flux:menu.item>
                             </flux:menu>

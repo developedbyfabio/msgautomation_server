@@ -66,6 +66,8 @@
                                 <flux:menu.item wire:click="openPreview({{ $c->id }})" icon="eye">Preview + aprovar</flux:menu.item>
                                 <flux:menu.item wire:click="edit({{ $c->id }})" icon="pencil-square">Editar</flux:menu.item>
                             @endif
+                            {{-- Fatia 13: qualquer status duplica (a copia e rascunho limpo). --}}
+                            <flux:menu.item wire:click="duplicate({{ $c->id }})" icon="document-duplicate">Duplicar</flux:menu.item>
                             @if ($c->total_count > 0)
                                 <flux:menu.item wire:click="showTargets({{ $c->id }})" icon="list-bullet">Ver destinatarios</flux:menu.item>
                             @endif
