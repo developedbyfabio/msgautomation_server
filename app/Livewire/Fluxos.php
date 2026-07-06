@@ -22,6 +22,9 @@ class Fluxos extends Component
 {
     public ?int $editingFlowId = null;
 
+    // Fatia 17 — alternancia "Editar | Arvore" (arvore e READ-ONLY na v1).
+    public bool $treeView = false;
+
     // Config do fluxo (modo edicao).
     public string $name = '';
     public bool $enabled = false;
@@ -129,6 +132,7 @@ class Fluxos extends Component
     {
         $flow = Flow::query()->where('account_id', $this->accountId())->with(['triggers', 'contacts'])->findOrFail($flowId);
         $this->editingFlowId = $flow->id;
+        $this->treeView = false;
         $this->name = (string) $flow->name;
         $this->enabled = (bool) $flow->enabled;
         $this->scope = $flow->scope ?: 'global';
@@ -150,6 +154,7 @@ class Fluxos extends Component
     public function voltar(): void
     {
         $this->editingFlowId = null;
+        $this->treeView = false;
     }
 
     public function toggleFluxo(int $id): void
@@ -547,6 +552,48 @@ class Fluxos extends Component
         $this->simStatus = 'none';
     }
 
+    /**
+     * Fatia 17 — estrutura da VISUALIZACAO EM ARVORE (read-only), montada em PHP
+     * com a politica EXPAND-ONCE: um set global de visitados na travessia DFS a
+     * partir da raiz; cada no expande na PRIMEIRA visita e qualquer reencontro
+     * (laco "voltar ao menu" ou DAG com subarvore compartilhada) vira uma
+     * REFERENCIA (↩) sem expandir. Terminacao garantida: cada no expande no
+     * maximo 1 vez, entao a recursao e limitada ao numero de nos do fluxo —
+     * nenhum limite de profundidade arbitrario e necessario.
+     * Nos fora do set visitado = ORFAOS (inalcancaveis a partir da raiz).
+     */
+    private function buildFlowTree(Flow $flow): array
+    {
+        $nodes = $flow->nodes()->with('options')->get()->keyBy('id');
+        $visited = [];
+
+        $render = function (int $nodeId) use (&$render, &$visited, $nodes): ?array {
+            $node = $nodes->get($nodeId);
+            if (! $node) {
+                return null; // destino aponta pra fora do fluxo (corrompido) -> "sem destino"
+            }
+            if (isset($visited[$nodeId])) {
+                return ['type' => 'ref', 'node' => $node]; // laco/DAG: referencia, sem expandir
+            }
+            $visited[$nodeId] = true; // marca ANTES de descer (auto-laco tambem vira ref)
+
+            $opcoes = [];
+            foreach ($node->options as $opt) {
+                $opcoes[] = [
+                    'option' => $opt,
+                    'target' => $opt->next_node_id ? $render((int) $opt->next_node_id) : null,
+                ];
+            }
+
+            return ['type' => 'node', 'node' => $node, 'opcoes' => $opcoes];
+        };
+
+        $raiz = $flow->root_node_id ? $render((int) $flow->root_node_id) : null;
+        $orfaos = $nodes->reject(fn ($n) => isset($visited[$n->id]))->values();
+
+        return ['raiz' => $raiz, 'orfaos' => $orfaos];
+    }
+
     /** Nós ordenados em arvore (raiz primeiro, depois filhos por ordem) com profundidade. */
     private function treeOrdered(Flow $flow): array
     {
@@ -577,6 +624,11 @@ class Fluxos extends Component
         $flow = $this->flow();
         $tree = $flow ? $this->treeOrdered($flow) : [];
         $warnings = $flow ? $this->flowWarnings($flow, $tree) : [];
+
+        // Fatia 17 — numero de exibicao por id (rotulos de destino) e a arvore
+        // read-only (so montada quando a aba Arvore esta ativa).
+        $numById = $flow ? collect($tree)->mapWithKeys(fn ($r) => [(int) $r['node']->id => (int) $r['node']->display_number])->all() : [];
+        $arvoreFluxo = ($flow && $this->treeView) ? $this->buildFlowTree($flow) : null;
         $deleting = $this->confirmingDeleteFlowId ? $flows->firstWhere('id', $this->confirmingDeleteFlowId) : null;
 
         $contacts = ($flow && $this->scope === 'contatos')
@@ -643,6 +695,8 @@ class Fluxos extends Component
             'flowConflicts' => $flowConflicts,
             'warnings' => $warnings,
             'templates' => $templates,
+            'numById' => $numById,
+            'arvoreFluxo' => $arvoreFluxo,
         ]);
     }
 
@@ -657,21 +711,22 @@ class Fluxos extends Component
             $node = $row['node'];
             $opts = $node->options;
             // Fatia 5b: handoff e terminal por natureza — sem opcao NAO e problema.
+            // Fatia 17: warnings falam a lingua da UI — numero POR FLUXO (#N), nao a PK.
             if (! in_array($node->kind, ['final', 'handoff'], true) && $opts->isEmpty()) {
-                $w[] = "No #{$node->id} e menu mas nao tem opcao — vai encerrar como resposta final.";
+                $w[] = "No #{$node->display_number} e menu mas nao tem opcao — vai encerrar como resposta final.";
             }
             if ($node->kind === 'handoff' && $opts->isNotEmpty()) {
-                $w[] = "No #{$node->id} e handoff (terminal) mas tem opcoes — elas sao ignoradas na execucao.";
+                $w[] = "No #{$node->display_number} e handoff (terminal) mas tem opcoes — elas sao ignoradas na execucao.";
             }
             if ($node->kind === 'handoff' && trim((string) $node->message) === '') {
-                $w[] = "No #{$node->id} e handoff sem mensagem — o contato seria passado pro humano sem aviso.";
+                $w[] = "No #{$node->display_number} e handoff sem mensagem — o contato seria passado pro humano sem aviso.";
             }
             foreach ($opts as $opt) {
                 if (! $opt->next_node_id) {
-                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->id} esta sem destino.";
+                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->display_number} esta sem destino.";
                 }
                 if (trim((string) $opt->label) === '') {
-                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->id} esta sem rotulo.";
+                    $w[] = "Opcao \"{$opt->input}\" do no #{$node->display_number} esta sem rotulo.";
                 }
             }
         }

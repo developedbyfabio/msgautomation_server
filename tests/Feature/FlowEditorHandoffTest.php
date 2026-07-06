@@ -94,9 +94,12 @@ class FlowEditorHandoffTest extends TestCase
 
         $this->assertSame($handoff->id, (int) $opt->fresh()->next_node_id);
 
-        // e o handoff aparece como destino no select (render da arvore o inclui)
+        // e o handoff aparece como destino no select (render da arvore o inclui).
+        // Fatia 17 (ajuste deliberado): o ROTULO agora exibe o numero POR FLUXO
+        // (display_number), nao a PK — o value do select segue sendo o id real
+        // (provado acima: definirDestino persistiu $handoff->id).
         Livewire::test(Fluxos::class)->call('editar', $flow->id)
-            ->assertSee("no #{$handoff->id} (handoff)");
+            ->assertSee("no #{$handoff->fresh()->display_number} (handoff)");
     }
 
     // ---- Handoff PRE-EXISTENTE (como um template da Fatia 7 instanciaria) ------

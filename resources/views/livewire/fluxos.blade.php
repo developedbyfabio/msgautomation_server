@@ -121,6 +121,20 @@
                 </button>
             </div>
 
+            {{-- Fatia 17 — alternancia Editar | Arvore (arvore READ-ONLY). --}}
+            <div class="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm dark:border-zinc-700">
+                <button type="button" wire:click="$set('treeView', false)" @class([
+                    'inline-flex items-center gap-1 rounded-md px-3 py-1',
+                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => ! $treeView,
+                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => $treeView,
+                ])><flux:icon icon="pencil-square" variant="micro" /> Editar</button>
+                <button type="button" wire:click="$set('treeView', true)" @class([
+                    'inline-flex items-center gap-1 rounded-md px-3 py-1',
+                    'bg-zinc-900 font-medium text-white dark:bg-white dark:text-zinc-900' => $treeView,
+                    'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200' => ! $treeView,
+                ])><flux:icon icon="share" variant="micro" /> Arvore</button>
+            </div>
+
             @if (! empty($warnings))
                 <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
                     <div class="mb-1 flex items-center gap-1 font-medium"><flux:icon icon="exclamation-triangle" variant="micro" /> Avisos do fluxo</div>
@@ -175,6 +189,36 @@
                 @endif
             </div>
 
+            @if ($treeView)
+                {{-- Fatia 17 — VISUALIZACAO EM ARVORE (read-only): lacos como
+                     referencias ↩ (expand-once), orfaos em secao separada. --}}
+                <div class="rounded-xl border border-zinc-200 bg-white p-5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Arvore do fluxo (somente leitura)</div>
+                    @if ($arvoreFluxo && $arvoreFluxo['raiz'])
+                        @include('livewire.partials.flow-tree-node', ['ramo' => $arvoreFluxo['raiz']])
+                    @else
+                        <p class="text-xs text-zinc-400">Fluxo sem no raiz — nada a exibir.</p>
+                    @endif
+
+                    @if ($arvoreFluxo && $arvoreFluxo['orfaos']->isNotEmpty())
+                        <div class="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                            <div class="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                                <flux:icon icon="exclamation-triangle" variant="micro" /> Nos nao conectados (inalcancaveis a partir da raiz)
+                            </div>
+                            <div class="space-y-1">
+                                @foreach ($arvoreFluxo['orfaos'] as $orfao)
+                                    <div class="flex items-center gap-2 text-xs text-zinc-500">
+                                        <span class="size-2.5 shrink-0 rounded-full {{ $orfao->identityColor() }}"></span>
+                                        <span class="font-mono">no #{{ $orfao->display_number }}</span>
+                                        <span class="rounded bg-zinc-100 px-1 text-[10px] dark:bg-zinc-800">{{ $orfao->kind }}</span>
+                                        <span class="truncate">{{ \Illuminate\Support\Str::limit(strip_tags((string) $orfao->message), 80) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            @else
             {{-- CONFIG --}}
             <div class="rounded-xl border border-zinc-200 bg-white p-5 space-y-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Configuracao</div>
@@ -279,7 +323,10 @@
                     <div wire:key="node-{{ $node->id }}" class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" style="margin-left: {{ min($row['depth'], 6) * 18 }}px">
                         <div class="mb-2 flex items-center justify-between gap-2">
                             <div class="flex items-center gap-2 text-xs">
-                                <span class="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800">no #{{ $node->id }}</span>
+                                {{-- Fatia 17: numero POR FLUXO (#N) + dot de identidade — a PK sai da UI. --}}
+                                <span class="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800">
+                                    <span class="size-2 shrink-0 rounded-full {{ $node->identityColor() }}"></span> no #{{ $node->display_number }}
+                                </span>
                                 @if ($isRoot) <span class="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">raiz</span> @endif
                                 <select wire:model="nodeKind.{{ $node->id }}" class="rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
                                     <option value="menu">menu (espera opcao)</option>
@@ -319,7 +366,7 @@
 
                         @if (($nodeKind[$node->id] ?? $node->kind) === 'handoff')
                             <div class="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                                Ao chegar aqui o robo envia a mensagem acima, <strong>pausa as respostas automaticas</strong> pra esse contato e move o card pra <strong>Em atendimento</strong>. Terminal: sem opcoes.
+                                Ao chegar aqui o robo envia a mensagem acima, <strong>pausa as respostas automaticas</strong> pra esse contato e move o card pra <strong>Aguardando resposta</strong>. Terminal: sem opcoes.
                             </div>
                         @endif
 
@@ -329,12 +376,20 @@
                                     <div wire:key="opt-{{ $opt->id }}" class="flex flex-wrap items-center gap-2 rounded-md bg-zinc-50 p-2 text-sm dark:bg-zinc-800/50 sm:flex-nowrap">
                                         <input type="text" wire:model="optBuf.{{ $opt->id }}.input" placeholder="1" class="w-14 shrink-0 rounded border border-zinc-300 bg-white px-2 py-1 text-center text-sm dark:border-zinc-700 dark:bg-zinc-900">
                                         <input type="text" wire:model="optBuf.{{ $opt->id }}.label" placeholder="Rotulo (ex.: 1 - Suporte)" class="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                        {{-- Fatia 17: dot com a cor do NO ALVO ao lado do select (option de
+                                             <select> nativo nao coloriza de forma confiavel; o dot e
+                                             server-rendered — definirDestino ja re-renderiza via Livewire).
+                                             O VALUE segue sendo o id REAL do banco; so o rotulo mostra #N. --}}
+                                        @if ($opt->next_node_id && isset($numById[$opt->next_node_id]))
+                                            <span class="size-2.5 shrink-0 rounded-full {{ \App\Models\FlowNode::IDENTITY_COLORS[($numById[$opt->next_node_id] - 1) % count(\App\Models\FlowNode::IDENTITY_COLORS)] }}"
+                                                title="destino: no #{{ $numById[$opt->next_node_id] }}"></span>
+                                        @endif
                                         <select wire:change="definirDestino({{ $opt->id }}, $event.target.value)" class="w-40 shrink-0 rounded border border-zinc-300 bg-white px-1.5 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
                                             <option value="" @selected(! $opt->next_node_id)>vai para...</option>
                                             <optgroup label="No existente">
                                                 @foreach ($tree as $r2)
                                                     @if ((int) $r2['node']->id !== (int) $node->id)
-                                                        <option value="{{ $r2['node']->id }}" @selected((int) $opt->next_node_id === (int) $r2['node']->id)>no #{{ $r2['node']->id }} ({{ $r2['node']->kind }})</option>
+                                                        <option value="{{ $r2['node']->id }}" @selected((int) $opt->next_node_id === (int) $r2['node']->id)>no #{{ $r2['node']->display_number }} ({{ $r2['node']->kind }})</option>
                                                     @endif
                                                 @endforeach
                                             </optgroup>
@@ -365,12 +420,13 @@
                             <span class="text-zinc-400">{{ match ($n->kind) { 'final' => 'fim', 'handoff' => 'handoff', default => 'menu' } }}:</span>
                             {{ \Illuminate\Support\Str::limit(strip_tags($n->message), 50) }}
                             @foreach ($n->options as $opt)
-                                <div style="margin-left: 16px" class="text-zinc-400">{{ $opt->input }} -> {{ $opt->label ?: '(sem rotulo)' }} {{ $opt->next_node_id ? '[no #' . $opt->next_node_id . ']' : '[sem destino]' }}</div>
+                                <div style="margin-left: 16px" class="text-zinc-400">{{ $opt->input }} -> {{ $opt->label ?: '(sem rotulo)' }} {{ $opt->next_node_id ? '[no #' . ($numById[$opt->next_node_id] ?? '?') . ']' : '[sem destino]' }}</div>
                             @endforeach
                         </div>
                     @endforeach
                 </div>
             </div>
+            @endif {{-- /treeView --}}
         @endif
 
         {{-- MODAL: excluir fluxo --}}
