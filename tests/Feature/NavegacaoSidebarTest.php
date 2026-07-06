@@ -31,7 +31,7 @@ class NavegacaoSidebarTest extends TestCase
         'conhecimento' => 'Informacoes do negocio',
         'variaveis' => 'Variaveis',
         'revisao' => 'Sugestoes da IA',
-        'senhas' => 'Senhas',
+        'senhas' => 'Cofre de credenciais', // Fatia 24 (ajuste deliberado): rotulo; rota identica
         'logs' => 'Logs',
         'configuracoes' => 'Configuracoes',
         'perfil' => 'Perfil',
@@ -95,7 +95,7 @@ class NavegacaoSidebarTest extends TestCase
         // Amostra com paginas de conteudo variado (o rotulo aparece; "Menu" nao).
         // Fatia 23 (ajuste deliberado): rotulos de negocio; 'regras' saiu da
         // amostra ("Menus de atendimento" contem "Menu" — rotulo legitimo).
-        foreach (['senhas' => 'Senhas', 'configuracoes' => 'Configuracoes', 'kanban' => 'Kanban'] as $rota => $rotulo) {
+        foreach (['senhas' => 'Cofre de credenciais', 'configuracoes' => 'Configuracoes', 'kanban' => 'Kanban'] as $rota => $rotulo) {
             $this->get(route($rota))->assertOk()->assertSee($rotulo)->assertDontSee('Menu >');
         }
     }

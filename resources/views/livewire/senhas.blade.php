@@ -1,17 +1,18 @@
 <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-3xl p-6 space-y-4">
         <div class="flex items-center justify-between gap-3">
-            <h1 class="text-xl font-semibold">Senhas (cofre)</h1>
+            <h1 class="text-xl font-semibold">Cofre de credenciais</h1>
             <button type="button" wire:click="novo"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                <flux:icon icon="plus" variant="micro" /> Nova senha
+                <flux:icon icon="plus" variant="micro" /> Nova credencial
             </button>
         </div>
 
         <div class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
             <flux:icon icon="shield-check" variant="micro" class="inline size-3.5" />
-            Valores cifrados em repouso (chave dedicada). Usar uma senha numa regra envia ela em texto pelo
-            WhatsApp pra quem disparar — por isso regras com senha exigem <strong>contatos especificos</strong>.
+            Cofre tecnico, separado do conteudo de atendimento: os valores ficam <strong>cifrados</strong>
+            (chave dedicada) e so saem numa mensagem se VOCE usar o codigo <code>{senha:nome}</code> numa regra —
+            e ai vao em texto pra quem disparar, por isso regras assim exigem <strong>contatos especificos</strong>.
             Acesse por <strong>tunel SSH ou HTTPS</strong> (a rede e HTTP).
         </div>
 
@@ -43,14 +44,14 @@
                             @if ($revealedId === $s->id)
                                 <span class="select-all text-zinc-800 dark:text-zinc-100">{{ $revealedValue }}</span>
                                 <button type="button" wire:click="hideReveal"
-                                    aria-label="Ocultar senha" title="Ocultar senha"
+                                    aria-label="Ocultar valor" title="Ocultar valor"
                                     class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 font-sans text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
                                     <flux:icon icon="eye-slash" variant="micro" /> Ocultar
                                 </button>
                             @else
                                 <span aria-hidden="true">••••••••</span>
                                 <button type="button" wire:click="askReveal({{ $s->id }})"
-                                    aria-label="Revelar senha" title="Revelar senha"
+                                    aria-label="Revelar valor" title="Revelar valor"
                                     class="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-0.5 font-sans text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 dark:border-zinc-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
                                     wire:loading.attr="disabled" wire:target="askReveal">
                                     <flux:icon icon="eye" variant="micro" /> Revelar
@@ -76,7 +77,7 @@
             @empty
                 <div class="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
                     <flux:icon icon="key" class="size-8" />
-                    <p class="text-sm">{{ $search !== '' ? 'Nenhuma senha encontrada.' : 'Cofre vazio. Cadastre a primeira senha.' }}</p>
+                    <p class="text-sm">{{ $search !== '' ? 'Nenhuma credencial encontrada.' : 'Cofre vazio. Cadastre a primeira credencial.' }}</p>
                 </div>
             @endforelse
         </div>
@@ -84,7 +85,7 @@
 
     {{-- MODAL: criar/editar --}}
     @if ($showForm)
-        <x-modal wireClose="closeForm" title="{{ $editingId ? 'Editar senha' : 'Nova senha' }}">
+        <x-modal wireClose="closeForm" title="{{ $editingId ? 'Editar credencial' : 'Nova credencial' }}">
             <form id="secret-form" wire:submit="save" class="space-y-3">
                 <div>
                     <label class="mb-1 block text-xs font-medium">Nome (referencia)</label>
@@ -124,7 +125,7 @@
 
     {{-- MODAL: revelar (re-digitar senha de login) --}}
     @if ($revealingId)
-        <x-modal wireClose="cancelReveal" title="Revelar senha">
+        <x-modal wireClose="cancelReveal" title="Revelar credencial">
             <p class="text-sm text-zinc-600 dark:text-zinc-300">
                 Por seguranca, confirme sua <strong>senha de login</strong> para revelar este valor.
             </p>
@@ -147,7 +148,7 @@
 
     {{-- MODAL: confirmar exclusao --}}
     @if ($deleting)
-        <x-modal wireClose="cancelDelete" title="Excluir senha">
+        <x-modal wireClose="cancelDelete" title="Excluir credencial">
             <p class="text-sm text-zinc-600 dark:text-zinc-300">
                 Excluir a senha <strong>"{{ $deleting->nome }}"</strong>? Regras que usam <code>{senha:{{ $deleting->nome }}}</code> deixarao de resolver.
             </p>

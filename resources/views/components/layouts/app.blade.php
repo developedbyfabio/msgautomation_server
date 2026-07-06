@@ -31,7 +31,7 @@
             ['revisao', 'Sugestoes da IA', 'inbox', $pendencias],
         ]],
         ['heading' => null, 'items' => [
-            ['senhas', 'Senhas', 'key', 0],
+            ['senhas', 'Cofre de credenciais', 'key', 0], // Fatia 24: rotulo; rota/chave 'senhas' intocadas
             ['logs', 'Logs', 'document-text', 0],
             ['configuracoes', 'Configuracoes', 'cog-6-tooth', 0],
             ['perfil', 'Perfil', 'user-circle', 0],
