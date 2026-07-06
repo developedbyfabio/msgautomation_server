@@ -28,7 +28,12 @@ class Contatos extends Component
     public ?int $confirmingMuteId = null;
 
     // T-1 — gerenciar tags (modal): renomear, cor, excluir com contagem de uso.
+    // Fatia 12 — criar STANDALONE no proprio modal (sem passar por um contato).
     public bool $showTags = false;
+
+    public string $newTagName = '';
+
+    public string $newTagColor = 'zinc';
     /** @var array<int,string> id => nome */
     public array $tagNames = [];
     /** @var array<int,string> id => cor */
@@ -226,8 +231,45 @@ class Contatos extends Component
     {
         $this->tagNames = Tag::query()->orderBy('name')->pluck('name', 'id')->all();
         $this->tagColors = Tag::query()->pluck('color', 'id')->all();
+        $this->newTagName = '';
+        $this->newTagColor = 'zinc';
         $this->resetValidation();
         $this->showTags = true;
+    }
+
+    /**
+     * Fatia 12 — cria a tag SEM contato envolvido (o caminho principal pedido
+     * pelo dono; a criacao inline do painel do contato permanece como atalho).
+     * MESMA disciplina da criacao inline (ContactTags::addTag) e do renomear
+     * (saveTags): nome obrigatorio ate 40, unico POR CONTA via LOWER(name)
+     * (case-insensitive; no MySQL a collation ci tambem casa sem acento), cor da
+     * paleta. Escopo: BelongsToAccount preenche account_id da conta ativa.
+     * A tag nasce sem pivo — origem ('manual') e rastreada no ATTACH, como hoje.
+     */
+    public function createTag(): void
+    {
+        $nome = trim($this->newTagName);
+        if ($nome === '' || mb_strlen($nome) > 40) {
+            $this->addError('newTagName', 'Informe um nome de ate 40 caracteres.');
+
+            return;
+        }
+        if (Tag::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($nome, 'UTF-8')])->exists()) {
+            $this->addError('newTagName', 'Ja existe tag com esse nome.');
+
+            return;
+        }
+        $cor = in_array($this->newTagColor, Tag::COLORS, true) ? $this->newTagColor : 'zinc';
+
+        $tag = Tag::create(['name' => $nome, 'color' => $cor]);
+
+        // Entra na lista do modal (mapas de edicao) sem fechar nada.
+        $this->tagNames = Tag::query()->orderBy('name')->pluck('name', 'id')->all();
+        $this->tagColors = Tag::query()->pluck('color', 'id')->all();
+        $this->newTagName = '';
+        $this->newTagColor = 'zinc';
+        $this->resetValidation();
+        $this->dispatch('toast', message: 'Tag "' . $tag->name . '" criada. Atribua a contatos quando quiser.');
     }
 
     public function closeTags(): void
@@ -333,7 +375,8 @@ class Contatos extends Component
             'contacts' => $contacts,
             'editing' => $scoped($this->editingId),
             'muting' => $scoped($this->confirmingMuteId),
-            'tagList' => $this->showTags ? Tag::query()->orderBy('name')->get() : collect(),
+            // Fatia 12: contagem de uso por tag (withCount — sem N+1) pro modal.
+            'tagList' => $this->showTags ? Tag::query()->withCount('contacts')->orderBy('name')->get() : collect(),
             'deletingTag' => $this->confirmingDeleteTagId ? Tag::query()->find($this->confirmingDeleteTagId) : null,
         ]);
     }

@@ -211,12 +211,36 @@
     @if ($showTags && ! $deletingTag)
         <x-modal wireClose="closeTags" title="Gerenciar tags" maxWidth="lg">
             <div class="space-y-2">
+                {{-- Fatia 12 — criar tag STANDALONE (sem contato): o caminho principal.
+                     A criacao inline no painel do contato permanece como atalho. --}}
+                <form wire:submit="createTag" class="rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-950/50">
+                    <div class="flex items-center gap-2">
+                        <input type="text" wire:model="newTagName" maxlength="40" placeholder="Nova tag..."
+                            class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <select wire:model="newTagColor" aria-label="Cor da nova tag"
+                            class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            @foreach (\App\Models\Tag::COLORS as $cor)
+                                <option value="{{ $cor }}">{{ $cor }}</option>
+                            @endforeach
+                        </select>
+                        <button type="submit"
+                            class="inline-flex shrink-0 items-center gap-1 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                            <flux:icon icon="plus" variant="micro" /> Criar
+                        </button>
+                    </div>
+                    @error('newTagName') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                </form>
+
                 <p class="text-xs text-zinc-500">Renomear/trocar cor vale na hora. Excluir mostra onde a tag e usada e pede confirmacao.</p>
                 @forelse ($tagList as $tag)
                     <div class="flex items-center gap-2" wire:key="tg-{{ $tag->id }}">
                         <x-tag-chip :color="$tagColors[$tag->id] ?? $tag->color" small>{{ $tagNames[$tag->id] ?? $tag->name }}</x-tag-chip>
                         <input type="text" wire:model="tagNames.{{ $tag->id }}" maxlength="40"
                             class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        {{-- Fatia 12: uso da tag sempre visivel (withCount, sem N+1). --}}
+                        <span class="shrink-0 whitespace-nowrap text-xs text-zinc-400" title="Contatos com esta tag">
+                            {{ $tag->contacts_count }} contato(s)
+                        </span>
                         <select wire:model.live="tagColors.{{ $tag->id }}" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                             @foreach (\App\Models\Tag::COLORS as $cor)
                                 <option value="{{ $cor }}">{{ $cor }}</option>
@@ -228,7 +252,7 @@
                         @error('tagNames.' . $tag->id) <p class="text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                 @empty
-                    <p class="py-3 text-center text-xs text-zinc-400">Nenhuma tag ainda. Crie pela primeira vez no painel de um contato.</p>
+                    <p class="py-3 text-center text-xs text-zinc-400">Nenhuma tag ainda. Crie a primeira aqui em cima.</p>
                 @endforelse
             </div>
             <x-slot:footer>
