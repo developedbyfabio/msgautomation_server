@@ -79,6 +79,31 @@
                 <div class="p-6 text-center text-sm text-zinc-400">Nenhuma variavel ainda.</div>
             @endforelse
         </div>
+
+        {{-- Fatia 14 — comecar com um modelo (instancia e abre no form) --}}
+        @if (! empty($templates))
+            <div>
+                <h2 class="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">Comecar com um modelo</h2>
+                <p class="mb-2 text-xs text-zinc-500">
+                    Cria a variavel pronta na sua conta — troque o texto entre [colchetes]. Nome ja existente nao e sobrescrito.
+                </p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                    @foreach ($templates as $t)
+                        <div class="flex flex-col rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900" wire:key="vtpl-{{ $t['key'] }}">
+                            <div class="mb-1 flex items-center gap-1.5 font-medium">
+                                <flux:icon icon="sparkles" variant="micro" class="text-zinc-400" />
+                                <span class="font-mono text-sm">{{ $t['name'] }}</span>
+                            </div>
+                            <p class="mb-3 flex-1 text-xs text-zinc-500">{{ $t['description'] }}</p>
+                            <button type="button" wire:click="usarTemplate('{{ $t['key'] }}')"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                                <flux:icon icon="plus" variant="micro" /> Usar modelo
+                            </button>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
     </div>
 
     {{-- MODAL: criar/editar --}}

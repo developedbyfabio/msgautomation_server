@@ -80,6 +80,25 @@ class Regras extends Component
         ];
     }
 
+    /**
+     * Fatia 14 — cria uma regra REAL a partir de um template do catalogo (via
+     * RuleWriter oficial; nasce DESLIGADA — os textos tem [placeholders]) e ja
+     * abre no form pro usuario trocar os textos. Mesmo padrao da Fatia 7.
+     */
+    public function usarTemplate(string $key): void
+    {
+        try {
+            $rule = app(\App\Whatsapp\AutoReply\InstantiateRuleTemplate::class)->handle($key, $this->accountId());
+        } catch (\InvalidArgumentException) {
+            $this->dispatch('toast', message: 'Modelo de regra desconhecido.', type: 'error');
+
+            return;
+        }
+
+        $this->edit($rule->id);
+        $this->dispatch('toast', message: 'Regra criada DESLIGADA a partir do modelo — troque os textos entre [colchetes] e ligue quando quiser.');
+    }
+
     public function novo(): void
     {
         $this->reset(['editingId']);
@@ -323,6 +342,8 @@ class Regras extends Component
         $secretNames = $this->showForm ? app(SecretVault::class)->names($this->accountId()) : [];
 
         return view('livewire.regras', [
+            // Fatia 14 — catalogo de templates (padrao da Fatia 7).
+            'templates' => $this->showForm ? [] : app(\App\Whatsapp\AutoReply\RuleTemplateCatalog::class)->summaries(),
             'allTags' => ($this->showForm) ? \App\Models\Tag::query()->orderBy('name')->get() : collect(),
             'rules' => $rules,
             'deleting' => $deleting,

@@ -39,6 +39,31 @@ class Variaveis extends Component
 
     // ---- form -----------------------------------------------------------------
 
+    /**
+     * Fatia 14 — cria uma variavel REAL a partir de um template do catalogo (via
+     * VariableWriter oficial). Nome duplicado NAO sufixa (nome e identidade de
+     * referencia {empresa}): o writer rejeita e o motivo aparece no toast.
+     */
+    public function usarTemplate(string $key): void
+    {
+        try {
+            $res = app(\App\Variables\InstantiateVariableTemplate::class)->handle($key, $this->accountId());
+        } catch (\InvalidArgumentException) {
+            $this->dispatch('toast', message: 'Modelo de variavel desconhecido.', type: 'error');
+
+            return;
+        }
+
+        if ($res['errors'] !== []) {
+            $this->dispatch('toast', message: 'Modelo nao criado: ' . implode(' ', $res['errors']), type: 'error');
+
+            return;
+        }
+
+        $this->edit($res['variable']->id);
+        $this->dispatch('toast', message: 'Variavel criada a partir do modelo — troque o texto entre [colchetes].');
+    }
+
     public function novo(): void
     {
         $this->reset(['editingId', 'vName', 'cValor', 'cValorPadrao']);
@@ -203,6 +228,8 @@ class Variaveis extends Component
         }
 
         return view('livewire.variaveis', [
+            // Fatia 14 — catalogo de templates (padrao da Fatia 7).
+            'templates' => $this->showForm ? [] : app(\App\Variables\VariableTemplateCatalog::class)->summaries(),
             'variaveis' => $variaveis,
             'preview' => $preview,
             'nativasPreview' => [

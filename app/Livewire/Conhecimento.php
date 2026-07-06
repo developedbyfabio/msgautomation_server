@@ -55,6 +55,25 @@ class Conhecimento extends Component
         ];
     }
 
+    /**
+     * Fatia 14 — cria uma entrada REAL a partir de um template do catalogo (via
+     * KnowledgeWriter oficial; titulo sufixado em colisao) e abre no form pro
+     * usuario preencher os [placeholders]. Mesmo padrao da Fatia 7.
+     */
+    public function usarTemplate(string $key): void
+    {
+        try {
+            $k = app(\App\Ai\InstantiateKnowledgeTemplate::class)->handle($key, $this->accountId());
+        } catch (\InvalidArgumentException) {
+            $this->dispatch('toast', message: 'Modelo de conhecimento desconhecido.', type: 'error');
+
+            return;
+        }
+
+        $this->edit($k->id);
+        $this->dispatch('toast', message: 'Entrada criada a partir do modelo — preencha os textos entre [colchetes].');
+    }
+
     public function novo(): void
     {
         $this->reset(['editingId', 'title', 'content', 'contactIds', 'contactSearch']);
@@ -186,6 +205,8 @@ class Conhecimento extends Component
             : $contacts;
 
         return view('livewire.conhecimento', [
+            // Fatia 14 — catalogo de templates (padrao da Fatia 7).
+            'templates' => $this->showForm ? [] : app(\App\Ai\KnowledgeTemplateCatalog::class)->summaries(),
             'entries' => $entries,
             'deleting' => $deleting,
             'contacts' => $filteredContacts,

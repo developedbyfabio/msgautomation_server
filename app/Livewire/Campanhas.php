@@ -55,6 +55,25 @@ class Campanhas extends Component
 
     // ---- form (draft) ---------------------------------------------------------
 
+    /**
+     * Fatia 14 — cria uma campanha REAL a partir de um template do catalogo:
+     * RASCUNHO LIMPO (draft, publico vazio, sem agenda — NUNCA dispara nada) e
+     * abre no form pro usuario editar mensagem/publico. Mesmo padrao da Fatia 7.
+     */
+    public function usarTemplate(string $key): void
+    {
+        try {
+            $nova = app(\App\Whatsapp\Proactive\InstantiateCampaignTemplate::class)->handle($key, $this->accountId());
+        } catch (\InvalidArgumentException) {
+            $this->dispatch('toast', message: 'Modelo de campanha desconhecido.', type: 'error');
+
+            return;
+        }
+
+        $this->edit($nova->id);
+        $this->dispatch('toast', message: 'Campanha criada como rascunho — edite a mensagem, defina o publico e aprove quando quiser.');
+    }
+
     public function novo(): void
     {
         $this->reset(['editingId', 'cName', 'cMessage', 'cTagIds', 'cColumnId', 'cContactIds', 'cContactSearch', 'cStartAt']);
@@ -473,6 +492,8 @@ class Campanhas extends Component
         }
 
         return view('livewire.campanhas', [
+            // Fatia 14 — catalogo de templates (padrao da Fatia 7).
+            'templates' => $this->showForm ? [] : app(\App\Whatsapp\Proactive\CampaignTemplateCatalog::class)->summaries(),
             'campanhas' => $campanhas,
             'preview' => $preview,
             'allTags' => Tag::query()->orderBy('name')->get(),
