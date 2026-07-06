@@ -61,7 +61,8 @@ class Flow extends Model
         return $filhos->map(fn ($t) => [
             'type' => $t->match_type,
             'value' => (string) $t->match_value,
-            'normalized' => $t->normalized_text, // MATCH-1: persistida (perf)
+            'normalized' => $t->normalized_text,               // MATCH-1: persistida (perf)
+            'normalized_phonetic' => $t->normalized_phonetic,  // MATCH-2: idem (fuzzy)
             'precision' => $t->precision ?: 'exato',
             'fuzzy_level' => $t->fuzzy_level,
         ]);

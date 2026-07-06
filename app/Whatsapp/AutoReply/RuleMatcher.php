@@ -77,6 +77,11 @@ class RuleMatcher
         // do match — tag entra/sai, o alcance muda na proxima mensagem).
         $senderTagIds = $this->tagIdsFor($remoteJid);
 
+        // MATCH-2: forma FONETICA da mensagem computada NO MAXIMO uma vez por
+        // avaliacao (lazy — so se algum gatilho tolerante aparecer), a partir do
+        // texto CRU (o normText ja perdeu o ç no fold ascii; phonetic trata antes).
+        $phonText = null;
+
         $matches = [];
         foreach ($rules as $rule) {
             // S3/T-1: escopo. 'contatos' exige o remetente na lista; 'tags' exige
@@ -84,7 +89,7 @@ class RuleMatcher
             if (! $this->scopeEligible($rule, $remoteJid, $senderTagIds)) {
                 continue;
             }
-            $score = $this->bestTriggerScore($rule, $raw, $normText);
+            $score = $this->bestTriggerScore($rule, $raw, $normText, $phonText);
             if ($score === null) {
                 continue;
             }
@@ -131,11 +136,11 @@ class RuleMatcher
     }
 
     /** Escore do gatilho MAIS especifico da regra que casa, ou null. */
-    private function bestTriggerScore(AutoReplyRule $rule, string $raw, string $normText): ?array
+    private function bestTriggerScore(AutoReplyRule $rule, string $raw, string $normText, ?string &$phonText): ?array
     {
         $best = null;
         foreach ($rule->triggerList() as $trigger) {
-            if (! $this->triggerMatches($trigger, $raw, $normText)) {
+            if (! $this->triggerMatches($trigger, $raw, $normText, $phonText)) {
                 continue;
             }
             $cand = [
@@ -226,8 +231,9 @@ class RuleMatcher
 
         $melhor = null;
         $melhorChave = null;
+        $phonText = null;
         foreach ($rule->triggerList() as $trigger) {
-            if (! $this->triggerMatches($trigger, $raw, $normText)) {
+            if (! $this->triggerMatches($trigger, $raw, $normText, $phonText)) {
                 continue;
             }
             $chave = [$this->typeRank($trigger['type']), $this->valueLength($trigger), ($trigger['precision'] ?? 'exato') === 'tolerante' ? 0 : 1];
@@ -266,8 +272,9 @@ class RuleMatcher
         if ($normText === '') {
             return false;
         }
+        $phonText = null;
         foreach ($triggerList as $trigger) {
-            if ($this->triggerMatches($trigger, $raw, $normText)) {
+            if ($this->triggerMatches($trigger, $raw, $normText, $phonText)) {
                 return true;
             }
         }
@@ -288,8 +295,10 @@ class RuleMatcher
     /**
      * Decide se UM gatilho casa o texto. $trigger: ['type','value','precision','fuzzy_level'].
      * precision 'tolerante' (S5) so vale para tipos de texto; regex nunca e fuzzy.
+     * MATCH-2: $phonText e a forma fonetica da MENSAGEM, computada lazy (no maximo
+     * 1x por avaliacao) a partir do texto CRU — so quando um gatilho tolerante aparece.
      */
-    private function triggerMatches(array $trigger, string $raw, string $normText): bool
+    private function triggerMatches(array $trigger, string $raw, string $normText, ?string &$phonText = null): bool
     {
         $type = $trigger['type'];
 
@@ -314,7 +323,17 @@ class RuleMatcher
             };
         }
 
-        return $this->fuzzyMatches($type, $normText, $normValue, (string) ($trigger['fuzzy_level'] ?? 'media'));
+        // MATCH-2: o caminho tolerante compara formas FONETICAS dos dois lados.
+        // Gatilho: forma persistida (normalized_phonetic; fallback legado computa).
+        // Mensagem: computada 1x por avaliacao, do RAW (o normText perdeu o ç).
+        $phonText ??= \App\Whatsapp\TextNormalizer::phonetic($raw);
+        $phonValue = (string) (($trigger['normalized_phonetic'] ?? null)
+            ?: \App\Whatsapp\TextNormalizer::phonetic((string) $trigger['value']));
+        if ($phonValue === '') {
+            return false;
+        }
+
+        return $this->fuzzyMatches($type, $phonText, $phonValue, (string) ($trigger['fuzzy_level'] ?? 'media'));
     }
 
     private function containsWholeWord(string $text, string $value): bool
@@ -377,24 +396,69 @@ class RuleMatcher
 
     private function fuzzyTokenEqual(string $msgToken, string $trigToken, string $level): bool
     {
+        if ($msgToken === $trigToken) {
+            return true;
+        }
+
         $len = strlen($trigToken);
 
-        // Guarda-corpo: token curto (< 4) NUNCA tolera erro -> so exato.
+        // Guarda-corpo: token curto (< 4) nao tolera ERRO de edicao — mas MATCH-2
+        // aceita a TRANSPOSICAO adjacente unica ("pxi"->"pix": todas as letras
+        // presentes, so trocadas de lugar — typo classico, risco baixo). Exigido
+        // pela matriz da fatia 19; "pai" x "pix" (2 substituicoes) segue fora.
         if ($len < 4) {
-            return $msgToken === $trigToken;
+            return $this->isSingleTransposition($msgToken, $trigToken);
         }
 
         $allowed = $this->allowedDistance($len, $level);
         if ($allowed === 0) {
-            return $msgToken === $trigToken;
+            return false; // igualdade ja testada acima
         }
 
-        // Poda barata: diferenca de tamanho ja maior que a folga -> nao casa.
+        // Poda barata (early-exit): diferenca de tamanho > folga -> nao casa.
         if (abs(strlen($msgToken) - $len) > $allowed) {
             return false;
         }
 
-        return levenshtein($msgToken, $trigToken) <= $allowed;
+        return $this->editDistance($msgToken, $trigToken) <= $allowed;
+    }
+
+    /**
+     * MATCH-2 — distancia de edicao com TRANSPOSICAO adjacente contando 1
+     * (estilo Damerau/OSA): levenshtein() NATIVO (C) decide; quando devolve 2 e
+     * os tamanhos sao iguais, uma verificacao O(n) direta detecta "e uma unica
+     * transposicao adjacente?" -> conta 1 ("pxi"->"pix", "qeu"->"que").
+     * Estrategia escolhida por benchmark (nativo + check bate OSA propria em PHP).
+     */
+    private function editDistance(string $a, string $b): int
+    {
+        $lev = levenshtein($a, $b);
+        if ($lev === 2 && strlen($a) === strlen($b) && $this->isSingleTransposition($a, $b)) {
+            return 1;
+        }
+
+        return $lev;
+    }
+
+    /** a e b diferem por EXATAMENTE uma transposicao de vizinhos? O(n), sem alocacao. */
+    private function isSingleTransposition(string $a, string $b): bool
+    {
+        $n = strlen($a);
+        if ($n !== strlen($b) || $n < 2) {
+            return false;
+        }
+        $i = 0;
+        while ($i < $n && $a[$i] === $b[$i]) {
+            $i++;
+        }
+        if ($i >= $n - 1) {
+            return false; // sem divergencia, ou divergencia so no ultimo char
+        }
+        if ($a[$i] !== $b[$i + 1] || $a[$i + 1] !== $b[$i]) {
+            return false;
+        }
+
+        return substr($a, $i + 2) === substr($b, $i + 2);
     }
 
     /**

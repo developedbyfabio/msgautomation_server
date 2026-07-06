@@ -13,18 +13,19 @@ class RuleTrigger extends Model
         'match_value',
         'precision',   // exato | tolerante  (S5)
         'fuzzy_level', // baixa | media | alta (quando tolerante)
-        'normalized_text', // MATCH-1: forma normalizada (observer preenche)
+        'normalized_text',     // MATCH-1: forma normalizada (observer preenche)
+        'normalized_phonetic', // MATCH-2: forma fonetica (caminho tolerante)
     ];
 
     protected static function booted(): void
     {
-        // MATCH-1: a forma normalizada e persistida em TODA escrita (writer,
-        // promocao, backfill, teste) — o matcher le a coluna (perf) e o valor
-        // nunca fica velho. Regex NAO normaliza (casa contra o texto cru).
+        // MATCH-1/2: as formas normalizada E fonetica sao persistidas em TODA
+        // escrita (writer, promocao, backfill, teste) — o matcher le as colunas
+        // (perf) e o valor nunca fica velho. Regex NAO normaliza (texto cru).
         static::saving(function (self $t) {
-            $t->normalized_text = $t->match_type === 'regex'
-                ? null
-                : \App\Whatsapp\TextNormalizer::normalize((string) $t->match_value);
+            $regex = $t->match_type === 'regex';
+            $t->normalized_text = $regex ? null : \App\Whatsapp\TextNormalizer::normalize((string) $t->match_value);
+            $t->normalized_phonetic = $regex ? null : \App\Whatsapp\TextNormalizer::phonetic((string) $t->match_value);
         });
     }
 

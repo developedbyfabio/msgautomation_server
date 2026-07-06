@@ -147,47 +147,53 @@
                             <x-info-tip text="MATCH-1: caixa, ACENTOS, espacos extras e PONTUACAO/emoji sao ignorados nos dois lados (gatilho e mensagem) — 'Que horas são?' casa 'que horas sao'. EXCECAO: Regex casa contra o texto CRU, sem nenhuma normalizacao — quem escolhe regex controla a precisao." />
                         </p>
                         @foreach ($triggers as $i => $t)
-                            {{-- S4: [tipo] [precisao] [texto] [x] na MESMA linha. --}}
-                            <div wire:key="trg-{{ $i }}" class="flex flex-wrap items-start gap-2 sm:flex-nowrap">
-                                <select wire:model.live="triggers.{{ $i }}.type" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                    <option value="contains">Contem</option>
-                                    <option value="exact">Mensagem exata</option>
-                                    <option value="starts_with">Comeca com</option>
-                                    <option value="regex">Regex (avancado)</option>
-                                </select>
-
-                                @if ($t['type'] !== 'regex')
-                                    <select wire:model.live="triggers.{{ $i }}.precision" title="Precisao do match" class="w-32 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                        <option value="exato">exato</option>
-                                        <option value="tolerante">tolerante</option>
+                            {{-- S4/Fatia 19: [tipo] [precisao] [intensidade] [texto] [x] na MESMA
+                                 linha, alinhados (a intensidade tem coluna propria — antes quebrava
+                                 desalinhada pra linha de baixo). O hint fica ABAIXO da linha inteira.
+                                 Responsivo: abaixo de sm quebra intencionalmente (flex-wrap). --}}
+                            <div wire:key="trg-{{ $i }}">
+                                <div class="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                                    <select wire:model.live="triggers.{{ $i }}.type" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                        <option value="contains">Contem</option>
+                                        <option value="exact">Mensagem exata</option>
+                                        <option value="starts_with">Comeca com</option>
+                                        <option value="regex">Regex (avancado)</option>
                                     </select>
-                                @endif
 
-                                <div class="min-w-0 flex-1">
-                                    <input type="text" wire:model="triggers.{{ $i }}.value" placeholder="{{ $t['type'] === 'regex' ? 'ex.: ^pre[cç]o' : 'ex.: horario' }}"
-                                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                    @error("triggers.{$i}.value") <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                                    @if ($t['type'] === 'regex')
-                                        <p class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                                            <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
-                                            Regex avancado: validado e protegido, mas teste antes. Sem delimitadores; flags i+u aplicadas.
-                                        </p>
-                                    @elseif (($t['precision'] ?? 'exato') === 'tolerante')
-                                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                                            <select wire:model="triggers.{{ $i }}.fuzzy_level" class="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                                    @if ($t['type'] !== 'regex')
+                                        <select wire:model.live="triggers.{{ $i }}.precision" title="Precisao do match" class="w-28 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                            <option value="exato">exato</option>
+                                            <option value="tolerante">tolerante</option>
+                                        </select>
+                                        @if (($t['precision'] ?? 'exato') === 'tolerante')
+                                            <select wire:model="triggers.{{ $i }}.fuzzy_level" title="Intensidade da tolerancia" class="w-24 shrink-0 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                                                 <option value="baixa">baixa</option>
                                                 <option value="media">media</option>
                                                 <option value="alta">alta</option>
                                             </select>
-                                            <span class="text-amber-600 dark:text-amber-400">tolera erro de digitacao; palavra curta (&lt;4) segue exata. Teste no "Testar".</span>
-                                        </div>
+                                        @endif
                                     @endif
+
+                                    <input type="text" wire:model="triggers.{{ $i }}.value" placeholder="{{ $t['type'] === 'regex' ? 'ex.: ^pre[cç]o' : 'ex.: horario' }}"
+                                        class="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+
+                                    <button type="button" wire:click="removeTrigger({{ $i }})" @disabled(count($triggers) <= 1)
+                                        class="shrink-0 text-zinc-400 hover:text-red-500 disabled:opacity-30" aria-label="Remover gatilho">
+                                        <flux:icon icon="x-mark" variant="micro" />
+                                    </button>
                                 </div>
 
-                                <button type="button" wire:click="removeTrigger({{ $i }})" @disabled(count($triggers) <= 1)
-                                    class="mt-2.5 text-zinc-400 hover:text-red-500 disabled:opacity-30" aria-label="Remover gatilho">
-                                    <flux:icon icon="x-mark" variant="micro" />
-                                </button>
+                                @error("triggers.{$i}.value") <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                                @if ($t['type'] === 'regex')
+                                    <p class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                                        <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
+                                        Regex avancado: validado e protegido, mas teste antes. Sem delimitadores; flags i+u aplicadas.
+                                    </p>
+                                @elseif (($t['precision'] ?? 'exato') === 'tolerante')
+                                    <p class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                                        tolera erro de digitacao (typos, letras trocadas e sons parecidos); palavra curta (&lt;4) segue exata. Teste no "Testar".
+                                    </p>
+                                @endif
                             </div>
                         @endforeach
                     </div>
