@@ -18,6 +18,10 @@ class AutoReplySent
         public readonly int $autoReplyLogId,
         public readonly string $remoteJid,
         public readonly string $mode,
+        // Fatia 11 — despedida de HANDOFF: o card ja foi movido pra 'aguardando'
+        // pelo proprio handoff (deterministico, no motor); este envio NAO deve
+        // disparar a regra resposta_enviada (regrediria o card pra em_atendimento).
+        public readonly bool $handoff = false,
     ) {
     }
 }

@@ -184,10 +184,15 @@ class FlowEngine
     /**
      * Fatia 5 — no de HANDOFF: envia a mensagem do no, PAUSA o robo pro contato
      * (MESMO mecanismo do mute da UI: Contact.auto_reply_mode='off'), move o card
-     * pro em_atendimento (BoardEngine) e encerra a sessao (terminal 'handed_off';
+     * no Kanban (BoardEngine) e encerra a sessao (terminal 'handed_off';
      * string(16) comporta, aditivo). A despedida vai pelo MESMO caminho de dispatch
      * (o status 'handed_off' na diretiva sinaliza a isencao do gate de contato no
      * envio — o 'off' e do proprio handoff, nao pode bloquear a propria despedida).
+     *
+     * Fatia 11 — o destino do card passou de em_atendimento pra AGUARDANDO
+     * (pendencia HUMANA: alguem precisa assumir). A despedida enviada depois NAO
+     * regride o card: o AutoReplySent dela viaja com handoff=true e o listener do
+     * Kanban suprime a regra resposta_enviada (corrida resolvida na emissao).
      */
     private function emitHandoff(FlowSession $session, FlowNode $node): array
     {
@@ -205,11 +210,12 @@ class FlowEngine
             ['auto_reply_mode' => 'off'],
         );
 
-        // 3) card -> em_atendimento (BoardEngine: mesmo motor de cards/transicoes,
-        //    idempotente por evento). Kanban e observador: erro dele NUNCA derruba o fluxo.
+        // 3) card -> aguardando (Fatia 11: handoff = pendencia humana; BoardEngine:
+        //    mesmo motor de cards/transicoes, idempotente por evento). Kanban e
+        //    observador: erro dele NUNCA derruba o fluxo.
         try {
             app(\App\Kanban\BoardEngine::class)->moveToColumnSlug(
-                'em_atendimento', (int) $session->account_id, (string) $session->remote_jid,
+                'aguardando', (int) $session->account_id, (string) $session->remote_jid,
                 'handoff', (int) $session->id,
             );
         } catch (\Throwable $e) {

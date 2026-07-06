@@ -368,6 +368,18 @@ class ProcessIncomingWhatsappMessage implements ShouldQueue
                 // antes; contato nao aprovado/opt-out NAO entra — ali nao ha
                 // oportunidade de regra). A IA, quando elegivel, decide no job.
                 \App\Models\UnmatchedMessage::record($account->id, $jid, $data->text);
+
+                // Fatia 11 — o robo NAO teve resposta (ambos os modos): card ->
+                // 'aguardando' (pendencia humana). BEST-EFFORT como todo Kanban
+                // (padrao K): erro isolado, a decisao de resposta acima nao muda
+                // em nada. Idempotente por (card, 'sem_resposta', message.id).
+                try {
+                    app(\App\Kanban\BoardEngine::class)->moveToColumnSlug(
+                        'aguardando', $account->id, $jid, 'sem_resposta', (int) $message->id, cause: 'sem_resposta',
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Kanban: falha isolada ao mover card (sem resposta); pipeline segue.', ['erro' => $e->getMessage()]);
+                }
             }
 
             return;

@@ -171,10 +171,12 @@ class Sender
         ]);
 
         // Kanban K-1 — evento de dominio no ENVIO EFETIVO (listener em fila;
-        // observador puro — nada aqui altera o envio ja concluido).
+        // observador puro — nada aqui altera o envio ja concluido). Fatia 11: a
+        // despedida de handoff viaja marcada — o listener do Kanban nao aplica a
+        // regra resposta_enviada nela (o handoff ja moveu o card pra 'aguardando').
         event($mode === 'manual'
             ? new \App\Events\ManualMessageSent((int) $accountId, (int) $log->id, $jid)
-            : new \App\Events\AutoReplySent((int) $accountId, (int) $log->id, $jid, $mode));
+            : new \App\Events\AutoReplySent((int) $accountId, (int) $log->id, $jid, $mode, handoff: $handoff));
 
         return $log;
     }

@@ -122,14 +122,18 @@ class BoardEngine
      * de coluna — nao depende de BoardRule por conta (regras sao dados por conta;
      * o handoff precisa mover SEMPRE). Cria o card se nao existir (diferente do
      * observador de regras: aqui a acao e do proprio sistema, nao observacao).
+     *
+     * Fatia 11 — $cause parametrizado: alem do 'handoff', o pipeline usa
+     * 'sem_resposta' (unmatched -> Aguardando resposta). Default preserva a
+     * assinatura da Fatia 5.
      */
-    public function moveToColumnSlug(string $slug, int $accountId, string $remoteJid, string $eventType, int $eventRef): void
+    public function moveToColumnSlug(string $slug, int $accountId, string $remoteJid, string $eventType, int $eventRef, string $cause = 'handoff'): void
     {
         if (str_ends_with($remoteJid, '@g.us')) {
             return; // Kanban e de conversas com pessoas
         }
 
-        $this->context->runAs($accountId, function () use ($slug, $remoteJid, $eventType, $eventRef) {
+        $this->context->runAs($accountId, function () use ($slug, $remoteJid, $eventType, $eventRef, $cause) {
             $contact = Contact::query()->where('remote_jid', $remoteJid)->first();
             if ($contact === null) {
                 return;
@@ -152,13 +156,13 @@ class BoardEngine
                 return;
             }
 
-            $registrar = function (?int $de) use (&$card, $col, $eventType, $eventRef) {
+            $registrar = function (?int $de) use (&$card, $col, $eventType, $eventRef, $cause) {
                 try {
                     CardTransition::create([
                         'card_id' => $card->id,
                         'from_column_id' => $de,
                         'to_column_id' => $col->id,
-                        'cause' => 'handoff',
+                        'cause' => $cause,
                         'event_type' => $eventType,
                         'event_ref' => $eventRef,
                     ]);

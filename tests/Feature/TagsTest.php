@@ -177,7 +177,11 @@ class TagsTest extends TestCase
         $im = \App\Models\IncomingMessage::withoutAccountScope()->first();
         event(new \App\Events\IncomingMessageStored((int) $this->account->id, (int) $im->id, (int) $this->contact->id, self::JID));
         $this->assertSame(0, $this->contact->tags()->count());
-        $this->assertSame(1, \App\Models\CardTransition::count());
+        // Fatia 11: alem da criacao pela regra (novo), a mensagem sem resposta gera
+        // a transicao sem_resposta -> aguardando. A re-entrega nao duplica nenhuma.
+        $this->assertSame(1, \App\Models\CardTransition::where('event_type', 'mensagem_recebida')->count());
+        $this->assertSame(1, \App\Models\CardTransition::where('event_type', 'sem_resposta')->count());
+        $this->assertSame(2, \App\Models\CardTransition::count());
     }
 
     public function test_condicao_por_intent_aplica_a_tag_certa(): void

@@ -25,9 +25,13 @@ use Tests\TestCase;
 
 /**
  * Fatia 5 — no de HANDOFF no motor: mensagem enviada, robo pausado (mute reusado:
- * auto_reply_mode='off'), card -> em_atendimento (BoardEngine), sessao terminal
+ * auto_reply_mode='off'), card movido no Kanban (BoardEngine), sessao terminal
  * handed_off. Contato pausado NAO re-dispara o catch-all, mas as mensagens dele
  * CONTINUAM sendo recebidas/persistidas. Reativar restaura. Isolamento por conta.
+ *
+ * Fatia 11 — destino do card do handoff mudou de em_atendimento pra AGUARDANDO
+ * (pendencia humana); a corrida com a regra resposta_enviada da despedida e
+ * coberta no KanbanAguardandoTest.
  */
 class FlowHandoffTest extends TestCase
 {
@@ -104,12 +108,12 @@ class FlowHandoffTest extends TestCase
         // 2) robo pausado pro contato (mute reusado).
         $this->assertSame('off', Contact::withoutAccountScope()->where('remote_jid', self::JID)->first()->auto_reply_mode);
 
-        // 3) card em em_atendimento. (Nota: com as regras default do board, a regra
-        //    'resposta_enviada' ja move no envio do menu — o movimento do handoff vira
-        //    no-op de mesma coluna, semantica correta. O teste dedicado abaixo prova o
-        //    movimento DETERMINISTICO do handoff sem depender de regra nenhuma.)
+        // 3) card em AGUARDANDO (Fatia 11: handoff = pendencia humana; a despedida
+        //    enviada depois NAO regride o card — supressao coberta em detalhe no
+        //    KanbanAguardandoTest). O teste dedicado abaixo prova o movimento
+        //    DETERMINISTICO do handoff sem depender de regra nenhuma.
         $board = Board::withoutAccountScope()->where('account_id', $this->account->id)->where('is_default', true)->first();
-        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'em_atendimento')->first();
+        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'aguardando')->first();
         $card = Card::withoutAccountScope()->where('board_id', $board->id)->first();
         $this->assertNotNull($card);
         $this->assertSame((int) $col->id, (int) $card->column_id);
@@ -127,7 +131,7 @@ class FlowHandoffTest extends TestCase
         $this->executarHandoff();
 
         $board = Board::withoutAccountScope()->where('account_id', $this->account->id)->where('is_default', true)->first();
-        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'em_atendimento')->first();
+        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'aguardando')->first();
         $card = Card::withoutAccountScope()->where('board_id', $board->id)->first();
         $this->assertNotNull($card); // criado pelo proprio handoff (nenhuma regra ativa)
         $this->assertSame((int) $col->id, (int) $card->column_id);

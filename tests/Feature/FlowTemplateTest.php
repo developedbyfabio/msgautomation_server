@@ -187,11 +187,12 @@ class FlowTemplateTest extends TestCase
         $this->receber('menu', 'T1');   // gatilho do template abre o menu
         $this->receber('1', 'T2');      // "Agendar consulta" -> handoff
 
-        // mensagem do handoff enviada + robo pausado + card em_atendimento + sessao terminal.
+        // mensagem do handoff enviada + robo pausado + card em AGUARDANDO (fatia 11:
+        // handoff = pendencia humana) + sessao terminal.
         $this->assertDatabaseHas('auto_reply_logs', ['status' => 'sent', 'response_text' => 'Perfeito! Vou te transferir para um atendente que finaliza seu agendamento. Só um instante.']);
         $this->assertSame('off', Contact::withoutAccountScope()->where('remote_jid', self::JID)->first()->auto_reply_mode);
         $board = Board::withoutAccountScope()->where('account_id', $this->account->id)->where('is_default', true)->first();
-        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'em_atendimento')->first();
+        $col = BoardColumn::query()->where('board_id', $board->id)->where('slug', 'aguardando')->first();
         $card = Card::withoutAccountScope()->where('board_id', $board->id)->first();
         $this->assertNotNull($card);
         $this->assertSame((int) $col->id, (int) $card->column_id);

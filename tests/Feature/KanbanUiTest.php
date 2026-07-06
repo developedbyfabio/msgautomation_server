@@ -110,15 +110,18 @@ class KanbanUiTest extends TestCase
 
     public function test_mover_manual_registra_transicao_manual(): void
     {
+        // Fatia 11: a mensagem sem resposta ja deixou o card em 'aguardando' —
+        // o movimento manual do teste vai pra 'resolvido' (coluna diferente).
         $this->receber('oi');
         $card = $this->card();
+        $this->assertSame($this->col('aguardando')->id, (int) $card->column_id);
 
-        Livewire::test(Kanban::class)->call('moveCard', $card->id, $this->col('aguardando')->id);
+        Livewire::test(Kanban::class)->call('moveCard', $card->id, $this->col('resolvido')->id);
 
-        $this->assertSame($this->col('aguardando')->id, (int) $card->fresh()->column_id);
+        $this->assertSame($this->col('resolvido')->id, (int) $card->fresh()->column_id);
         $this->assertDatabaseHas('card_transitions', [
-            'card_id' => $card->id, 'from_column_id' => $this->col('novo')->id,
-            'to_column_id' => $this->col('aguardando')->id, 'cause' => 'manual', 'board_rule_id' => null,
+            'card_id' => $card->id, 'from_column_id' => $this->col('aguardando')->id,
+            'to_column_id' => $this->col('resolvido')->id, 'cause' => 'manual', 'board_rule_id' => null,
         ]);
         // Observador puro: mover card NAO envia nada.
         Http::assertNothingSent();
@@ -127,10 +130,10 @@ class KanbanUiTest extends TestCase
     public function test_mover_pra_mesma_coluna_e_noop(): void
     {
         $this->receber('oi');
-        $card = $this->card();
+        $card = $this->card(); // fatia 11: card esta em 'aguardando'
         $antes = CardTransition::where('card_id', $card->id)->count();
 
-        Livewire::test(Kanban::class)->call('moveCard', $card->id, $this->col('novo')->id);
+        Livewire::test(Kanban::class)->call('moveCard', $card->id, (int) $card->column_id);
 
         $this->assertSame($antes, CardTransition::where('card_id', $card->id)->count());
     }
@@ -164,9 +167,14 @@ class KanbanUiTest extends TestCase
         $this->assertSame('Caixa de entrada', $novo->name);
         $this->assertSame('novo', $novo->slug); // slug INTACTO
 
-        // A regra default (que referencia a coluna) segue movendo apos renomear.
+        // A regra default (que referencia a coluna) segue CRIANDO nela apos renomear
+        // (slug intacto — provado pela transicao)...
         $this->receber('oi', 'W9');
-        $this->assertSame($novo->id, (int) $this->card()->column_id);
+        $this->assertDatabaseHas('card_transitions', [
+            'to_column_id' => $novo->id, 'cause' => 'regra', 'event_type' => 'mensagem_recebida',
+        ]);
+        // ...e a Fatia 11 seguiu com o card sem resposta pra 'aguardando'.
+        $this->assertSame($this->col('aguardando')->id, (int) $this->card()->column_id);
     }
 
     public function test_reordenar_colunas_persiste(): void
@@ -251,9 +259,14 @@ class KanbanUiTest extends TestCase
 
         $this->assertFalse((bool) $regraNovo->fresh()->active);
 
-        // Sem a regra "cria em Novo": primeira mensagem nao cria card.
+        // Sem a regra "cria em Novo": NENHUMA criacao/movimento POR REGRA...
         $this->receber('oi', 'W1');
-        $this->assertDatabaseCount('cards', 0);
+        $this->assertSame(0, CardTransition::where('cause', 'regra')->count());
+        // ...mas o movimento DETERMINISTICO da Fatia 11 (sem resposta) segue criando
+        // a pendencia em 'aguardando' — acao de SISTEMA, nao regra (mesmo padrao do
+        // handoff da Fatia 5: nao depende de BoardRule e nao e desligavel por ela).
+        $this->assertSame($this->col('aguardando')->id, (int) $this->card()->column_id);
+        $this->assertDatabaseHas('card_transitions', ['cause' => 'sem_resposta']);
     }
 
     public function test_reordenar_muda_o_first_match(): void

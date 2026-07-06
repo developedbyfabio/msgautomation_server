@@ -100,12 +100,15 @@ class KanbanEngineTest extends TestCase
 
         $card = $this->card();
         $this->assertNotNull($card);
-        $this->assertSame($this->col('novo'), (int) $card->column_id);
+        // Fatia 11: mensagem SEM resposta do robo termina em 'aguardando'
+        // (pendencia humana). A criacao em Novo pela regra segue provada abaixo,
+        // na PRIMEIRA transicao.
+        $this->assertSame($this->col('aguardando'), (int) $card->column_id);
         $this->assertSame('in', $card->last_direction);
         $this->assertNotNull($card->last_interaction_at);
 
-        // Transicao com CAUSA completa (regra default + evento + referencia).
-        $t = CardTransition::where('card_id', $card->id)->first();
+        // 1a transicao: criacao pela REGRA default, com CAUSA completa (intacta).
+        $t = CardTransition::where('card_id', $card->id)->orderBy('id')->first();
         $this->assertNotNull($t);
         $this->assertNull($t->from_column_id); // criado
         $this->assertSame($this->col('novo'), (int) $t->to_column_id);
@@ -113,6 +116,11 @@ class KanbanEngineTest extends TestCase
         $this->assertSame('mensagem_recebida', $t->event_type);
         $this->assertNotNull($t->board_rule_id);
         $this->assertDatabaseHas('incoming_messages', ['id' => $t->event_ref]);
+
+        // 2a transicao (Fatia 11): novo -> aguardando por 'sem_resposta'.
+        $this->assertDatabaseHas('card_transitions', [
+            'card_id' => $card->id, 'cause' => 'sem_resposta', 'to_column_id' => $this->col('aguardando'),
+        ]);
     }
 
     public function test_mensagem_em_card_resolvido_reabre_pra_novo(): void
@@ -123,11 +131,14 @@ class KanbanEngineTest extends TestCase
 
         $this->receber('voltei com outra duvida', 'W2');
 
-        $this->assertSame($this->col('novo'), (int) $card->fresh()->column_id);
+        // A REABERTURA (resolvido -> novo, pela regra default) segue acontecendo:
         $this->assertDatabaseHas('card_transitions', [
             'card_id' => $card->id, 'from_column_id' => $this->col('resolvido'),
             'to_column_id' => $this->col('novo'), 'cause' => 'regra',
         ]);
+        // ...e a Fatia 11 leva adiante: mensagem reaberta SEM resposta do robo
+        // termina como pendencia humana em 'aguardando'.
+        $this->assertSame($this->col('aguardando'), (int) $card->fresh()->column_id);
     }
 
     public function test_mensagem_em_outras_colunas_so_atualiza_interacao(): void
@@ -215,7 +226,11 @@ class KanbanEngineTest extends TestCase
         event(new IncomingMessageStored((int) $this->account->id, (int) $im->id, (int) $contato->id, self::JID));
 
         $this->assertSame(1, Card::withoutAccountScope()->count());
-        $this->assertSame(1, CardTransition::count());
+        // Fatia 11: o processamento original ja gera DUAS transicoes (regra -> novo
+        // + sem_resposta -> aguardando); a re-entrega nao duplica NENHUMA delas.
+        $this->assertSame(1, CardTransition::where('event_type', 'mensagem_recebida')->count());
+        $this->assertSame(1, CardTransition::where('event_type', 'sem_resposta')->count());
+        $this->assertSame(2, CardTransition::count());
     }
 
     public function test_falha_no_listener_nao_derruba_o_pipeline(): void
@@ -273,7 +288,14 @@ class KanbanEngineTest extends TestCase
         $this->receber('oi', 'W2', '5541888880000@s.whatsapp.net');
 
         $novo = Card::withoutAccountScope()->where('board_id', $this->board->id)->latest('id')->first();
-        $this->assertSame($this->col('novo'), (int) $novo->column_id);
+        // A regra default CRIOU o card em Novo (regra inativa ignorada; first-match
+        // provado pela transicao)...
+        $this->assertDatabaseHas('card_transitions', [
+            'card_id' => $novo->id, 'from_column_id' => null,
+            'to_column_id' => $this->col('novo'), 'cause' => 'regra',
+        ]);
+        // ...e a Fatia 11 seguiu com a mensagem sem resposta pra 'aguardando'.
+        $this->assertSame($this->col('aguardando'), (int) $novo->column_id);
     }
 
     // ---- eventos informativos emitidos (sem regra default) -----------------------------

@@ -31,7 +31,11 @@ class UpdateKanbanFromEvent implements ShouldQueue
             match (true) {
                 $event instanceof IncomingMessageStored => $this->engine->apply(
                     'mensagem_recebida', $event->accountId, $event->remoteJid, $event->incomingMessageId, 'in'),
-                $event instanceof AutoReplySent => $this->engine->apply(
+                // Fatia 11 — despedida de HANDOFF nao e "resposta que reabre
+                // atendimento": o handoff ja moveu o card pra 'aguardando' no motor
+                // (deterministico, antes do envio); aplicar resposta_enviada aqui
+                // regrediria o card pra em_atendimento (corrida). Suprimido.
+                $event instanceof AutoReplySent => $event->handoff ? null : $this->engine->apply(
                     'resposta_enviada', $event->accountId, $event->remoteJid, $event->autoReplyLogId, 'out'),
                 $event instanceof ManualMessageSent => $this->engine->apply(
                     'envio_manual', $event->accountId, $event->remoteJid, $event->autoReplyLogId, 'out'),
