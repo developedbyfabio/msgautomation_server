@@ -34,7 +34,17 @@ class Incidentes extends Component
 
         $incident = Incident::query()->findOrFail($id); // escopo por conta
         $incidents->acknowledge($incident, (int) auth()->id());
-        $this->dispatch('toast', message: 'Incidente reconhecido.');
+        $this->dispatch('toast', message: 'Incidente reconhecido — re-avisos pausados.');
+    }
+
+    /** Reativa os avisos de um incidente reconhecido (re-avisos por cadencia voltam). */
+    public function reactivate(int $id, IncidentManager $incidents): void
+    {
+        AreaAccess::authorizeOwnerAction();
+
+        $incident = Incident::query()->findOrFail($id);
+        $incidents->reactivate($incident);
+        $this->dispatch('toast', message: 'Avisos reativados — voltam a repetir conforme a cadencia da regra.');
     }
 
     public function render()

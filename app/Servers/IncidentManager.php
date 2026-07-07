@@ -111,4 +111,24 @@ class IncidentManager
             'acknowledged_by' => $userId,
         ])->save();
     }
+
+    /**
+     * Reativa os avisos de um incidente RECONHECIDO (volta a firing): os
+     * re-avisos por cadencia voltam a disparar. NAO re-abre (mantem
+     * notified_level, started_at) — nao e um novo incidente, so desfaz o ack.
+     * Reseta last_notified_at para o re-aviso sair no proximo tick (respeitando
+     * o repeat da regra a partir de agora).
+     */
+    public function reactivate(Incident $incident): void
+    {
+        if ($incident->status !== Incident::STATUS_ACKNOWLEDGED) {
+            return;
+        }
+
+        $incident->forceFill([
+            'status' => Incident::STATUS_FIRING,
+            'acknowledged_at' => null,
+            'acknowledged_by' => null,
+        ])->save();
+    }
 }

@@ -71,9 +71,19 @@
                     </div>
                     @if ($i->status === 'firing')
                         <button type="button" wire:click="ack({{ $i->id }})"
-                            class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                            class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            title="Silencia os re-avisos deste incidente (ate resolver ou escalar)">
                             <flux:icon icon="check" variant="micro" /> Reconhecer
                         </button>
+                    @elseif ($i->status === 'acknowledged')
+                        <div class="flex shrink-0 flex-col items-end gap-1">
+                            <span class="text-[10px] text-zinc-400">re-avisos pausados</span>
+                            <button type="button" wire:click="reactivate({{ $i->id }})"
+                                class="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950"
+                                title="Volta a repetir os avisos conforme a cadencia da regra">
+                                <flux:icon icon="bell-alert" variant="micro" /> Reativar avisos
+                            </button>
+                        </div>
                     @endif
                 </div>
             @empty
