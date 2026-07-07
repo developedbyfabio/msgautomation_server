@@ -180,6 +180,21 @@
             </div>
 
             <div class="mt-3 space-y-1">
+                <p class="text-sm font-medium">Atualizar o agente (pegar correcoes sem reinstalar nem reconfigurar):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">sudo msgautomation-agent-update</code>
+                </div>
+                <p class="text-[11px] text-zinc-400">
+                    Preserva o token e o agendamento (timer) — troca so o binario. <strong>Servidores instalados
+                    antes desta versao</strong> ainda nao tem esse comando; nesses, rode uma vez a linha abaixo (troca
+                    o binario baixando do proprio painel; nao pede token) e a partir dai o comando acima passa a existir:
+                </p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">{{ $this->comandoAtualizacao() }}</code>
+                </div>
+            </div>
+
+            <div class="mt-3 space-y-1">
                 <p class="text-[11px] text-zinc-400">
                     <flux:icon icon="shield-check" variant="micro" class="inline size-3" />
                     O agente e <strong>read-only</strong>, faz so <strong>PUSH de saida</strong> (nao abre porta) e roda
@@ -243,6 +258,7 @@
             </div>
 
             <div class="mt-3 space-y-1 text-[11px] text-zinc-400">
+                <p><strong>Atualizar:</strong> <code>sudo msgautomation-agent-update</code> (troca o binario, preserva token e timer). Se este servidor foi instalado antes desta versao, atualize uma vez com: <code class="select-all break-all">{{ $this->comandoAtualizacao() }}</code></p>
                 <p><strong>Desinstalar:</strong> <code>sudo msgautomation-agent-uninstall</code> (para e remove sem residuo).</p>
                 <p>
                     <flux:icon icon="shield-check" variant="micro" class="inline size-3" />

@@ -68,7 +68,11 @@ class ServerIngestController extends Controller
             'swap.pct' => 'nullable|numeric|min:0|max:100',
             'swap.total_mb' => 'nullable|numeric|min:0',
             'swap.used_mb' => 'nullable|numeric|min:0',
-            'disks' => 'required|array|min:1|max:20',
+            // TOLERA ausencia/lista vazia de discos: um coletor que so nao achou
+            // disco local (mount de rede morto, so pseudo-FS) ainda entrega
+            // CPU/RAM/swap/load uteis — melhor que 422 -> coletor morto ->
+            // watchdog falso. Auth (401/403) e o resto da validacao seguem firmes.
+            'disks' => 'nullable|array|max:20',
             'disks.*.mount' => 'required|string|max:120',
             'disks.*.pct' => 'required|numeric|min:0|max:100',
             'disks.*.total_gb' => 'nullable|numeric|min:0',
@@ -94,7 +98,7 @@ class ServerIngestController extends Controller
             'disks' => array_map(fn (array $d) => [
                 'mount' => (string) $d['mount'],
                 'pct' => (float) $d['pct'],
-            ], $data['disks']),
+            ], $data['disks'] ?? []),
             'agent_version' => $data['agent_version'] ?? null,
         ];
 

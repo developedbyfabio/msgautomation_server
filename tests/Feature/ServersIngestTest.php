@@ -122,6 +122,34 @@ class ServersIngestTest extends TestCase
         $this->assertNull($this->server->fresh()->last_seen_at);
     }
 
+    public function test_payload_sem_discos_e_aceito_e_nao_cega_o_watchdog(): void
+    {
+        // Coletor que so nao achou disco local (mount de rede morto, so pseudo-FS)
+        // ainda entrega CPU/RAM/swap/load. NAO pode virar 422 -> coletor morto ->
+        // watchdog falso. Aceita (200), grava a amostra e ATUALIZA last_seen.
+        $p = $this->payload();
+        unset($p['disks']);
+
+        $this->ingest($p, $this->token)->assertOk();
+
+        $samples = app(MetricsBuffer::class)->samples($this->server->id);
+        $this->assertCount(1, $samples);
+        $this->assertSame([], $samples[0]['disks']); // sem disco, mas amostra valida
+        $this->assertSame(37.2, $samples[0]['cpu_pct']);
+        // last_seen atualizado -> o watchdog (S2) NAO dispara "sem reportar".
+        $this->assertNotNull($this->server->fresh()->last_seen_at);
+    }
+
+    public function test_payload_com_lista_de_discos_vazia_e_aceito(): void
+    {
+        $this->ingest($this->payload(['disks' => []]), $this->token)->assertOk();
+
+        $samples = app(MetricsBuffer::class)->samples($this->server->id);
+        $this->assertCount(1, $samples);
+        $this->assertSame([], $samples[0]['disks']);
+        $this->assertNotNull($this->server->fresh()->last_seen_at);
+    }
+
     public function test_payload_gigante_413_antes_de_qualquer_processamento(): void
     {
         $this->ingest($this->payload(['junk' => str_repeat('a', 17000)]), $this->token)

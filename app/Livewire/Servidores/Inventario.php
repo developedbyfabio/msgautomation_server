@@ -204,6 +204,20 @@ class Inventario extends Component
             .' AGENT_TOKEN='.$t.' sh';
     }
 
+    /**
+     * Comando de ATUALIZACAO para servidores JA instalados: baixa a versao nova
+     * do coletor e troca o binario, PRESERVANDO o config (token) e o timer. NAO
+     * pede token (o coletor.sh e publico, sem segredo). Depois desta troca, o
+     * agente novo passa a ter `sudo msgautomation-agent-update` pra updates
+     * futuros. Download em temp + mv = seguro mesmo se o timer disparar no meio.
+     */
+    public function comandoAtualizacao(): string
+    {
+        return 'curl -fsSL '.route('servidores.agente.coletor')
+            .' -o /tmp/msgautomation-agent.new && chmod 755 /tmp/msgautomation-agent.new'
+            .' && sudo mv /tmp/msgautomation-agent.new /usr/local/bin/msgautomation-agent';
+    }
+
     // ---- Excluir -------------------------------------------------------------
 
     public function confirmDelete(int $id): void

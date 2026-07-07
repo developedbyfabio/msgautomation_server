@@ -20,6 +20,9 @@
 #   msgautomation-agent.sh            # coleta e faz PUSH (modo normal)
 #   msgautomation-agent.sh --dry-run  # imprime o payload JSON, NAO envia
 #   msgautomation-agent.sh --disks-only  # imprime so o array de discos (teste)
+#   msgautomation-agent.sh --version  # imprime a versao do agente e sai
+#   sudo msgautomation-agent.sh --update  # rebaixa a versao nova do app e se
+#                                          # substitui, PRESERVANDO o config
 #
 # Config (lido em ordem): variaveis de ambiente AGENT_URL/AGENT_TOKEN, senao
 # /etc/msgautomation-agent/config (KEY=VALUE por linha).
@@ -27,7 +30,7 @@
 set -eu
 
 CONFIG_FILE="${AGENT_CONFIG:-/etc/msgautomation-agent/config}"
-AGENT_VERSION="1"
+AGENT_VERSION="2"
 
 # --- config: env tem precedencia; senao le o arquivo restrito ----------------
 if [ -z "${AGENT_URL:-}" ] || [ -z "${AGENT_TOKEN:-}" ]; then
@@ -37,20 +40,47 @@ if [ -z "${AGENT_URL:-}" ] || [ -z "${AGENT_TOKEN:-}" ]; then
     fi
 fi
 
+# --- df RESILIENTE: um mount de rede morto NAO pode travar nem quebrar --------
+# Lição do API-ECOMMERCE (`df: /mnt/fotos: Host is down`, ~21s travado):
+#  - timeout: um mount pendurado nao segura o coletor (cap de 8s).
+#  - -x <tipos de rede>: o df nem STATA cifs/nfs/etc -> nao trava no mount morto
+#    e nao lista compartilhamento de rede (que nao e disco local).
+#  - 2>/dev/null: o "Host is down" vai pro stderr; nao pode contaminar o parsing.
+#  - "|| true": saida nao-zero do df (mount morto) NUNCA mata o script (set -e).
+# AGENT_DF_INPUT (seam de teste) tem precedencia e pula o df real.
+run_df() {
+    if [ -n "${AGENT_DF_INPUT:-}" ]; then
+        printf '%s\n' "$AGENT_DF_INPUT"
+        return 0
+    fi
+    # exclui por TIPO os FS de rede/penduraveis (os demais pseudo-FS caem na
+    # allowlist do awk; aqui excluimos so os que podem TRAVAR o stat do df).
+    set -- -PT -x cifs -x smbfs -x smb3 -x nfs -x nfs4 \
+        -x fuse.sshfs -x fuse.gvfsd-fuse -x fuse.rclone -x fuse.s3fs
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 8 df "$@" 2>/dev/null || true
+    else
+        df "$@" 2>/dev/null || true
+    fi
+}
+
 # --- filtro de disco: SO filesystems reais, cada device UMA vez ---------------
-# Ignora pseudo-FS (tmpfs, devtmpfs, overlay, squashfs, ...) por ALLOWLIST de
-# tipos reais (default-deny) e DEDUPLICA por device — os N overlays do Docker
-# apontam para "overlay"/mesmo device e nao passam. Entrada: `df -PT` (ou o
-# conteudo de AGENT_DF_INPUT, seam de teste). Saida: objetos JSON de disco.
+# Ignora pseudo-FS (tmpfs, devtmpfs, overlay, squashfs, cifs, nfs, ...) por
+# ALLOWLIST de tipos reais (default-deny) e DEDUPLICA por device — os N overlays
+# do Docker apontam para "overlay"/mesmo device e nao passam; CIFS/NFS saem por
+# NAO estarem na allowlist (nunca por nome). Linha de erro/mount morto que por
+# acaso chegue ao stdout tem "type" fora da allowlist -> ignorada sem quebrar.
+# Saida: objetos JSON de disco (pode ser VAZIO — e valido; o endpoint tolera).
 collect_disks_json() {
-    df_out="${AGENT_DF_INPUT:-$(df -PT 2>/dev/null)}"
-    printf '%s\n' "$df_out" | awk '
+    run_df | awk '
         NR == 1 { next }                              # cabecalho
+        NF < 7 { next }                               # linha curta/lixo: ignora
         {
             fs = $1; type = $2; blocks = $3; used = $4; cap = $6;
             mount = $7; for (i = 8; i <= NF; i++) mount = mount " " $i;
-            # allowlist de tipos REAIS (qualquer outro = pseudo-FS, fora):
+            # allowlist de tipos REAIS (qualquer outro = pseudo-FS/rede, fora):
             if (type !~ /^(ext2|ext3|ext4|xfs|btrfs|zfs|jfs|reiserfs|f2fs|vfat|exfat|ntfs|ufs)$/) next;
+            if (cap !~ /^[0-9]+%?$/) next;             # capacidade nao-numerica: lixo
             if (seen[fs]) next;                       # dedup por device
             seen[fs] = 1;
             gsub(/%/, "", cap);
@@ -96,10 +126,43 @@ build_payload() {
         "$(mem_pct)" "$(mem_total_mb)" "$(mem_used_mb)" "$(swap_pct)" "$(collect_disks_json)"
 }
 
-# --- modos de teste/inspecao (nao enviam) ------------------------------------
+# --- self-update: rebaixa a versao nova do app e se substitui -----------------
+# Roda como root (escreve em /usr/local/bin). PRESERVA o config (token+URL) e o
+# timer — nada mais e tocado. A URL do coletor deriva do AGENT_URL de ingestao
+# (mesmo host/app) ou vem de AGENT_COLLECTOR_URL. Seam de teste: AGENT_BIN.
+do_update() {
+    _bin="${AGENT_BIN:-/usr/local/bin/msgautomation-agent}"
+    if [ -n "${AGENT_COLLECTOR_URL:-}" ]; then
+        _url="$AGENT_COLLECTOR_URL"
+    else
+        : "${AGENT_URL:?AGENT_URL ausente (config nao encontrado) — reinstale o agente}"
+        _url="${AGENT_URL%/webhook/servers/ingest}/servidores/agente/coletor.sh"
+    fi
+    echo "==> Baixando agente novo de: $_url"
+    _tmp="$(dirname "$_bin")/.msgautomation-agent.new.$$"
+    trap 'rm -f "$_tmp"' EXIT INT TERM
+    if ! curl -fsSL --max-time 30 "$_url" -o "$_tmp" 2>/dev/null; then
+        echo "!! download falhou — agente atual mantido intacto" >&2; exit 1
+    fi
+    # sanidade: precisa ser o script do agente (evita gravar HTML de erro/login).
+    if ! head -n 1 "$_tmp" | grep -q '^#!/bin/sh' || ! grep -q 'msgautomation' "$_tmp"; then
+        echo "!! download nao parece o agente msgautomation — mantido intacto" >&2; exit 1
+    fi
+    chmod 755 "$_tmp"
+    # mv no MESMO diretorio = rename atomico; o processo em execucao segue lendo
+    # o inode antigo (self-replace seguro). Config e timer NAO sao tocados.
+    mv -f "$_tmp" "$_bin"
+    trap - EXIT INT TERM
+    _nv="$(AGENT_URL=x AGENT_TOKEN=x sh "$_bin" --version 2>/dev/null || echo '?')"
+    echo "==> Atualizado para a versao $_nv. Config e timer preservados."
+}
+
+# --- modos de teste/inspecao/manutencao (nao enviam metrica) ------------------
 case "${1:-}" in
+    --version)    printf '%s\n' "$AGENT_VERSION"; exit 0 ;;
     --disks-only) collect_disks_json; echo; exit 0 ;;
     --dry-run)    build_payload; echo; exit 0 ;;
+    --update)     do_update; exit 0 ;;
 esac
 
 # --- envio com BACKOFF (3 tentativas, espera curta, depois desiste) ----------

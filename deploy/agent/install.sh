@@ -49,10 +49,20 @@ fi
 crontab -l 2>/dev/null | grep -v msgautomation-agent | crontab - 2>/dev/null || true
 rm -f /usr/local/bin/msgautomation-agent /etc/msgautomation-agent/config
 rmdir /etc/msgautomation-agent 2>/dev/null || true
-rm -f /usr/local/bin/msgautomation-agent-uninstall
+rm -f /usr/local/bin/msgautomation-agent-uninstall /usr/local/bin/msgautomation-agent-update
 echo "==> Removido. Nenhum residuo."
 UNINSTALL_EOF
 chmod 755 /usr/local/bin/msgautomation-agent-uninstall
+
+# 3b. atualizador: rebaixa a versao nova do agente do proprio app e troca o
+#     binario, PRESERVANDO o config (token+URL) e o timer. Um comando, sem
+#     reinstalar nem reconfigurar. (o agente ja sabe se auto-atualizar via
+#     --update; este wrapper e so pra descoberta: `sudo msgautomation-agent-update`)
+cat > /usr/local/bin/msgautomation-agent-update <<'UPDATE_EOF'
+#!/bin/sh
+exec /usr/local/bin/msgautomation-agent --update "$@"
+UPDATE_EOF
+chmod 755 /usr/local/bin/msgautomation-agent-update
 
 # 4. agendamento: systemd timer (preferido) com fallback cron
 if command -v systemctl >/dev/null 2>&1; then
@@ -96,4 +106,5 @@ else
 fi
 
 echo "==> Pronto. O servidor deve aparecer como 'Recebendo dados' em ~${INTERVAL}s."
+echo "    Atualizar:   sudo msgautomation-agent-update   (preserva token e timer)"
 echo "    Desinstalar: sudo msgautomation-agent-uninstall"
