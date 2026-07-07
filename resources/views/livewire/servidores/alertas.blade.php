@@ -176,7 +176,7 @@
         <div class="flex items-center justify-between gap-3 pt-4">
             <div class="flex items-center gap-2">
                 <h2 class="text-lg font-semibold">Destinatarios</h2>
-                <x-info-tip text="Quem recebe os alertas no WhatsApp. Filtro por severidade (warning recebe warning+critical; critical so critical) e por alvo (um servidor, um grupo, ou todos). E-mail opcional serve de fallback quando o WhatsApp falha." />
+                <x-info-tip text="Quem recebe os alertas no WhatsApp. Por destinatario: severidade minima (warning recebe warning+critical; critical so critical), QUAIS servidores (todos ou uma selecao) e QUANDO (24h ou janela de horario + fim de semana, fuso de Sao Paulo). Fora da janela o WhatsApp e suprimido, mas o incidente e a conversa seguem registrados. E-mail opcional = fallback quando o WhatsApp falha." />
             </div>
             <button type="button" wire:click="novoContato"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
@@ -216,14 +216,31 @@
                                 <span aria-hidden="true">&middot;</span><span>{{ $c->email }}</span>
                             @endif
                             <span aria-hidden="true">&middot;</span>
+                            {{-- Escopo de servidores (Feature 2) --}}
                             <span>
-                                @if ($c->server_id)
+                                @php $ids = is_array($c->server_ids) ? $c->server_ids : []; @endphp
+                                @if ($ids !== [])
+                                    @php $nomes = $servers->whereIn('id', $ids)->pluck('name'); @endphp
+                                    <flux:icon icon="server" variant="micro" class="inline size-3" />
+                                    {{ $nomes->count() <= 2 ? $nomes->implode(', ') : $nomes->count().' servidores' }}
+                                @elseif ($c->server_id)
                                     {{ optional($servers->firstWhere('id', $c->server_id))->name ?? 'servidor' }}
                                 @elseif ($c->grupo)
                                     grupo {{ $c->grupo }}
                                 @else
                                     todos os servidores
                                 @endif
+                            </span>
+                            {{-- Janela de horario (Feature 1) --}}
+                            <span aria-hidden="true">&middot;</span>
+                            <span>
+                                <flux:icon icon="clock" variant="micro" class="inline size-3" />
+                                @if ($c->window_mode === 'custom' && $c->window_start && $c->window_end)
+                                    {{ $c->window_start }}–{{ $c->window_end }}
+                                @else
+                                    24h
+                                @endif
+                                @unless ($c->weekends)<span class="text-amber-600 dark:text-amber-400"> · sem fim de semana</span>@endunless
                             </span>
                         </div>
                     </div>
@@ -274,30 +291,61 @@
                         @error('c_email') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="mb-1 block text-xs font-medium">Severidade minima</label>
-                        <select wire:model="c_min_level" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                            <option value="warning">Warning e acima (tudo)</option>
-                            <option value="critical">So critical</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs font-medium">Alvo</label>
-                        <select wire:model="c_server_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                            <option value="">Todos / por grupo</option>
-                            @foreach ($servers as $s)
-                                <option value="{{ $s->id }}">{{ $s->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium">Severidade minima</label>
+                    <select wire:model="c_min_level" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <option value="warning">Warning e acima (tudo)</option>
+                        <option value="critical">So critical</option>
+                    </select>
                 </div>
-                <div @if ($c_server_id) hidden @endif>
-                    <label class="mb-1 block text-xs font-medium">Grupo (opcional; vazio = todos os servidores)</label>
-                    <input type="text" wire:model="c_grupo" placeholder="ex.: producao"
-                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                    @error('c_grupo') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    <p class="mt-1 text-[11px] text-zinc-400">Um servidor especifico tem precedencia; sem alvo, recebe de todos.</p>
+
+                {{-- Feature 2 — quais servidores este destinatario recebe --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <label class="mb-1 block text-xs font-semibold">Servidores</label>
+                    <select wire:model.live="c_server_scope" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <option value="all">Todos os servidores</option>
+                        <option value="selected">Escolher servidores</option>
+                    </select>
+                    @if ($c_server_scope === 'selected')
+                        <div class="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+                            @forelse ($servers as $s)
+                                <label class="flex items-center gap-2 text-sm" wire:key="csrv-{{ $s->id }}">
+                                    <input type="checkbox" wire:model="c_server_ids" value="{{ $s->id }}" class="rounded border-zinc-300 dark:border-zinc-700">
+                                    {{ $s->name }}
+                                </label>
+                            @empty
+                                <p class="text-[11px] text-zinc-400">Nenhum servidor no inventario ainda.</p>
+                            @endforelse
+                        </div>
+                        @error('c_server_ids') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
+                </div>
+
+                {{-- Feature 1 — janela de horario (fuso America/Sao_Paulo) --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <label class="mb-1 block text-xs font-semibold">Quando recebe (fuso de Sao Paulo)</label>
+                    <select wire:model.live="c_window_mode" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <option value="24h">24 horas (sempre)</option>
+                        <option value="custom">Janela personalizada</option>
+                    </select>
+                    @if ($c_window_mode === 'custom')
+                        <div class="mt-2 flex items-center gap-2 text-sm">
+                            <span>das</span>
+                            <input type="time" wire:model="c_window_start" class="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                            <span>as</span>
+                            <input type="time" wire:model="c_window_end" class="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        </div>
+                        @error('c_window_start') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        @error('c_window_end') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    @endif
+                    <label class="mt-2 flex items-center gap-2 text-sm">
+                        <input type="checkbox" wire:model="c_weekends" class="rounded border-zinc-300 dark:border-zinc-700">
+                        Receber sabado e domingo
+                    </label>
+                    <p class="mt-1 text-[11px] text-zinc-400">
+                        Fora da janela o alerta NAO vai pro WhatsApp deste contato — mas o incidente e a conversa
+                        "Alertas de Infraestrutura" continuam registrados (o fato nao se perde).
+                    </p>
                 </div>
             </form>
             <x-slot:footer>

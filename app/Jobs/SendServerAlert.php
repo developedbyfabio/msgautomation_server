@@ -102,8 +102,16 @@ class SendServerAlert implements ShouldQueue
             // pelo AlertNotifier na transicao (nao re-gravar aqui).
             $this->registrarReavisosNaConversa($reminders);
 
-            // Envia por destinatario (roteamento por severidade+alvo) e balde.
+            // Envia por destinatario (roteamento por severidade+escopo) e balde.
+            // JANELA DE HORARIO (Feature 1): fora da janela/fim de semana, o
+            // WhatsApp DESTE contato e suprimido — sem acumulo, ele nao recebe
+            // "depois". O incidente e a conversa "Alertas de Infraestrutura" ja
+            // foram gravados pelo AlertNotifier (upstream): o fato nao se perde,
+            // so a entrega a este contato fora de hora e descartada.
             foreach ($contacts as $contact) {
+                if (! $contact->withinWindow()) {
+                    continue;
+                }
                 $this->sendTo($registry, $channel, $contact, 'abertura', $opens);
                 $this->sendTo($registry, $channel, $contact, 'reincidencia', $reminders);
                 $this->sendTo($registry, $channel, $contact, 'resolucao', $resolved);

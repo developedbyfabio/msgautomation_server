@@ -168,7 +168,7 @@ class ServersAlertasUiTest extends TestCase
         $this->assertSame('fabio@x.local', $c->email);
     }
 
-    public function test_alvo_servidor_especifico_zera_o_grupo(): void
+    public function test_escopo_selecionado_grava_server_ids_e_limpa_alvo_legado(): void
     {
         $this->comoOwner();
 
@@ -176,14 +176,51 @@ class ServersAlertasUiTest extends TestCase
             ->call('novoContato')
             ->set('c_name', 'OnCall')
             ->set('c_phone', '5511888880000')
-            ->set('c_server_id', $this->server->id)
-            ->set('c_grupo', 'ignorado')
+            ->set('c_server_scope', 'selected')
+            ->set('c_server_ids', [$this->server->id])
             ->call('saveContato')
             ->assertHasNoErrors();
 
         $c = AlertContact::withoutAccountScope()->where('name', 'OnCall')->sole();
-        $this->assertSame($this->server->id, $c->server_id);
-        $this->assertNull($c->grupo); // servidor especifico tem precedencia
+        $this->assertSame([$this->server->id], array_map('intval', $c->server_ids)); // escopo por selecao
+        $this->assertNull($c->server_id); // alvo legado limpo (a UI usa server_ids)
+        $this->assertNull($c->grupo);
+    }
+
+    public function test_escopo_selecionado_sem_servidor_e_rejeitado(): void
+    {
+        $this->comoOwner();
+
+        Livewire::test(Alertas::class)
+            ->call('novoContato')
+            ->set('c_name', 'Vazio')
+            ->set('c_phone', '5511888880000')
+            ->set('c_server_scope', 'selected')
+            ->set('c_server_ids', [])
+            ->call('saveContato')
+            ->assertHasErrors('c_server_ids');
+    }
+
+    public function test_janela_custom_persiste_inicio_fim_e_fim_de_semana(): void
+    {
+        $this->comoOwner();
+
+        Livewire::test(Alertas::class)
+            ->call('novoContato')
+            ->set('c_name', 'Comercial')
+            ->set('c_phone', '5511777770000')
+            ->set('c_window_mode', 'custom')
+            ->set('c_window_start', '08:00')
+            ->set('c_window_end', '18:00')
+            ->set('c_weekends', false)
+            ->call('saveContato')
+            ->assertHasNoErrors();
+
+        $c = AlertContact::withoutAccountScope()->where('name', 'Comercial')->sole();
+        $this->assertSame('custom', $c->window_mode);
+        $this->assertSame('08:00', $c->window_start);
+        $this->assertSame('18:00', $c->window_end);
+        $this->assertFalse((bool) $c->weekends);
     }
 
     public function test_operador_nao_cadastra_destinatario(): void

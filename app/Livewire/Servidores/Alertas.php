@@ -84,6 +84,21 @@ class Alertas extends Component
 
     public string $c_grupo = '';
 
+    // Feature 1 — janela de horario do destinatario (fuso America/Sao_Paulo).
+    public string $c_window_mode = '24h'; // 24h|custom
+
+    public string $c_window_start = '08:00';
+
+    public string $c_window_end = '18:00';
+
+    public bool $c_weekends = true;
+
+    // Feature 2 — escopo de servidores do destinatario.
+    public string $c_server_scope = 'all'; // all|selected
+
+    /** @var array<int,int> */
+    public array $c_server_ids = [];
+
     public ?int $confirmingContactDeleteId = null;
 
     // Separador dos avisos agrupados numa mesma mensagem de WhatsApp.
@@ -375,6 +390,12 @@ class Alertas extends Component
         $this->reset(['contactEditingId', 'c_name', 'c_phone', 'c_email', 'c_grupo']);
         $this->c_min_level = 'warning';
         $this->c_server_id = null;
+        $this->c_window_mode = '24h';
+        $this->c_window_start = '08:00';
+        $this->c_window_end = '18:00';
+        $this->c_weekends = true;
+        $this->c_server_scope = 'all';
+        $this->c_server_ids = [];
         $this->resetValidation();
         $this->showContactForm = true;
     }
@@ -389,6 +410,21 @@ class Alertas extends Component
         $this->c_min_level = $c->min_level;
         $this->c_server_id = $c->server_id;
         $this->c_grupo = (string) $c->grupo;
+
+        // Janela (Feature 1).
+        $this->c_window_mode = $c->window_mode === 'custom' ? 'custom' : '24h';
+        $this->c_window_start = (string) ($c->window_start ?? '08:00');
+        $this->c_window_end = (string) ($c->window_end ?? '18:00');
+        $this->c_weekends = (bool) $c->weekends;
+
+        // Escopo (Feature 2): selecao explicita, ou migra o alvo legado (server_id).
+        $ids = is_array($c->server_ids) ? array_map('intval', $c->server_ids) : [];
+        if ($ids === [] && $c->server_id !== null) {
+            $ids = [(int) $c->server_id];
+        }
+        $this->c_server_ids = $ids;
+        $this->c_server_scope = $ids !== [] ? 'selected' : 'all';
+
         $this->resetValidation();
         $this->showContactForm = true;
     }
@@ -408,11 +444,24 @@ class Alertas extends Component
             'c_phone' => 'required|string|max:30|regex:/^[0-9+\s()-]+$/',
             'c_email' => 'nullable|email|max:150',
             'c_min_level' => 'required|in:warning,critical',
-            'c_server_id' => 'nullable|integer|exists:servers,id',
-            'c_grupo' => 'nullable|string|max:60',
+            'c_window_mode' => 'required|in:24h,custom',
+            'c_window_start' => 'required_if:c_window_mode,custom|nullable|date_format:H:i',
+            'c_window_end' => 'required_if:c_window_mode,custom|nullable|date_format:H:i',
+            'c_server_scope' => 'required|in:all,selected',
+            'c_server_ids' => 'required_if:c_server_scope,selected|array',
+            'c_server_ids.*' => 'integer|exists:servers,id',
         ], [
             'c_phone.regex' => 'Telefone: use apenas numeros e + ( ) - espaco.',
+            'c_server_ids.required_if' => 'Escolha ao menos um servidor (ou selecione "todos").',
+            'c_window_start.required_if' => 'Defina o inicio da janela.',
+            'c_window_end.required_if' => 'Defina o fim da janela.',
         ]);
+
+        // Escopo: "selected" grava a lista; "all" zera (server_ids NULL = todos).
+        // O alvo legado (server_id/grupo) e limpo: a UI agora usa server_ids.
+        $ids = $this->c_server_scope === 'selected'
+            ? array_values(array_unique(array_map('intval', $this->c_server_ids)))
+            : null;
 
         AlertContact::query()->updateOrCreate(
             ['id' => $this->contactEditingId, 'account_id' => $this->accountId()],
@@ -422,9 +471,13 @@ class Alertas extends Component
                 'phone' => preg_replace('/\D/', '', $this->c_phone),
                 'email' => trim($this->c_email) !== '' ? trim($this->c_email) : null,
                 'min_level' => $this->c_min_level,
-                // server_id especifico tem precedencia; senao grupo; senao todos.
-                'server_id' => $this->c_server_id,
-                'grupo' => $this->c_server_id === null && trim($this->c_grupo) !== '' ? trim($this->c_grupo) : null,
+                'server_ids' => $ids,
+                'server_id' => null,
+                'grupo' => null,
+                'window_mode' => $this->c_window_mode,
+                'window_start' => $this->c_window_mode === 'custom' ? $this->c_window_start : null,
+                'window_end' => $this->c_window_mode === 'custom' ? $this->c_window_end : null,
+                'weekends' => $this->c_weekends,
                 'enabled' => true,
             ],
         );
