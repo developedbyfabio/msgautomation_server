@@ -332,21 +332,81 @@
                     </div>
                     <div></div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="mb-1 block text-xs font-medium">Cooldown (s) — re-notificacao de critical</label>
-                        <input type="number" wire:model="cooldown_s"
-                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                        @error('cooldown_s') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                    </div>
-                    <label class="flex items-end gap-2 pb-2 text-sm">
-                        <input type="checkbox" wire:model="enabled" class="rounded border-zinc-300 dark:border-zinc-700">
-                        Regra ligada
-                    </label>
-                </div>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" wire:model="enabled" class="rounded border-zinc-300 dark:border-zinc-700">
+                    Regra ligada
+                </label>
                 @if ($ehWatchdog)
                     <p class="text-[11px] text-zinc-400">Watchdog nao usa histerese: o gap (agora − ultimo reporte) ja e uma duracao.</p>
                 @endif
+
+                {{-- CADENCIA DE RE-AVISO por nivel --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <p class="mb-2 text-xs font-semibold">Cadencia de re-aviso (enquanto o incidente segue aberto)</p>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="flex items-center gap-2 text-sm">
+                                <input type="checkbox" wire:model.live="warning_repeat_on" class="rounded border-zinc-300 dark:border-zinc-700">
+                                Warning: re-avisar
+                            </label>
+                            <div class="mt-1 flex items-center gap-1 text-sm" @unless ($warning_repeat_on) hidden @endunless>
+                                a cada <input type="number" wire:model="warning_repeat_min" class="w-20 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800"> min
+                            </div>
+                            <p class="text-[11px] text-zinc-400" @if ($warning_repeat_on) hidden @endif>avisar 1 vez</p>
+                            @error('warning_repeat_min') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label class="flex items-center gap-2 text-sm">
+                                <input type="checkbox" wire:model.live="critical_repeat_on" class="rounded border-zinc-300 dark:border-zinc-700">
+                                Critical: re-avisar
+                            </label>
+                            <div class="mt-1 flex items-center gap-1 text-sm" @unless ($critical_repeat_on) hidden @endunless>
+                                a cada <input type="number" wire:model="critical_repeat_min" class="w-20 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800"> min
+                            </div>
+                            <p class="text-[11px] text-zinc-400" @if ($critical_repeat_on) hidden @endif>avisar 1 vez</p>
+                            @error('critical_repeat_min') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                {{-- MENSAGENS configuraveis (rotacao) + variaveis --}}
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <p class="mb-1 text-xs font-semibold">Mensagens do alerta</p>
+                    <p class="mb-2 text-[11px] text-zinc-400">
+                        Varias mensagens = rotacao: a 1a no disparo, a proxima a cada re-aviso (repete a ultima ao acabar).
+                        Variaveis: <code>{servidor}</code> <code>{metrica}</code> <code>{valor}</code> <code>{nivel}</code> <code>{particao}</code>.
+                        Vazio = texto padrao.
+                    </p>
+
+                    @foreach (['warning' => 'Warning', 'critical' => 'Critical'] as $lvl => $rot)
+                        @php $lista = $lvl === 'warning' ? $msgsWarning : $msgsCritical; @endphp
+                        <div class="mt-2">
+                            <p class="text-[11px] font-medium text-zinc-500">{{ $rot }}</p>
+                            @forelse ($lista as $i => $txt)
+                                <div class="mt-1 flex items-start gap-1" wire:key="msg-{{ $lvl }}-{{ $i }}">
+                                    <span class="pt-2 text-[11px] text-zinc-400">{{ $i + 1 }}.</span>
+                                    <input type="text" wire:model="{{ $lvl === 'warning' ? 'msgsWarning' : 'msgsCritical' }}.{{ $i }}"
+                                        placeholder="ex.: 🔴 {servidor} com {metrica} em {valor}"
+                                        class="w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                    <button type="button" wire:click="removeMsg('{{ $lvl }}', {{ $i }})" class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800" title="Remover">
+                                        <flux:icon icon="x-mark" variant="micro" />
+                                    </button>
+                                </div>
+                            @empty
+                                <p class="mt-1 text-[11px] text-zinc-400">Sem mensagem propria — usa o texto padrao.</p>
+                            @endforelse
+                            <button type="button" wire:click="addMsg('{{ $lvl }}')" class="mt-1 inline-flex items-center gap-1 text-xs text-emerald-700 hover:underline dark:text-emerald-400">
+                                <flux:icon icon="plus" variant="micro" /> Adicionar mensagem
+                            </button>
+                        </div>
+                    @endforeach
+
+                    <div class="mt-3">
+                        <label class="mb-1 block text-[11px] font-medium text-zinc-500">Mensagem de resolucao (1 vez)</label>
+                        <input type="text" wire:model="msgResolved" placeholder="ex.: ✅ {servidor}: {metrica} normalizou"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    </div>
+                </div>
             </form>
             <x-slot:footer>
                 <div class="flex justify-end gap-2">

@@ -5,6 +5,7 @@ namespace App\Servers;
 use App\Tenancy\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Servidores S2 — regra de alerta. server_id NULL = padrao GLOBAL da conta;
@@ -36,7 +37,8 @@ class AlertRule extends Model
     protected $fillable = [
         'account_id', 'server_id', 'metric', 'mount',
         'warning_threshold', 'critical_threshold',
-        'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s', 'enabled',
+        'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s',
+        'warning_repeat_s', 'critical_repeat_s', 'enabled',
     ];
 
     protected function casts(): array
@@ -48,8 +50,24 @@ class AlertRule extends Model
             'critical_for_s' => 'integer',
             'resolve_for_s' => 'integer',
             'cooldown_s' => 'integer',
+            'warning_repeat_s' => 'integer',
+            'critical_repeat_s' => 'integer',
             'enabled' => 'boolean',
         ];
+    }
+
+    /** Intervalo de RE-AVISO (s) para o nivel. null/0 = avisar 1 vez (nao repete). */
+    public function repeatSecondsFor(string $level): ?int
+    {
+        $v = $level === 'critical' ? $this->critical_repeat_s : $this->warning_repeat_s;
+
+        return ($v !== null && $v > 0) ? (int) $v : null;
+    }
+
+    /** Mensagens (rotacao) de um nivel/kind, em ordem. level: warning|critical|resolved. */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(AlertMessage::class, 'rule_id')->orderBy('position');
     }
 
     public function server(): BelongsTo

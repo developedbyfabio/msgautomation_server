@@ -4,6 +4,7 @@ namespace App\Livewire\Servidores;
 
 use App\Auth\AreaAccess;
 use App\Servers\AlertContact;
+use App\Servers\AlertMessage;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Server;
@@ -43,6 +44,24 @@ class Alertas extends Component
     public string $cooldown_s = '';
 
     public bool $enabled = true;
+
+    // Cadencia de re-aviso por nivel (UI em MINUTOS). "avisar 1 vez" = toggle off.
+    public bool $warning_repeat_on = false;
+
+    public string $warning_repeat_min = '60';
+
+    public bool $critical_repeat_on = false;
+
+    public string $critical_repeat_min = '30';
+
+    // Mensagens configuraveis (rotacao) por nivel + texto de resolucao.
+    /** @var array<int,string> */
+    public array $msgsWarning = [];
+
+    /** @var array<int,string> */
+    public array $msgsCritical = [];
+
+    public string $msgResolved = '';
 
     public ?int $confirmingRemoveId = null;
 
@@ -88,7 +107,42 @@ class Alertas extends Component
         $this->resolve_for_s = $r->resolve_for_s !== null ? (string) $r->resolve_for_s : '';
         $this->cooldown_s = (string) $r->cooldown_s;
         $this->enabled = (bool) $r->enabled;
+
+        // Cadencia de re-aviso (segundos no banco -> minutos na UI).
+        $this->warning_repeat_on = $r->warning_repeat_s !== null && $r->warning_repeat_s > 0;
+        $this->warning_repeat_min = $this->warning_repeat_on ? (string) (int) round($r->warning_repeat_s / 60) : '60';
+        $this->critical_repeat_on = $r->critical_repeat_s !== null && $r->critical_repeat_s > 0;
+        $this->critical_repeat_min = $this->critical_repeat_on ? (string) (int) round($r->critical_repeat_s / 60) : '30';
+
+        // Mensagens (rotacao) + resolucao.
+        $msgs = AlertMessage::withoutAccountScope()->where('rule_id', $r->id)->orderBy('position')->get();
+        $this->msgsWarning = $msgs->where('level', 'warning')->pluck('text')->values()->all();
+        $this->msgsCritical = $msgs->where('level', 'critical')->pluck('text')->values()->all();
+        $this->msgResolved = (string) ($msgs->firstWhere('level', 'resolved')->text ?? '');
+
         $this->resetValidation();
+    }
+
+    // ---- editor de mensagens (add/remove linha) --------------------------------
+
+    public function addMsg(string $level): void
+    {
+        if ($level === 'warning') {
+            $this->msgsWarning[] = '';
+        } elseif ($level === 'critical') {
+            $this->msgsCritical[] = '';
+        }
+    }
+
+    public function removeMsg(string $level, int $i): void
+    {
+        if ($level === 'warning') {
+            unset($this->msgsWarning[$i]);
+            $this->msgsWarning = array_values($this->msgsWarning);
+        } elseif ($level === 'critical') {
+            unset($this->msgsCritical[$i]);
+            $this->msgsCritical = array_values($this->msgsCritical);
+        }
     }
 
     public function closeEdit(): void
@@ -111,7 +165,8 @@ class Alertas extends Component
             'warning_for_s' => "required|integer|min:0|max:{$maxFor}",
             'critical_for_s' => "required|integer|min:0|max:{$maxFor}",
             'resolve_for_s' => "nullable|integer|min:0|max:{$maxFor}",
-            'cooldown_s' => 'required|integer|min:0|max:86400',
+            'warning_repeat_min' => 'required_if:warning_repeat_on,true|nullable|integer|min:1|max:1440',
+            'critical_repeat_min' => 'required_if:critical_repeat_on,true|nullable|integer|min:1|max:1440',
         ], [
             'warning_threshold.lte' => 'Warning deve ser menor ou igual ao critical.',
             'warning_for_s.max' => "Maximo {$maxFor}s (limite do buffer de avaliacao).",
@@ -121,11 +176,43 @@ class Alertas extends Component
         // resolve_for_s vazio -> NULL (usa warning_for_s no avaliador).
         $dados['resolve_for_s'] = $this->resolve_for_s === '' ? null : (int) $this->resolve_for_s;
 
+        // Cadencia de re-aviso: toggle off = NULL (avisar 1 vez); on = minutos -> segundos.
+        $dados['warning_repeat_s'] = $this->warning_repeat_on ? max(60, (int) $this->warning_repeat_min * 60) : null;
+        $dados['critical_repeat_s'] = $this->critical_repeat_on ? max(60, (int) $this->critical_repeat_min * 60) : null;
+
         $r = AlertRule::query()->findOrFail($this->editingId);
         $r->update($dados + ['enabled' => $this->enabled]);
 
+        // Regrava as mensagens (rotacao) e o texto de resolucao da regra.
+        $this->salvarMensagens($r);
+
         $this->closeEdit();
         $this->dispatch('toast', message: 'Regra salva.');
+    }
+
+    /** Regrava server_alert_messages da regra a partir do estado do form (ignora vazias). */
+    private function salvarMensagens(AlertRule $r): void
+    {
+        AlertMessage::withoutAccountScope()->where('rule_id', $r->id)->delete();
+
+        $criar = function (string $level, array $textos) use ($r) {
+            $pos = 0;
+            foreach ($textos as $t) {
+                $t = trim((string) $t);
+                if ($t === '') {
+                    continue;
+                }
+                AlertMessage::withoutAccountScope()->create([
+                    'account_id' => $r->account_id, 'rule_id' => $r->id,
+                    'level' => $level, 'position' => $pos++, 'text' => mb_substr($t, 0, 1000),
+                ]);
+            }
+        };
+        $criar('warning', $this->msgsWarning);
+        $criar('critical', $this->msgsCritical);
+        if (trim($this->msgResolved) !== '') {
+            $criar('resolved', [$this->msgResolved]);
+        }
     }
 
     public function toggleEnabled(int $id): void

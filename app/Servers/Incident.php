@@ -32,7 +32,7 @@ class Incident extends Model
         'account_id', 'server_id', 'rule_id', 'metric', 'mount',
         'level', 'status', 'open_key', 'value_at_fire', 'detail',
         'started_at', 'acknowledged_at', 'acknowledged_by', 'resolved_at',
-        'notified_firing_at', 'notified_resolved_at', 'notified_level', 'last_notified_at',
+        'notified_firing_at', 'notified_resolved_at', 'notified_level', 'last_notified_at', 'notify_count',
     ];
 
     protected function casts(): array

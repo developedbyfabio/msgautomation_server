@@ -156,7 +156,7 @@ class ServersCanalTest extends TestCase
 
         $this->abrirCpuCritical();
         $this->evaluateCommand(); // notifica abertura
-        Http::assertSent(fn ($req) => str_contains($req['text'], 'Alerta'));
+        Http::assertSent(fn ($req) => str_contains($req['text'], 'srv-a')); // texto por-incidente
 
         // Normaliza -> resolve -> notifica resolucao.
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm2']], 200)]);
@@ -177,8 +177,8 @@ class ServersCanalTest extends TestCase
     public function test_critical_nao_reconhecido_renotifica_apos_cooldown(): void
     {
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
-        // Cooldown curto para o teste.
-        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['cooldown_s' => 60]);
+        // Cadencia de re-aviso curta para o teste (critical a cada 60s).
+        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['critical_repeat_s' => 60]);
         $this->contato();
 
         $this->abrirCpuCritical();
@@ -202,7 +202,7 @@ class ServersCanalTest extends TestCase
     public function test_warning_nunca_renotifica(): void
     {
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
-        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['cooldown_s' => 1]);
+        // warning_repeat_s NULL (default) = avisar 1 vez -> warning nunca repete.
         $this->contato();
 
         $buffer = app(MetricsBuffer::class);
@@ -229,14 +229,15 @@ class ServersCanalTest extends TestCase
     public function test_reconhecido_nao_renotifica_mesmo_critical(): void
     {
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
-        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['cooldown_s' => 60]);
+        // Re-aviso critical a cada 60s: o ack deve silenciar mesmo com o intervalo vencido.
+        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['critical_repeat_s' => 60]);
         $this->contato();
 
         $this->abrirCpuCritical();
         $this->evaluateCommand();
         $inc = Incident::withoutAccountScope()->sole();
 
-        // Dono reconhece; passa o cooldown; a condicao persiste.
+        // Dono reconhece; passa o intervalo de re-aviso; a condicao persiste.
         app(IncidentManager::class)->acknowledge($inc, $this->donoId());
         $this->travel(120)->seconds();
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);

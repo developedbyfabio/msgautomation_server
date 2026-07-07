@@ -7,10 +7,12 @@ use App\Mail\ServersAlertFallback;
 use App\Models\Channel;
 use App\Models\SystemEvent;
 use App\Servers\AlertContact;
+use App\Servers\AlertMessageResolver;
 use App\Servers\AlertRule;
 use App\Servers\Incident;
 use App\Tenancy\AccountContext;
 use App\Whatsapp\Exceptions\WhatsappSendException;
+use App\Whatsapp\SystemConversation;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -61,8 +63,16 @@ class SendServerAlert implements ShouldQueue
                 $q->where(fn ($q) => $q->whereNull('resolved_at') // abertura/escalada
                     ->where(fn ($q) => $q->whereNull('notified_level')->orWhereColumn('notified_level', '!=', 'level')))
                     ->orWhere(fn ($q) => $q->whereNotNull('resolved_at')->whereNull('notified_resolved_at')) // resolucao
-                    ->orWhere(fn ($q) => $q->where('status', Incident::STATUS_FIRING)->where('level', 'critical') // re-notificacao
-                        ->whereColumn('notified_level', 'level'));
+                    // candidato a re-aviso: firing ja notificado CUJA regra tem cadencia
+                    // (>0) para o nivel do incidente. Evita job no-op perpetuo em
+                    // incidentes "avisar 1 vez". O intervalo exato e checado no pendingReminders.
+                    ->orWhere(fn ($q) => $q->where('status', Incident::STATUS_FIRING)
+                        ->whereColumn('notified_level', 'level')
+                        ->whereExists(fn ($sub) => $sub->from('server_alert_rules')
+                            ->whereColumn('server_alert_rules.id', 'server_incidents.rule_id')
+                            ->where(fn ($w) => $w
+                                ->where(fn ($a) => $a->where('server_incidents.level', 'warning')->where('warning_repeat_s', '>', 0))
+                                ->orWhere(fn ($a) => $a->where('server_incidents.level', 'critical')->where('critical_repeat_s', '>', 0)))));
             })->exists();
     }
 
@@ -84,6 +94,11 @@ class SendServerAlert implements ShouldQueue
             if ($opens->isEmpty() && $resolved->isEmpty() && $reminders->isEmpty()) {
                 return;
             }
+
+            // Conversa de sistema (Atendimento): re-avisos aparecem com o MESMO
+            // texto rotacionado. Abertura/escalada/resolucao ja foram gravadas
+            // pelo AlertNotifier na transicao (nao re-gravar aqui).
+            $this->registrarReavisosNaConversa($reminders);
 
             // Envia por destinatario (roteamento por severidade+alvo) e balde.
             foreach ($contacts as $contact) {
@@ -114,18 +129,24 @@ class SendServerAlert implements ShouldQueue
             ->with('server')->get();
     }
 
-    /** Re-notificacao: so critical firing (nao-reconhecido) com cooldown vencido. */
+    /**
+     * Re-aviso conforme a CADENCIA da regra por nivel (warning ou critical): so
+     * incidentes FIRING (nao-reconhecidos: ack silencia) ja notificados, cuja
+     * regra define re-aviso (repeat_s > 0) e cujo intervalo venceu. NULL/0 no
+     * nivel = "avisar 1 vez" -> nunca entra aqui.
+     */
     private function pendingReminders()
     {
         return Incident::withoutAccountScope()->where('account_id', $this->accountId)
-            ->where('status', Incident::STATUS_FIRING)->where('level', 'critical')
+            ->where('status', Incident::STATUS_FIRING)
             ->whereColumn('notified_level', 'level')
             ->whereNotNull('last_notified_at')
             ->with(['server'])->get()
             ->filter(function (Incident $i) {
-                $cooldown = (int) (AlertRule::withoutAccountScope()->whereKey($i->rule_id)->value('cooldown_s') ?? 1800);
+                $rule = $i->rule_id ? AlertRule::withoutAccountScope()->find($i->rule_id) : null;
+                $repeat = $rule?->repeatSecondsFor((string) $i->level);
 
-                return $i->last_notified_at->addSeconds($cooldown)->isPast();
+                return $repeat !== null && $i->last_notified_at->addSeconds($repeat)->isPast();
             });
     }
 
@@ -161,53 +182,67 @@ class SendServerAlert implements ShouldQueue
         $this->contarRajada();
     }
 
-    /** Texto agrupado; acima de storm_cap vira resumo (B3). */
+    /**
+     * Texto AGRUPADO por contato: cada incidente vira a SUA mensagem configurada
+     * (rotacao por notify_count + variaveis, via AlertMessageResolver); acima de
+     * storm_cap vira resumo (B3). Mantem o agrupamento anti-tempestade — o texto
+     * de cada linha e o mesmo que vai pra conversa de sistema.
+     */
     private function montarMensagem(string $balde, $incidents): string
     {
         $cap = (int) config('servers.storm_cap', 10);
-        $cabecalho = match ($balde) {
-            'abertura' => '🔴 Alerta de infraestrutura',
-            'reincidencia' => '🔴 Incidente crítico ainda aberto',
-            'resolucao' => '✅ Incidente resolvido',
-            default => 'Alerta',
-        };
 
         if ($incidents->count() > $cap) {
             $criticos = $incidents->where('level', 'critical')->count();
+            $cabecalho = $balde === 'resolucao' ? '✅ Incidentes resolvidos' : '🔴 Alerta de infraestrutura';
 
             return $cabecalho." — {$incidents->count()} servidores afetados"
                 .($criticos ? " ({$criticos} críticos)" : '')
                 .".\nVeja a lista completa em Servidores › Incidentes.";
         }
 
-        $linhas = $incidents->map(function (Incident $i) {
-            $nome = $i->server?->name ?? ('#'.$i->server_id);
-            $metrica = AlertRule::LABELS[$i->metric] ?? $i->metric;
-            $particao = $i->mount ? " ({$i->mount})" : '';
-            $valor = $i->metric === 'watchdog'
-                ? ((int) $i->value_at_fire).'s sem reportar'
-                : ($i->value_at_fire !== null ? $i->value_at_fire.($i->metric === 'load' ? '/núcleo' : '%') : '');
+        $resolver = app(AlertMessageResolver::class);
 
-            return "• {$nome}: {$metrica}{$particao} {$i->level}".($valor ? " ({$valor})" : '');
-        })->implode("\n");
-
-        return $cabecalho."\n".$linhas;
+        return $incidents->map(fn (Incident $i) => $balde === 'resolucao'
+            ? $resolver->resolved($i)
+            : $resolver->firing($i)   // usa o notify_count atual do incidente (rotacao)
+        )->implode("\n");
     }
 
     private function marcarNotificados($opens, $resolved, $reminders): void
     {
+        // Abertura/escalada: marca o nivel notificado e AVANCA a rotacao.
         foreach ($opens as $i) {
             $i->forceFill([
                 'notified_level' => $i->level,
                 'notified_firing_at' => $i->notified_firing_at ?? now(),
                 'last_notified_at' => now(),
+                'notify_count' => (int) $i->notify_count + 1,
             ])->save();
         }
+        // Re-aviso: avanca a rotacao (proxima mensagem da lista).
         foreach ($reminders as $i) {
-            $i->forceFill(['last_notified_at' => now()])->save();
+            $i->forceFill([
+                'last_notified_at' => now(),
+                'notify_count' => (int) $i->notify_count + 1,
+            ])->save();
         }
         foreach ($resolved as $i) {
             $i->forceFill(['notified_resolved_at' => now(), 'last_notified_at' => now()])->save();
+        }
+    }
+
+    /** Grava os re-avisos na conversa de sistema (texto rotacionado atual). */
+    private function registrarReavisosNaConversa($reminders): void
+    {
+        $conv = app(SystemConversation::class);
+        $resolver = app(AlertMessageResolver::class);
+        foreach ($reminders as $i) {
+            try {
+                $conv->record($i->account_id, $resolver->firing($i), 'srv-alert:'.$i->id.':reaviso:'.$i->notify_count);
+            } catch (\Throwable) {
+                // best-effort: a conversa e so exibicao
+            }
         }
     }
 

@@ -54,34 +54,20 @@ class AlertNotifier
     private function registrarNaConversa(Incident $incident, string $transition): void
     {
         try {
+            // MESMO texto configurado que vai pro WhatsApp (rotacao + variaveis):
+            // firing/escalated usam a mensagem do nivel (indice = notify_count);
+            // resolved usa o texto de resolucao.
+            $resolver = app(AlertMessageResolver::class);
+            $texto = $transition === 'resolved' ? $resolver->resolved($incident) : $resolver->firing($incident);
+
             app(SystemConversation::class)->record(
                 $incident->account_id,
-                $this->textoConversa($incident, $transition),
+                $texto,
                 'srv-alert:'.$incident->id.':'.$transition,
             );
         } catch (\Throwable) {
             // best-effort: a conversa e so exibicao; nao pode quebrar o alerta
         }
-    }
-
-    /** Texto humano do alerta (servidor, metrica, particao, nivel, valor, transicao). */
-    private function textoConversa(Incident $incident, string $transition): string
-    {
-        $server = $incident->server()->withoutGlobalScopes()->first();
-        $nome = $server?->name ?? ('#'.$incident->server_id);
-        $metrica = AlertRule::LABELS[$incident->metric] ?? $incident->metric;
-        $particao = $incident->mount !== null ? " ({$incident->mount})" : '';
-        $valor = $incident->metric === 'watchdog'
-            ? ((int) $incident->value_at_fire).'s sem reportar'
-            : ($incident->value_at_fire !== null ? $incident->value_at_fire.($incident->metric === 'load' ? '/nucleo' : '%') : '');
-
-        return match ($transition) {
-            'resolved' => "✅ {$nome}: {$metrica}{$particao} normalizado",
-            'escalated' => "🔴 {$nome}: {$metrica}{$particao} escalou para CRITICAL"
-                .($valor ? " ({$valor})" : ''),
-            default => ($incident->level === 'critical' ? '🔴' : '🟡')
-                ." {$nome}: {$metrica}{$particao} {$incident->level}".($valor ? " ({$valor})" : ''),
-        };
     }
 
     /** SystemEvent com ref unica por (incidente, transicao) — best-effort. */
