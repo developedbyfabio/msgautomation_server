@@ -78,8 +78,8 @@ class ServersAlertaNoAtendimentoTest extends TestCase
         $this->assertSame($this->account->id, $msg->account_id);
         $this->assertFalse((bool) $msg->from_me);
         $this->assertStringContainsString('srv-a', $msg->text);   // servidor
-        $this->assertStringContainsString('CPU', $msg->text);     // metrica
-        $this->assertStringContainsString('critical', $msg->text); // nivel
+        $this->assertStringContainsString('CPU', $msg->text);      // metrica (pt-BR)
+        $this->assertStringContainsString('crítico', $msg->text);  // nivel (pt-BR)
 
         // Resolucao tambem grava.
         $inc->forceFill(['status' => 'resolved', 'resolved_at' => now()])->save();

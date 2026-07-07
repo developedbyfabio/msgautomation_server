@@ -9,6 +9,7 @@ use App\Servers\AlertMessageResolver;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Server;
+use App\Servers\ServerAlertSetting;
 use App\Tenancy\AccountContext;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -85,10 +86,35 @@ class Alertas extends Component
 
     public ?int $confirmingContactDeleteId = null;
 
+    // Separador dos avisos agrupados numa mesma mensagem de WhatsApp.
+    public string $groupSeparator = "\n";
+
     public function mount(): void
     {
         // Padroes garantidos de forma lazy (contas novas; idempotente).
         AlertRuleDefaults::ensureFor($this->accountId());
+        $this->groupSeparator = ServerAlertSetting::separatorFor($this->accountId());
+    }
+
+    /** Presets do separador (o textarea segue editavel para personalizar). */
+    public function setSeparadorPreset(string $preset): void
+    {
+        $this->groupSeparator = match ($preset) {
+            'branco' => "\n\n",
+            'tracos' => "\n----------\n",
+            'asteriscos' => "\n**********\n",
+            default => "\n", // quebra de linha simples
+        };
+    }
+
+    public function salvarSeparador(): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        ServerAlertSetting::updateOrCreate(
+            ['account_id' => $this->accountId()],
+            ['group_separator' => $this->groupSeparator],
+        );
+        $this->dispatch('toast', message: 'Separador dos avisos salvo.');
     }
 
     // ---- edicao ---------------------------------------------------------------

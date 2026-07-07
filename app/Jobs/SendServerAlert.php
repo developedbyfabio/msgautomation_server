@@ -10,6 +10,7 @@ use App\Servers\AlertContact;
 use App\Servers\AlertMessageResolver;
 use App\Servers\AlertRule;
 use App\Servers\Incident;
+use App\Servers\ServerAlertSetting;
 use App\Tenancy\AccountContext;
 use App\Whatsapp\Exceptions\WhatsappSendException;
 use App\Whatsapp\SystemConversation;
@@ -205,10 +206,14 @@ class SendServerAlert implements ShouldQueue
 
         $resolver = app(AlertMessageResolver::class);
 
+        // Separador EDITAVEL entre avisos agrupados (linha em branco, tracos, etc.);
+        // com um unico aviso, o separador nao aparece (implode so junta 2+).
+        $separador = ServerAlertSetting::separatorFor($this->accountId);
+
         return $incidents->map(fn (Incident $i) => $balde === 'resolucao'
             ? $resolver->resolved($i)
             : $resolver->firing($i)   // usa o notify_count atual do incidente (rotacao)
-        )->implode("\n");
+        )->implode($separador);
     }
 
     private function marcarNotificados($opens, $resolved, $reminders): void

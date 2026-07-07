@@ -103,7 +103,8 @@ class ServersReavisoEVariaveisTest extends TestCase
 
         (new SendServerAlert($this->account->id))->handle(app(ProviderRegistry::class));
 
-        Http::assertSent(fn ($req) => $req['text'] === '🔴 DEV-YELLL (10.40.132.19, grupo YELLL): Disco (/) em 97%');
+        // {metrica} renderiza em pt-BR: disk -> "disco".
+        Http::assertSent(fn ($req) => $req['text'] === '🔴 DEV-YELLL (10.40.132.19, grupo YELLL): disco (/) em 97%');
     }
 
     // ---- P3: mensagem padrao pre-preenchida e editavel na UI -------------------

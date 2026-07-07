@@ -14,10 +14,47 @@
             </select>
         </div>
 
-        <div class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-            <flux:icon icon="bell-slash" variant="micro" class="inline size-3.5" />
-            <strong>Modo silencioso (S2):</strong> as transicoes gravam incidente e aparecem nos <strong>Logs</strong>
-            como "teria notificado" — nenhum WhatsApp e enviado. O canal liga na proxima fatia, depois da calibracao.
+        @if ($notificacoesLigadas)
+            <div class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                <flux:icon icon="bell-alert" variant="micro" class="inline size-3.5" />
+                <strong>Canal ligado:</strong> quando um servidor entra em problema, o alerta sai no WhatsApp e
+                <strong>re-avisa pela cadencia da regra</strong> ate normalizar (quando avisa que resolveu).
+            </div>
+        @else
+            <div class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                <flux:icon icon="bell-slash" variant="micro" class="inline size-3.5" />
+                <strong>Modo silencioso:</strong> as transicoes gravam incidente e aparecem nos <strong>Logs</strong> e no
+                Atendimento — nenhum WhatsApp e enviado (ligue <code>SERVERS_NOTIFICATIONS_ENABLED</code> para notificar).
+            </div>
+        @endif
+
+        {{-- Separador dos avisos agrupados numa mesma mensagem de WhatsApp --}}
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">Separador dos avisos agrupados</h2>
+                <x-info-tip text="Quando varios avisos vao na MESMA mensagem de WhatsApp (anti-tempestade), este texto separa um do outro. Com um aviso so, o separador nao aparece." />
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                <span class="text-[11px] text-zinc-500">Presets:</span>
+                <button type="button" wire:click="setSeparadorPreset('linha')" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">Quebra de linha</button>
+                <button type="button" wire:click="setSeparadorPreset('branco')" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">Linha em branco</button>
+                <button type="button" wire:click="setSeparadorPreset('tracos')" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">Traços</button>
+                <button type="button" wire:click="setSeparadorPreset('asteriscos')" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">Asteriscos</button>
+            </div>
+            <textarea wire:model.live="groupSeparator" rows="2" placeholder="(uma quebra de linha)"
+                class="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800"></textarea>
+            <p class="mt-1 text-[11px] text-zinc-400">Personalize a vontade (Enter = quebra de linha). Vazio = uma quebra de linha (padrao).</p>
+
+            <div class="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                <span class="text-[11px] text-zinc-400">Previa (2 avisos agrupados):</span>
+                <div class="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{!! nl2br(e('🔴 Servidor A (10.0.0.1): disco (/) crítico (95%)'.$groupSeparator.'🟡 Servidor B (10.0.0.2): memória aviso (88%)')) !!}</div>
+            </div>
+
+            <div class="mt-2 flex justify-end">
+                <button type="button" wire:click="salvarSeparador" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
+                    <flux:icon icon="check" variant="micro" /> Salvar separador
+                </button>
+            </div>
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white divide-y divide-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:divide-zinc-800">

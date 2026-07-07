@@ -157,7 +157,8 @@ class ServersMensagensConfiguraveisTest extends TestCase
         $this->abrirCritical();
         $this->tick();
 
-        Http::assertSent(fn ($req) => $req['text'] === 'srv-a esta com CPU em 97% (critical)');
+        // Valores em pt-BR: {metrica} cpu -> "CPU", {nivel} critical -> "crítico".
+        Http::assertSent(fn ($req) => $req['text'] === 'srv-a esta com CPU em 97% (crítico)');
     }
 
     public function test_rotacao_avanca_e_repete_a_ultima(): void
@@ -236,7 +237,7 @@ class ServersMensagensConfiguraveisTest extends TestCase
         $texto = app(AlertMessageResolver::class)->firing($inc);
         $this->assertStringContainsString('srv-a', $texto);
         $this->assertStringContainsString('92%', $texto);
-        $this->assertStringContainsString('critical', $texto);
+        $this->assertStringContainsString('crítico', $texto); // {nivel} em pt-BR
     }
 
     // ---- UI grava cadencia + mensagens -----------------------------------------

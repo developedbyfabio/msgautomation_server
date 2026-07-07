@@ -16,15 +16,32 @@ namespace App\Servers;
  */
 class AlertMessageResolver
 {
-    /** Rotulos das variaveis exibidos na UI. */
+    /** Rotulos das variaveis exibidos na UI (valores saem em portugues). */
     public const VARIAVEIS = [
         '{servidor}' => 'nome do servidor',
         '{ip}' => 'IP / host do servidor',
         '{grupo}' => 'grupo do servidor',
-        '{metrica}' => 'CPU / RAM / Disco / ...',
+        '{metrica}' => 'CPU / memória / swap / disco / carga / sem reportar',
         '{valor}' => 'valor atual (ex.: 92%)',
-        '{nivel}' => 'warning / critical',
+        '{nivel}' => 'aviso / crítico',
         '{particao}' => 'partição (só disco)',
+    ];
+
+    /** Valor pt-BR de {metrica} na mensagem (distinto dos rotulos de regra da tela). */
+    public const METRIC_PT = [
+        'cpu' => 'CPU',
+        'ram' => 'memória',
+        'mem' => 'memória',
+        'swap' => 'swap',
+        'disk' => 'disco',
+        'load' => 'carga',
+        'watchdog' => 'sem reportar',
+    ];
+
+    /** Valor pt-BR de {nivel} na mensagem. */
+    public const LEVEL_PT = [
+        'warning' => 'aviso',
+        'critical' => 'crítico',
     ];
 
     /** Template padrao EDITAVEL de disparo (com placeholders; a UI mostra e o dono edita). */
@@ -91,9 +108,9 @@ class AlertMessageResolver
             '{servidor}' => $server?->name ?? ('#'.$incident->server_id),
             '{ip}' => (string) ($server?->host ?? ''),      // campo "Host / IP" do servidor
             '{grupo}' => (string) ($server?->grupo ?? ''),
-            '{metrica}' => AlertRule::LABELS[$incident->metric] ?? $incident->metric,
+            '{metrica}' => self::METRIC_PT[$incident->metric] ?? (AlertRule::LABELS[$incident->metric] ?? $incident->metric),
             '{valor}' => $this->valor($incident),
-            '{nivel}' => $incident->level,
+            '{nivel}' => self::LEVEL_PT[$incident->level] ?? $incident->level,
             '{particao}' => (string) $incident->mount,
         ]);
     }
