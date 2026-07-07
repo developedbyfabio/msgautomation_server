@@ -2,12 +2,18 @@
 
 namespace App\Kanban;
 
+use App\Events\AiDecisionRecorded;
+use App\Events\AutoReplySent;
+use App\Events\FlowNodeReached;
+use App\Events\IncomingMessageStored;
+use App\Events\ManualMessageSent;
 use App\Models\Board;
 use App\Models\BoardRule;
 use App\Models\Card;
 use App\Models\CardTransition;
 use App\Models\Contact;
 use App\Tenancy\AccountContext;
+use App\Whatsapp\SystemConversation;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
@@ -29,16 +35,14 @@ class BoardEngine
 {
     /** Tipos de evento estaveis (usados em board_rules e card_transitions). */
     public const EVENT_TYPES = [
-        \App\Events\IncomingMessageStored::class => 'mensagem_recebida',
-        \App\Events\AutoReplySent::class => 'resposta_enviada',
-        \App\Events\ManualMessageSent::class => 'envio_manual',
-        \App\Events\FlowNodeReached::class => 'fluxo_no',
-        \App\Events\AiDecisionRecorded::class => 'ia_decisao',
+        IncomingMessageStored::class => 'mensagem_recebida',
+        AutoReplySent::class => 'resposta_enviada',
+        ManualMessageSent::class => 'envio_manual',
+        FlowNodeReached::class => 'fluxo_no',
+        AiDecisionRecorded::class => 'ia_decisao',
     ];
 
-    public function __construct(private AccountContext $context)
-    {
-    }
+    public function __construct(private AccountContext $context) {}
 
     /**
      * Aplica um evento ao board default da conta.
@@ -55,8 +59,8 @@ class BoardEngine
      */
     public function apply(string $eventType, int $accountId, string $remoteJid, int $eventRef, ?string $direction = null, array $meta = []): void
     {
-        if (str_ends_with($remoteJid, '@g.us')) {
-            return; // Kanban e de conversas com PESSOAS (grupos fora, como no robo)
+        if (str_ends_with($remoteJid, '@g.us') || SystemConversation::isSystemJid($remoteJid)) {
+            return; // Kanban e de conversas com PESSOAS (grupos e sistema fora, como no robo)
         }
 
         $this->context->runAs($accountId, function () use ($eventType, $remoteJid, $eventRef, $direction, $meta) {
@@ -129,8 +133,8 @@ class BoardEngine
      */
     public function moveToColumnSlug(string $slug, int $accountId, string $remoteJid, string $eventType, int $eventRef, string $cause = 'handoff'): void
     {
-        if (str_ends_with($remoteJid, '@g.us')) {
-            return; // Kanban e de conversas com pessoas
+        if (str_ends_with($remoteJid, '@g.us') || SystemConversation::isSystemJid($remoteJid)) {
+            return; // Kanban e de conversas com pessoas (grupos e sistema fora)
         }
 
         $this->context->runAs($accountId, function () use ($slug, $remoteJid, $eventType, $eventRef, $cause) {

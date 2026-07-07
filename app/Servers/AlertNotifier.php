@@ -3,30 +3,35 @@
 namespace App\Servers;
 
 use App\Models\SystemEvent;
+use App\Whatsapp\SystemConversation;
 
 /**
  * Servidores — acao de notificacao por transicao de incidente.
  *
- * MODO SILENCIOSO (flag servers.notifications_enabled OFF, default S2): cada
- * transicao registra UM SystemEvent "teria notificado..." (ref idempotente por
- * incidente+transicao) e marca notified_firing_at/notified_resolved_at — para o
- * dono calibrar limiares vendo nos Logs o que sairia, SEM enviar nada.
+ * SEMPRE (F2, independente do flag): grava a transicao como mensagem na conversa
+ * de SISTEMA "Alertas de Infraestrutura" da conta — historico visivel no
+ * Atendimento (mesmo mudo: vira o registro do que "teria sido enviado"). Isso
+ * NAO envia WhatsApp e NAO toca o pipeline (a conversa de sistema e isolada).
+ *
+ * MODO SILENCIOSO (flag servers.notifications_enabled OFF, default S2): alem da
+ * conversa, registra UM SystemEvent "teria notificado..." (ref idempotente) e
+ * marca notified_firing_at/notified_resolved_at — para calibrar sem enviar.
  *
  * MODO CANAL (flag ON, S3): a transicao NAO envia nem loga aqui. O ENVIO e
  * responsabilidade do job SendServerAlert, despachado pelo servers:evaluate ao
- * fim do tick (fila, agrupado por conta). O "pendente" e o proprio estado
- * persistido do incidente (notified_level != level; notified_resolved_at NULL)
- * — o job envia e marca. Assim o envio nunca ocorre no request nem dentro da
- * avaliacao, e um rack caindo vira UMA mensagem agrupada, nao dezenas.
- * NENHUMA referencia a transporte/Http aqui, de proposito.
+ * fim do tick (fila, agrupado por conta). Assim o envio nunca ocorre no request
+ * nem dentro da avaliacao. NENHUMA referencia a transporte/Http aqui.
  */
 class AlertNotifier
 {
     /** $transition: firing | escalated | resolved. */
     public function transition(Incident $incident, string $transition): void
     {
-        // Modo canal (ON): a transicao nao faz nada aqui — o job SendServerAlert
-        // (despachado pelo command) le o estado pendente, envia e marca.
+        // F2 — grava na conversa de sistema em TODA transicao (mudo ou nao).
+        // Direto (record), sem evento de dominio: nao dispara robo/Kanban.
+        $this->registrarNaConversa($incident, $transition);
+
+        // Modo canal (ON): o envio real fica com o job SendServerAlert.
         if (config('servers.notifications_enabled')) {
             return;
         }
@@ -40,6 +45,43 @@ class AlertNotifier
         if ($transition === 'resolved' && $incident->notified_resolved_at === null) {
             $incident->forceFill(['notified_resolved_at' => now()])->save();
         }
+    }
+
+    /**
+     * F2 — grava a transicao como mensagem na conversa de sistema (idempotente
+     * por incidente+transicao). Best-effort: nunca derruba a avaliacao.
+     */
+    private function registrarNaConversa(Incident $incident, string $transition): void
+    {
+        try {
+            app(SystemConversation::class)->record(
+                $incident->account_id,
+                $this->textoConversa($incident, $transition),
+                'srv-alert:'.$incident->id.':'.$transition,
+            );
+        } catch (\Throwable) {
+            // best-effort: a conversa e so exibicao; nao pode quebrar o alerta
+        }
+    }
+
+    /** Texto humano do alerta (servidor, metrica, particao, nivel, valor, transicao). */
+    private function textoConversa(Incident $incident, string $transition): string
+    {
+        $server = $incident->server()->withoutGlobalScopes()->first();
+        $nome = $server?->name ?? ('#'.$incident->server_id);
+        $metrica = AlertRule::LABELS[$incident->metric] ?? $incident->metric;
+        $particao = $incident->mount !== null ? " ({$incident->mount})" : '';
+        $valor = $incident->metric === 'watchdog'
+            ? ((int) $incident->value_at_fire).'s sem reportar'
+            : ($incident->value_at_fire !== null ? $incident->value_at_fire.($incident->metric === 'load' ? '/nucleo' : '%') : '');
+
+        return match ($transition) {
+            'resolved' => "✅ {$nome}: {$metrica}{$particao} normalizado",
+            'escalated' => "🔴 {$nome}: {$metrica}{$particao} escalou para CRITICAL"
+                .($valor ? " ({$valor})" : ''),
+            default => ($incident->level === 'critical' ? '🔴' : '🟡')
+                ." {$nome}: {$metrica}{$particao} {$incident->level}".($valor ? " ({$valor})" : ''),
+        };
     }
 
     /** SystemEvent com ref unica por (incidente, transicao) — best-effort. */

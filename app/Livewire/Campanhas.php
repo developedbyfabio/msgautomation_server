@@ -2,16 +2,23 @@
 
 namespace App\Livewire;
 
+use App\Auth\AreaAccess;
+use App\Models\AutoReplySetting;
 use App\Models\BoardColumn;
 use App\Models\CampaignTarget;
 use App\Models\Contact;
 use App\Models\ProactiveCampaign;
 use App\Models\Tag;
+use App\Models\Variable;
 use App\Tenancy\AccountContext;
 use App\Whatsapp\AutoReply\RuleResponder;
 use App\Whatsapp\Proactive\AgendaBuilder;
 use App\Whatsapp\Proactive\AudienceResolver;
+use App\Whatsapp\Proactive\CampaignTemplateCatalog;
+use App\Whatsapp\Proactive\InstantiateCampaignTemplate;
+use App\Whatsapp\Proactive\OptoutFooterGuard;
 use App\Whatsapp\Secrets\SecretVault;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -32,25 +39,40 @@ class Campanhas extends Component
 {
     // Form (draft).
     public bool $showForm = false;
+
     public ?int $editingId = null;
+
     public string $cName = '';
+
     public string $cMessage = '';
+
     public string $cFooter = ''; // P-4: instrucao de saida (rodape OBRIGATORIO)
+
     public string $cAudienceType = 'tags'; // tags | coluna_kanban | contatos
+
     /** @var array<int,int> */
     public array $cTagIds = [];
+
     public ?int $cColumnId = null;
+
     /** @var array<int,int> */
     public array $cContactIds = [];
+
     public string $cContactSearch = '';
+
     public string $cStartAt = ''; // datetime-local opcional
 
     // Preview / aprovacao / cancelamento.
     public ?int $previewId = null;
+
     public ?int $confirmingApproveId = null;
+
     public ?int $confirmingCancelId = null;
+
     public ?int $confirmingUnapproveId = null;
+
     public ?int $confirmingPauseId = null;   // P-3: pausar/retomar
+
     public ?int $targetsOfId = null;         // P-3: modal de targets (status/motivo/hora)
 
     // ---- form (draft) ---------------------------------------------------------
@@ -63,10 +85,10 @@ class Campanhas extends Component
     public function usarTemplate(string $key): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         try {
-            $nova = app(\App\Whatsapp\Proactive\InstantiateCampaignTemplate::class)->handle($key, $this->accountId());
+            $nova = app(InstantiateCampaignTemplate::class)->handle($key, $this->accountId());
         } catch (\InvalidArgumentException) {
             $this->dispatch('toast', message: 'Modelo de campanha desconhecido.', type: 'error');
 
@@ -82,7 +104,7 @@ class Campanhas extends Component
         $this->reset(['editingId', 'cName', 'cMessage', 'cTagIds', 'cColumnId', 'cContactIds', 'cContactSearch', 'cStartAt']);
         $this->cAudienceType = 'tags';
         // P-4: rodape PRE-PREENCHIDO com o padrao da conta (editavel por campanha).
-        $this->cFooter = (string) \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_optout_footer;
+        $this->cFooter = (string) AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_optout_footer;
         $this->resetValidation();
         $this->showForm = true;
     }
@@ -128,7 +150,7 @@ class Campanhas extends Component
     public function duplicate(int $id): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($id);
         if (! $c) {
@@ -136,7 +158,7 @@ class Campanhas extends Component
         }
 
         $nova = ProactiveCampaign::create([
-            'name' => $this->uniqueName($c->name . ' (copia)'),
+            'name' => $this->uniqueName($c->name.' (copia)'),
             'message' => $c->message,
             'optout_footer' => $c->optout_footer,
             'audience_type' => $c->audience_type,
@@ -164,10 +186,10 @@ class Campanhas extends Component
         return $nome;
     }
 
-    public function save(SecretVault $vault, \App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
+    public function save(SecretVault $vault, OptoutFooterGuard $footerGuard): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $this->validate([
             'cName' => 'required|string|max:120',
@@ -211,7 +233,7 @@ class Campanhas extends Component
         }
 
         $startAt = $this->cStartAt !== ''
-            ? \Illuminate\Support\Carbon::parse($this->cStartAt, config('app.display_timezone'))->utc()
+            ? Carbon::parse($this->cStartAt, config('app.display_timezone'))->utc()
             : null;
 
         $dados = [
@@ -236,12 +258,12 @@ class Campanhas extends Component
 
         $this->closeForm();
         if ($rodape['warning'] !== null) {
-            $this->dispatch('toast', message: 'Aviso: ' . $rodape['warning'], type: 'error');
+            $this->dispatch('toast', message: 'Aviso: '.$rodape['warning'], type: 'error');
         }
         // Referencias desconhecidas avaliadas no CONJUNTO (mensagem + rodape).
-        $desconhecidas = \App\Models\Variable::unknownRefs($this->accountId(), trim($this->cMessage) . ' ' . trim($this->cFooter));
+        $desconhecidas = Variable::unknownRefs($this->accountId(), trim($this->cMessage).' '.trim($this->cFooter));
         if ($desconhecidas !== []) {
-            $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) na mensagem: {' . implode('}, {', $desconhecidas) . '} — sem variavel ativa, sai cru.', type: 'error');
+            $this->dispatch('toast', message: 'Aviso: referencia(s) desconhecida(s) na mensagem: {'.implode('}, {', $desconhecidas).'} — sem variavel ativa, sai cru.', type: 'error');
         }
         $this->dispatch('toast', message: 'Campanha salva (rascunho). Nada dispara sem preview + aprovacao.');
     }
@@ -252,7 +274,7 @@ class Campanhas extends Component
     public function openPreview(int $id): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($id);
         if (! $c || ! in_array($c->status, ['draft', 'previewed'], true)) {
@@ -291,7 +313,7 @@ class Campanhas extends Component
     public function approveConfirmed(AudienceResolver $resolver, AgendaBuilder $agenda): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($this->confirmingApproveId);
         $this->confirmingApproveId = null;
@@ -301,10 +323,10 @@ class Campanhas extends Component
 
         // P-4 — GATE do rodape na aprovacao (defesa em profundidade: cobre draft
         // antigo, escrita direta e palavra trocada depois do save).
-        $rodape = app(\App\Whatsapp\Proactive\OptoutFooterGuard::class)
+        $rodape = app(OptoutFooterGuard::class)
             ->check($this->accountId(), (string) $c->optout_footer);
         if ($rodape['error'] !== null) {
-            $this->dispatch('toast', message: 'Nao aprovada: ' . $rodape['error'] . ' Edite a campanha e ajuste a instrucao de saida.', type: 'error');
+            $this->dispatch('toast', message: 'Nao aprovada: '.$rodape['error'].' Edite a campanha e ajuste a instrucao de saida.', type: 'error');
 
             return;
         }
@@ -317,7 +339,7 @@ class Campanhas extends Component
             return;
         }
 
-        $settings = \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()]);
+        $settings = AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()]);
         $horarios = $agenda->build($settings, $c->start_at, $eligiveis->count());
 
         foreach ($eligiveis as $i => $contact) {
@@ -336,7 +358,7 @@ class Campanhas extends Component
         ]);
 
         $this->closePreview();
-        $this->dispatch('toast', message: 'Campanha APROVADA: snapshot congelado (' . $eligiveis->count() . ' contato(s) agendado(s)). O disparo em si chega na proxima fatia e exige o interruptor de proativas ligado.');
+        $this->dispatch('toast', message: 'Campanha APROVADA: snapshot congelado ('.$eligiveis->count().' contato(s) agendado(s)). O disparo em si chega na proxima fatia e exige o interruptor de proativas ligado.');
     }
 
     // ---- cancelar / des-aprovar ------------------------------------------------------
@@ -354,7 +376,7 @@ class Campanhas extends Component
     public function cancelConfirmed(): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($this->confirmingCancelId);
         $this->confirmingCancelId = null;
@@ -384,7 +406,7 @@ class Campanhas extends Component
     public function unapproveConfirmed(): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($this->confirmingUnapproveId);
         $this->confirmingUnapproveId = null;
@@ -423,7 +445,7 @@ class Campanhas extends Component
     public function pauseConfirmed(): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($this->confirmingPauseId);
         $this->confirmingPauseId = null;
@@ -437,7 +459,7 @@ class Campanhas extends Component
     public function resume(int $id, AgendaBuilder $agenda): void
     {
         // Fatia 23 — operador VE, nao escreve: gate server-side (acao forjavel).
-        \App\Auth\AreaAccess::authorizeEditAction('campanhas');
+        AreaAccess::authorizeEditAction('campanhas');
 
         $c = $this->find($id);
         if (! $c || $c->status !== 'paused') {
@@ -447,7 +469,7 @@ class Campanhas extends Component
         $vencidos = CampaignTarget::query()->where('campaign_id', $c->id)
             ->where('status', 'pending')->where('scheduled_at', '<=', now())->get();
         if ($vencidos->isNotEmpty()) {
-            $settings = \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()]);
+            $settings = AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()]);
             $novos = $agenda->build($settings, now(), $vencidos->count());
             foreach ($vencidos as $i => $t) {
                 $t->update(['scheduled_at' => $novos[$i]]);
@@ -493,7 +515,7 @@ class Campanhas extends Component
         ])->latest('id')->get();
 
         // P-3: honestidade na tela — aprovadas aguardando o interruptor.
-        $proativasLigadas = (bool) \App\Models\AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_enabled;
+        $proativasLigadas = (bool) AutoReplySetting::firstOrCreate(['account_id' => $this->accountId()])->proactive_enabled;
 
         $targetsDe = $this->targetsOfId
             ? CampaignTarget::query()->where('campaign_id', $this->targetsOfId)
@@ -507,7 +529,7 @@ class Campanhas extends Component
             $exemplo = $res['eligiveis']->first();
             // P-4: o exemplo mostra o texto COMPLETO (mensagem + rodape) — o que
             // se aprova e EXATAMENTE o que sai.
-            $templateCompleto = trim((string) $c->message) . "\n\n" . trim((string) $c->optout_footer);
+            $templateCompleto = trim((string) $c->message)."\n\n".trim((string) $c->optout_footer);
             $preview = [
                 'campanha' => $c,
                 'eligiveis' => $res['eligiveis'],
@@ -521,16 +543,16 @@ class Campanhas extends Component
         return view('livewire.campanhas', [
             // Fatia 23 — view-only do operador: esconde botoes de escrita (cosmetico;
             // a barreira real sao os gates authorizeEditAction nas acoes).
-            'podeEditar' => \App\Auth\AreaAccess::canEditArea('campanhas'),
+            'podeEditar' => AreaAccess::canEditArea('campanhas'),
             // Fatia 14 — catalogo de templates (padrao da Fatia 7).
-            'templates' => $this->showForm ? [] : app(\App\Whatsapp\Proactive\CampaignTemplateCatalog::class)->summaries(),
+            'templates' => $this->showForm ? [] : app(CampaignTemplateCatalog::class)->summaries(),
             'campanhas' => $campanhas,
             'preview' => $preview,
             'allTags' => Tag::query()->orderBy('name')->get(),
             'columns' => BoardColumn::query()->whereHas('board', fn ($q) => $q->where('account_id', $this->accountId())->where('is_default', true))->orderBy('position')->get(),
             'contactOptions' => $this->showForm && $this->cAudienceType === 'contatos'
-                ? Contact::query()->when(trim($this->cContactSearch) !== '', function ($q) {
-                    $b = '%' . trim($this->cContactSearch) . '%';
+                ? Contact::query()->where('is_system', false)->when(trim($this->cContactSearch) !== '', function ($q) {
+                    $b = '%'.trim($this->cContactSearch).'%';
                     $q->where(fn ($w) => $w->where('push_name', 'like', $b)->orWhere('remote_jid', 'like', $b));
                 })->orderByRaw('COALESCE(push_name, remote_jid)')->limit(200)->get(['id', 'push_name', 'remote_jid'])
                 : collect(),

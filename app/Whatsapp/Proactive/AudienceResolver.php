@@ -4,6 +4,7 @@ namespace App\Whatsapp\Proactive;
 
 use App\Models\Card;
 use App\Models\Contact;
+use App\Tenancy\AccountScope;
 use Illuminate\Support\Collection;
 
 /**
@@ -55,12 +56,13 @@ class AudienceResolver
     /** @return Collection<int,Contact> candidatos ANTES do filtro estrutural */
     private function candidatos(int $accountId, string $audienceType, array $config): Collection
     {
-        $base = Contact::withoutAccountScope()->where('account_id', $accountId);
+        // F2 — contato de SISTEMA (Alertas de Infra) nunca entra em campanha.
+        $base = Contact::withoutAccountScope()->where('account_id', $accountId)->where('is_system', false);
 
         return match ($audienceType) {
             // Por TAG: quem tem QUALQUER uma das tags (da MESMA conta — join valida).
             'tags' => $base->whereHas('tags', function ($q) use ($config, $accountId) {
-                $q->withoutGlobalScope(\App\Tenancy\AccountScope::class)
+                $q->withoutGlobalScope(AccountScope::class)
                     ->where('tags.account_id', $accountId)
                     ->whereIn('tags.id', array_map('intval', $config['tag_ids'] ?? []));
             })->orderBy('id')->get(),

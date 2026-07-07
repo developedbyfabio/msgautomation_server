@@ -2,9 +2,14 @@
 
 namespace App\Livewire;
 
-use App\Models\Account;
+use App\Channels\CloudApi\BrWaId;
+use App\Models\BoardRule;
+use App\Models\CampaignTarget;
 use App\Models\Contact;
+use App\Models\ProactiveConsent;
 use App\Models\Tag;
+use App\Tenancy\AccountContext;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -15,12 +20,17 @@ class Contatos extends Component
 
     // Prompt 19 — adicionar contato manualmente (form).
     public bool $showAdd = false;
+
     public string $newName = '';
+
     public string $newNumber = '';
 
     public ?int $editingId = null;
+
     public string $editName = '';
+
     public string $editNotes = '';
+
     public bool $editProactiveOptIn = false; // P-1: opt-in explicito (trilha auditada)
 
     public ?int $confirmingMuteId = null;
@@ -32,10 +42,13 @@ class Contatos extends Component
     public string $newTagName = '';
 
     public string $newTagColor = 'zinc';
+
     /** @var array<int,string> id => nome */
     public array $tagNames = [];
+
     /** @var array<int,string> id => cor */
     public array $tagColors = [];
+
     public ?int $confirmingDeleteTagId = null;
 
     /** Aprovar (on) e default sao instantaneos. Silenciar (off) passa por confirmacao. */
@@ -75,10 +88,10 @@ class Contatos extends Component
         // Variantes do 9o digito (com/sem) — casa com o formato dos contatos auto.
         $variantes = array_values(array_unique(array_filter([
             $canonical,
-            \App\Channels\CloudApi\BrWaId::comNonoDigito($canonical),
-            \App\Channels\CloudApi\BrWaId::semNonoDigito($canonical),
+            BrWaId::comNonoDigito($canonical),
+            BrWaId::semNonoDigito($canonical),
         ])));
-        $jids = array_map(fn ($d) => $d . '@s.whatsapp.net', $variantes);
+        $jids = array_map(fn ($d) => $d.'@s.whatsapp.net', $variantes);
         $nome = trim($this->newName);
 
         // Dedup/adocao SEMPRE escopada a conta ativa.
@@ -95,7 +108,7 @@ class Contatos extends Component
         } else {
             Contact::create([
                 'account_id' => $this->accountId(),
-                'remote_jid' => $canonical . '@s.whatsapp.net',
+                'remote_jid' => $canonical.'@s.whatsapp.net',
                 'push_name' => $nome !== '' ? $nome : null,
                 'saved' => true,
                 'auto_reply_mode' => 'default',
@@ -118,7 +131,7 @@ class Contatos extends Component
 
         // BR local sem DDI (10-11 digitos): prefixa 55.
         if (! str_starts_with($d, '55') && (strlen($d) === 10 || strlen($d) === 11)) {
-            $d = '55' . $d;
+            $d = '55'.$d;
         }
 
         // Valido = BR full: 12 (fixo) ou 13 (celular com 9). Fora disso: lixo.
@@ -126,7 +139,7 @@ class Contatos extends Component
             return null;
         }
 
-        return \App\Channels\CloudApi\BrWaId::paraEnvio($d);
+        return BrWaId::paraEnvio($d);
     }
 
     public function setMode(int $id, string $mode): void
@@ -192,7 +205,7 @@ class Contatos extends Component
         // P-1 — trilha de consentimento AUDITAVEL: toda mudanca de opt-in registra
         // grant/revoke com origem manual (nunca apagada; LGPD).
         if ($contato && $optInAnterior !== $this->editProactiveOptIn) {
-            \App\Models\ProactiveConsent::create([
+            ProactiveConsent::create([
                 'account_id' => $this->accountId(),
                 'contact_id' => $contato->id,
                 'action' => $this->editProactiveOptIn ? 'grant' : 'revoke',
@@ -201,7 +214,7 @@ class Contatos extends Component
 
             // P-3: revogacao manual tambem pula o contato em todas as campanhas.
             if (! $this->editProactiveOptIn) {
-                \App\Models\CampaignTarget::skipAllPendingFor($this->accountId(), $contato->id, 'opt_out_revogado');
+                CampaignTarget::skipAllPendingFor($this->accountId(), $contato->id, 'opt_out_revogado');
             }
         }
 
@@ -260,7 +273,7 @@ class Contatos extends Component
         $this->newTagName = '';
         $this->newTagColor = 'zinc';
         $this->resetValidation();
-        $this->dispatch('toast', message: 'Tag "' . $tag->name . '" criada. Atribua a contatos quando quiser.');
+        $this->dispatch('toast', message: 'Tag "'.$tag->name.'" criada. Atribua a contatos quando quiser.');
     }
 
     public function closeTags(): void
@@ -276,7 +289,7 @@ class Contatos extends Component
             $nome = trim((string) ($this->tagNames[$tag->id] ?? ''));
             $cor = in_array($this->tagColors[$tag->id] ?? '', Tag::COLORS, true) ? $this->tagColors[$tag->id] : $tag->color;
             if ($nome === '') {
-                $this->addError('tagNames.' . $tag->id, 'Nome nao pode ficar vazio.');
+                $this->addError('tagNames.'.$tag->id, 'Nome nao pode ficar vazio.');
 
                 return;
             }
@@ -284,7 +297,7 @@ class Contatos extends Component
             $duplicada = Tag::query()->where('id', '!=', $tag->id)
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower($nome, 'UTF-8')])->exists();
             if ($duplicada) {
-                $this->addError('tagNames.' . $tag->id, 'Ja existe tag com esse nome.');
+                $this->addError('tagNames.'.$tag->id, 'Ja existe tag com esse nome.');
 
                 return;
             }
@@ -327,17 +340,17 @@ class Contatos extends Component
     public function tagUsage(int $tagId): array
     {
         return [
-            'contatos' => \Illuminate\Support\Facades\DB::table('contact_tag')->where('tag_id', $tagId)->count(),
-            'regras' => \Illuminate\Support\Facades\DB::table('rule_tag')->where('tag_id', $tagId)->count(),
-            'fluxos' => \Illuminate\Support\Facades\DB::table('flow_tag')->where('tag_id', $tagId)->count(),
-            'kanban' => \App\Models\BoardRule::query()->where('tag_id', $tagId)->count(),
+            'contatos' => DB::table('contact_tag')->where('tag_id', $tagId)->count(),
+            'regras' => DB::table('rule_tag')->where('tag_id', $tagId)->count(),
+            'fluxos' => DB::table('flow_tag')->where('tag_id', $tagId)->count(),
+            'kanban' => BoardRule::query()->where('tag_id', $tagId)->count(),
         ];
     }
 
     private function accountId(): int
     {
         // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
-        return app(\App\Tenancy\AccountContext::class)->id();
+        return app(AccountContext::class)->id();
     }
 
     public function render()
@@ -348,10 +361,11 @@ class Contatos extends Component
             // Auto nunca-tocados (saved=false) NAO aparecem AQUI, mas seguem vivos no
             // resto do sistema (Kanban/Conversas/Painel/reativo).
             ->where('saved', true)
+            ->where('is_system', false) // F2: contato de sistema (Alertas) nunca conta como cliente
             ->when($this->search !== '', function ($q) {
                 $q->where(function ($w) {
-                    $w->where('remote_jid', 'like', '%' . $this->search . '%')
-                        ->orWhere('push_name', 'like', '%' . $this->search . '%');
+                    $w->where('remote_jid', 'like', '%'.$this->search.'%')
+                        ->orWhere('push_name', 'like', '%'.$this->search.'%');
                 });
             })
             ->orderByRaw('COALESCE(push_name, remote_jid)')

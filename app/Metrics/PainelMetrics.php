@@ -14,6 +14,7 @@ use App\Models\IncomingMessage;
 use App\Models\PendingApproval;
 use App\Models\ProactiveCampaign;
 use App\Whatsapp\Proactive\ProactiveGuard;
+use App\Whatsapp\SystemConversation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -80,6 +81,8 @@ class PainelMetrics
             // Prompt 16: reacao nao e mensagem — fora da contagem (neutraliza as linhas
             // historicas e defende caso alguma escape o corte da ingestao).
             ->whereNotIn('type', IncomingMessage::REACTION_TYPES)
+            // F2: a conversa de SISTEMA (Alertas de Infra) nao conta como mensagem recebida.
+            ->where('remote_jid', '!=', SystemConversation::JID)
             ->whereBetween('received_at', [$from, $to]);
 
         $recebidas = (clone $base)->where('remote_jid', 'not like', '%@g.us')->count();
@@ -112,6 +115,7 @@ class PainelMetrics
             ->where('account_id', $accountId)
             ->where('from_me', false)
             ->where('remote_jid', 'not like', '%@g.us')
+            ->where('remote_jid', '!=', SystemConversation::JID) // F2: sistema fora da mediana
             ->whereBetween('received_at', [$from, $to])
             ->selectRaw('remote_jid, MIN(received_at) as primeira')
             ->groupBy('remote_jid')
