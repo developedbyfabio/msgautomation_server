@@ -434,7 +434,50 @@
                 </li>
             </ul>
         </div>
+
+        {{-- ZONA DE PERIGO: limpar todas as conversas (hard delete, owner-only) --}}
+        <div class="rounded-2xl border border-red-300 bg-red-50/60 p-4 dark:border-red-900 dark:bg-red-950/30">
+            <div class="flex items-center gap-2">
+                <flux:icon icon="exclamation-triangle" variant="micro" class="text-red-600 dark:text-red-400" />
+                <h2 class="text-base font-semibold text-red-800 dark:text-red-300">Zona de perigo</h2>
+            </div>
+            <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="text-sm text-red-800/90 dark:text-red-300/90">
+                    <p class="font-medium">Limpar todas as conversas</p>
+                    <p class="text-xs text-red-700/80 dark:text-red-300/70">
+                        Apaga <strong>permanentemente</strong> as mensagens de todas as conversas do Atendimento desta
+                        empresa (recebidas e enviadas). <strong>Nao pode ser desfeito.</strong> Os <strong>contatos/clientes
+                        sao preservados</strong>, e a conversa "Alertas de Infraestrutura" nao e apagada.
+                    </p>
+                </div>
+                <button type="button" wire:click="askClearConversations"
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-transparent dark:text-red-300 dark:hover:bg-red-950">
+                    <flux:icon icon="trash" variant="micro" /> Limpar conversas
+                </button>
+            </div>
+        </div>
     </div>
+
+    {{-- MODAL: confirmar LIMPAR todas as conversas (hard delete) --}}
+    @if ($confirmingClearConversations)
+        <x-modal wireClose="cancelClearConversations" title="Apagar todas as conversas?">
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-red-500"><flux:icon icon="exclamation-triangle" class="size-6" /></div>
+                <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                    Isto apaga <strong>permanentemente {{ $clearCount }}</strong>
+                    {{ $clearCount === 1 ? 'mensagem' : 'mensagens' }} de todas as conversas desta empresa e
+                    <strong>nao pode ser desfeito</strong>. Os contatos/clientes sao preservados; a conversa de
+                    alertas de infraestrutura tambem. Tem certeza?
+                </p>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" wire:click="cancelClearConversations" data-autofocus class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Cancelar</button>
+                <button type="button" wire:click="clearConversationsConfirmed" class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                    <flux:icon icon="trash" variant="micro" /> Apagar tudo
+                </button>
+            </div>
+        </x-modal>
+    @endif
 
     {{-- MODAL: confirmar LIGAR o kill switch (desligar e instantaneo, sem modal) --}}
     @if ($confirmingEnable)

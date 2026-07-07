@@ -2,8 +2,16 @@
 
 namespace App\Livewire;
 
-use App\Models\Account;
+use App\Actions\ClearAccountConversations;
+use App\Auth\AreaAccess;
+use App\Channels\ProviderRegistry;
+use App\Enums\OperationMode;
 use App\Models\AutoReplySetting;
+use App\Models\Channel;
+use App\Models\Flow;
+use App\Tenancy\AccountContext;
+use App\Whatsapp\AutoReply\RuleResponder;
+use App\Whatsapp\Proactive\OptoutFooterGuard;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -11,20 +19,31 @@ use Livewire\Component;
 class Configuracoes extends Component
 {
     public bool $enabled = false;
+
     public string $reply_policy = 'allowlist';
 
     // Fatia 3 — fluxo de atendimento padrao (usado pelo modo automatico na Fatia 4;
     // por ora INERTE no robo: aqui so grava a escolha). null = nenhum.
     public ?int $default_flow_id = null;
+
     public string $window_start = '08:00';
+
     public string $window_end = '20:00';
+
     public int $min_interval_seconds = 30;
+
     public int $per_minute_cap = 4;
+
     public int $per_day_cap = 40;
+
     public int $contact_rate_seconds = 1800;
+
     public int $delay_min_seconds = 3;
+
     public int $delay_max_seconds = 15;
+
     public bool $skip_groups = true;
+
     public bool $warmup_enabled = false;
 
     // Prompt 14 — auto-download de midia recebida (por conta; default do .env quando nunca tocado).
@@ -32,38 +51,61 @@ class Configuracoes extends Component
 
     // S2 — toggles liga/desliga por freio (desligado = nao bloqueia).
     public bool $window_enabled = true;
+
     public bool $min_interval_enabled = true;
+
     public bool $per_minute_enabled = true;
+
     public bool $per_day_enabled = true;
+
     public bool $contact_rate_enabled = true;
 
     // Camada 3 (IA) — kill switch proprio + ajuste fino (Fatia 4: limiar e temas editaveis).
     public bool $ai_enabled = false;
+
     public float $ai_confidence_threshold = 0.75;
+
     /** @var array<int,string> */
     public array $ai_approval_topics = [];
 
     public bool $salvo = false;
+
     public bool $confirmingEnable = false;
+
     public bool $confirmingAiEnable = false;
+
+    // "Limpar todas as conversas" (hard delete owner-only) — Zona de perigo.
+    public bool $confirmingClearConversations = false;
+
+    public int $clearCount = 0;
 
     // Proativas P-1 — bloco proprio (kill switch INDEPENDENTE + tetos D5). Jitter
     // (3-15min) fica no default do schema; editavel so em fatia futura se precisar.
     public bool $proactive_enabled = false;
+
     public int $proactive_daily_cap = 20;
+
     public int $proactive_per_contact_weekly_cap = 1;
+
     public string $proactive_window_start = '09:00';
+
     public string $proactive_window_end = '18:00';
+
     public string $proactive_optout_word = 'PARAR';
+
     // P-4: rodape PADRAO de saida da conta (pre-preenche campanha nova).
     public string $proactive_optout_footer = '';
+
     public bool $confirmingProactiveEnable = false;
+
     public bool $confirmingProactiveRelax = false;
+
     /** @var array<int,string> */
     public array $proactiveRelaxWarnings = [];
 
     // Fatia 4 — confirmacao ao AFROUXAR a IA (reduzir limiar < 0.70 / desmarcar tema).
     public bool $confirmingAiRelax = false;
+
     /** @var array<int,string> */
     public array $aiRelaxWarnings = [];
 
@@ -113,7 +155,7 @@ class Configuracoes extends Component
     private function settings(): AutoReplySetting
     {
         // MT-0: conta do CONTEXTO (fase 1 = conta unica, fallback centralizado).
-        return AutoReplySetting::firstOrCreate(['account_id' => app(\App\Tenancy\AccountContext::class)->id()]);
+        return AutoReplySetting::firstOrCreate(['account_id' => app(AccountContext::class)->id()]);
     }
 
     /**
@@ -227,7 +269,7 @@ class Configuracoes extends Component
      * diario acima de 20, semanal acima de 1, janela mais larga que a atual)
      * pede confirmacao — mesmo padrao do limiar da IA.
      */
-    public function saveProactive(\App\Whatsapp\Proactive\OptoutFooterGuard $footerGuard): void
+    public function saveProactive(OptoutFooterGuard $footerGuard): void
     {
         $this->validate([
             'proactive_daily_cap' => 'required|integer|min:1|max:200',
@@ -247,14 +289,14 @@ class Configuracoes extends Component
 
         // P-4: rodape padrao valido (obrigatorio + {palavra_sair} + sem segredo).
         // Valida contra a PALAVRA NOVA do form (que sera salva junto).
-        $rodape = $footerGuard->check(app(\App\Tenancy\AccountContext::class)->id(), $this->proactive_optout_footer, trim($this->proactive_optout_word));
+        $rodape = $footerGuard->check(app(AccountContext::class)->id(), $this->proactive_optout_footer, trim($this->proactive_optout_word));
         if ($rodape['error'] !== null) {
             $this->addError('proactive_optout_footer', $rodape['error']);
 
             return;
         }
         if ($rodape['warning'] !== null) {
-            $this->dispatch('toast', message: 'Aviso: ' . $rodape['warning'], type: 'error');
+            $this->dispatch('toast', message: 'Aviso: '.$rodape['warning'], type: 'error');
         }
 
         $s = $this->settings();
@@ -306,12 +348,12 @@ class Configuracoes extends Component
     /** CH-2 — sanidade LEVE sob demanda (nunca em loop): atualiza channels.status. */
     public function verificarCanal(int $id): void
     {
-        $canal = \App\Models\Channel::query()->find($id);
+        $canal = Channel::query()->find($id);
         if (! $canal) {
             return;
         }
 
-        $estado = app(\App\Channels\ProviderRegistry::class)->for($canal)->connectionState($canal);
+        $estado = app(ProviderRegistry::class)->for($canal)->connectionState($canal);
         $mapa = ['connected' => 'connected', 'disconnected' => 'disconnected'];
         if (isset($mapa[$estado])) {
             $canal->update(['status' => $mapa[$estado]]);
@@ -324,8 +366,8 @@ class Configuracoes extends Component
         $this->settings()->update([
             'proactive_daily_cap' => $this->proactive_daily_cap,
             'proactive_per_contact_weekly_cap' => $this->proactive_per_contact_weekly_cap,
-            'proactive_window_start' => $this->proactive_window_start . ':00',
-            'proactive_window_end' => $this->proactive_window_end . ':00',
+            'proactive_window_start' => $this->proactive_window_start.':00',
+            'proactive_window_end' => $this->proactive_window_end.':00',
             'proactive_optout_word' => trim($this->proactive_optout_word),
             'proactive_optout_footer' => trim($this->proactive_optout_footer),
         ]);
@@ -364,7 +406,7 @@ class Configuracoes extends Component
         }
 
         foreach (array_diff($s->aiApprovalTopics(), $this->ai_approval_topics) as $tema) {
-            $avisos[] = 'Tema "' . (self::AI_TOPIC_LABELS[$tema] ?? $tema) . '" deixa de exigir aprovacao: a IA PODE responder sozinha nesse assunto.';
+            $avisos[] = 'Tema "'.(self::AI_TOPIC_LABELS[$tema] ?? $tema).'" deixa de exigir aprovacao: a IA PODE responder sozinha nesse assunto.';
         }
 
         if ($avisos !== []) {
@@ -421,8 +463,8 @@ class Configuracoes extends Component
                 if ($atual !== null && (int) $value === (int) $atual) {
                     return; // mantido — nao e escolha nova
                 }
-                $ok = \App\Models\Flow::query()
-                    ->where('account_id', app(\App\Tenancy\AccountContext::class)->id())
+                $ok = Flow::query()
+                    ->where('account_id', app(AccountContext::class)->id())
                     ->where('enabled', true)
                     ->whereKey((int) $value)
                     ->exists();
@@ -478,22 +520,22 @@ class Configuracoes extends Component
             $this->{$campo} = $v;
         }
 
-        $this->dispatch('toast', message: 'Preset aplicado: ' . ($preset === 'cloud' ? 'Cloud API (oficial)' : 'Evolution') . '. Ajuste os valores se quiser.');
+        $this->dispatch('toast', message: 'Preset aplicado: '.($preset === 'cloud' ? 'Cloud API (oficial)' : 'Evolution').'. Ajuste os valores se quiser.');
     }
 
     public function save(): void
     {
         // Fatia 22 — defesa em profundidade: config tecnica/freios exige OWNER
         // da conta ativa (a rota ja barra; acao Livewire e forjavel).
-        \App\Auth\AreaAccess::authorizeOwnerAction();
+        AreaAccess::authorizeOwnerAction();
 
         $this->validate();
 
         $this->settings()->update([
             'reply_policy' => $this->reply_policy,
             'default_flow_id' => $this->default_flow_id ?: null, // 'Nenhum' grava null
-            'window_start' => $this->window_start . ':00',
-            'window_end' => $this->window_end . ':00',
+            'window_start' => $this->window_start.':00',
+            'window_end' => $this->window_end.':00',
             'min_interval_seconds' => $this->min_interval_seconds,
             'per_minute_cap' => $this->per_minute_cap,
             'per_day_cap' => $this->per_day_cap,
@@ -513,18 +555,51 @@ class Configuracoes extends Component
         $this->dispatch('toast', message: 'Configuracoes salvas.');
     }
 
-    public function render(\App\Whatsapp\AutoReply\RuleResponder $responder)
+    // ---- Zona de perigo: limpar todas as conversas (hard delete) ---------------
+
+    /** Abre a confirmação, mostrando quantas mensagens serão apagadas. */
+    public function askClearConversations(ClearAccountConversations $action): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        $this->clearCount = $action->count($this->accountId());
+        $this->confirmingClearConversations = true;
+    }
+
+    public function cancelClearConversations(): void
+    {
+        $this->confirmingClearConversations = false;
+    }
+
+    /** Executa o hard delete APÓS a confirmação. Owner-only server-side. */
+    public function clearConversationsConfirmed(ClearAccountConversations $action): void
+    {
+        // Enforcement server-side: acao Livewire e forjavel — operador toma 403
+        // mesmo sem o botao no menu dele.
+        AreaAccess::authorizeOwnerAction();
+
+        $apagadas = $action->handle($this->accountId(), (int) auth()->id());
+
+        $this->confirmingClearConversations = false;
+        $this->dispatch('toast', message: "Conversas apagadas: {$apagadas} mensagens.");
+    }
+
+    private function accountId(): int
+    {
+        return app(AccountContext::class)->id();
+    }
+
+    public function render(RuleResponder $responder)
     {
         // P-4: preview HONESTO do rodape — o MESMO renderizador do envio, com a
         // palavra que esta SALVA (o form pode ter valor ainda nao persistido).
         // CH-2: a conta lista TODOS os canais (Evolution + Cloud API), cada um
         // com URL de webhook mascarada (token nunca inteiro na tela).
-        $canais = \App\Models\Channel::query()->orderBy('id')->get()->map(function ($c) {
+        $canais = Channel::query()->orderBy('id')->get()->map(function ($c) {
             $mask = '(sem token)';
             if ($c->webhook_token) {
                 $t = (string) $c->webhook_token;
                 $rota = $c->provider === 'cloud_api' ? 'cloud' : 'evolution';
-                $mask = "/webhook/{$rota}/" . substr($t, 0, 4) . '...' . substr($t, -4);
+                $mask = "/webhook/{$rota}/".substr($t, 0, 4).'...'.substr($t, -4);
             }
             $c->setAttribute('webhook_mascarado', $mask);
 
@@ -535,14 +610,14 @@ class Configuracoes extends Component
         // (Flow escopado por BelongsToAccount). Edge: se o default salvo aponta um
         // fluxo desabilitado, exibe-o marcado "(desabilitado)" pra tela nao mentir
         // nem quebrar (re-selecionar outro habilitado ou 'Nenhum' resolve).
-        $fluxosDisponiveis = \App\Models\Flow::query()->where('enabled', true)->orderBy('name')->get(['id', 'name']);
+        $fluxosDisponiveis = Flow::query()->where('enabled', true)->orderBy('name')->get(['id', 'name']);
         $fluxoAtualDesabilitado = ($this->default_flow_id && ! $fluxosDisponiveis->contains('id', $this->default_flow_id))
-            ? \App\Models\Flow::query()->find($this->default_flow_id)
+            ? Flow::query()->find($this->default_flow_id)
             : null;
 
         // Fatia 6 (hint leve, nao-bloqueante): modo automatico ativo com tetos em
         // patamar "pessoal-baixo" — sugere aplicar um preset. So aviso.
-        $tetosBaixosAuto = $this->settings()->operation_mode === \App\Enums\OperationMode::Auto
+        $tetosBaixosAuto = $this->settings()->operation_mode === OperationMode::Auto
             && (int) $this->per_day_cap <= 50;
 
         return view('livewire.configuracoes', [
