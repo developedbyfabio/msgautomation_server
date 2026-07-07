@@ -32,4 +32,29 @@ return [
      */
     'max_for_duration_s' => (int) env('SERVERS_MAX_FOR_DURATION_S', 600),
 
+    /*
+     * S3 canal — fila dedicada dos alertas. Default 'default' (worker atual
+     * consome sem mudanca). Para priorizar sobre campanhas, apontar para
+     * 'alerts' e subir o worker com --queue=alerts,default (1 linha no unit).
+     */
+    'alert_queue' => env('SERVERS_ALERT_QUEUE', 'default'),
+
+    /*
+     * B3 controle de tempestade — acima de storm_cap incidentes no MESMO
+     * envio, manda um RESUMO ("N servidores com incidente") em vez de listar,
+     * por destinatario. burst_cap/burst_window: teto de mensagens por conta na
+     * janela (rack caindo nao vira centenas de mensagens); estourou -> resumo
+     * unico e o excedente e suprimido (registrado em SystemEvent).
+     */
+    'storm_cap' => (int) env('SERVERS_STORM_CAP', 10),
+    'burst_cap' => (int) env('SERVERS_BURST_CAP', 20),
+    'burst_window_s' => (int) env('SERVERS_BURST_WINDOW_S', 300),
+
+    /*
+     * B4 fallback — e-mail para onde vai o alerta quando o WhatsApp falha
+     * (alem do e-mail do proprio contato, se houver). Vazio = so os e-mails
+     * dos contatos. A falha SEMPRE vira SystemEvent (observavel).
+     */
+    'fallback_email' => env('SERVERS_FALLBACK_EMAIL'),
+
 ];

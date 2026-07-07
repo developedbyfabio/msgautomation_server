@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\SendServerAlert;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Server;
 use App\Servers\ServerEvaluator;
@@ -50,6 +51,17 @@ class ServersEvaluate extends Command
 
             foreach ($servers as $server) {
                 $evaluator->evaluate($server);
+            }
+
+            // S3 — canal atras do flag: despacha o ENVIO (fila) por conta com
+            // pendencia, DEPOIS de avaliar tudo (agrupa transicoes do tick numa
+            // mensagem). Flag OFF: nada e despachado (silencioso fica no notifier).
+            if (config('servers.notifications_enabled')) {
+                foreach ($servers->pluck('account_id')->unique() as $accountId) {
+                    if (SendServerAlert::hasPending((int) $accountId)) {
+                        SendServerAlert::dispatch((int) $accountId)->onQueue(config('servers.alert_queue', 'default'));
+                    }
+                }
             }
 
             $this->info("Avaliados: {$servers->count()} servidor(es).");

@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\AutoReplySetting;
 use App\Models\Channel;
 use App\Models\User;
+use App\Servers\AlertContact;
 use App\Servers\AlertRule;
 use App\Servers\Server;
 use App\Tenancy\AccountContext;
@@ -144,5 +145,59 @@ class ServersAlertasUiTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(95.0, $cpu->fresh()->critical_threshold); // intacta
+    }
+
+    // ---- Destinatarios (roteamento) --------------------------------------------
+
+    public function test_owner_cadastra_destinatario(): void
+    {
+        $this->comoOwner();
+
+        Livewire::test(Alertas::class)
+            ->call('novoContato')
+            ->set('c_name', 'Fabio')
+            ->set('c_phone', '(55) 11 99999-0000')
+            ->set('c_email', 'fabio@x.local')
+            ->set('c_min_level', 'critical')
+            ->call('saveContato')
+            ->assertHasNoErrors();
+
+        $c = AlertContact::withoutAccountScope()->where('account_id', $this->account->id)->sole();
+        $this->assertSame('5511999990000', $c->phone); // normalizado (so digitos)
+        $this->assertSame('critical', $c->min_level);
+        $this->assertSame('fabio@x.local', $c->email);
+    }
+
+    public function test_alvo_servidor_especifico_zera_o_grupo(): void
+    {
+        $this->comoOwner();
+
+        Livewire::test(Alertas::class)
+            ->call('novoContato')
+            ->set('c_name', 'OnCall')
+            ->set('c_phone', '5511888880000')
+            ->set('c_server_id', $this->server->id)
+            ->set('c_grupo', 'ignorado')
+            ->call('saveContato')
+            ->assertHasNoErrors();
+
+        $c = AlertContact::withoutAccountScope()->where('name', 'OnCall')->sole();
+        $this->assertSame($this->server->id, $c->server_id);
+        $this->assertNull($c->grupo); // servidor especifico tem precedencia
+    }
+
+    public function test_operador_nao_cadastra_destinatario(): void
+    {
+        app(AccountContext::class)->set($this->account->id);
+        $this->actingAs($this->operador);
+
+        Livewire::test(Alertas::class)
+            ->call('novoContato')
+            ->set('c_name', 'X')
+            ->set('c_phone', '5511000000000')
+            ->call('saveContato')
+            ->assertForbidden();
+
+        $this->assertSame(0, AlertContact::withoutAccountScope()->count());
     }
 }

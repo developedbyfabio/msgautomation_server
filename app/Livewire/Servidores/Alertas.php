@@ -3,6 +3,7 @@
 namespace App\Livewire\Servidores;
 
 use App\Auth\AreaAccess;
+use App\Servers\AlertContact;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Server;
@@ -44,6 +45,25 @@ class Alertas extends Component
     public bool $enabled = true;
 
     public ?int $confirmingRemoveId = null;
+
+    // ---- Destinatarios (roteamento) ----
+    public bool $showContactForm = false;
+
+    public ?int $contactEditingId = null;
+
+    public string $c_name = '';
+
+    public string $c_phone = '';
+
+    public string $c_email = '';
+
+    public string $c_min_level = 'warning';
+
+    public ?int $c_server_id = null;
+
+    public string $c_grupo = '';
+
+    public ?int $confirmingContactDeleteId = null;
 
     public function mount(): void
     {
@@ -161,6 +181,98 @@ class Alertas extends Component
         $this->confirmingRemoveId = null;
     }
 
+    // ---- Destinatarios (roteamento por severidade + alvo) ----------------------
+
+    public function novoContato(): void
+    {
+        $this->reset(['contactEditingId', 'c_name', 'c_phone', 'c_email', 'c_grupo']);
+        $this->c_min_level = 'warning';
+        $this->c_server_id = null;
+        $this->resetValidation();
+        $this->showContactForm = true;
+    }
+
+    public function editContato(int $id): void
+    {
+        $c = AlertContact::query()->findOrFail($id);
+        $this->contactEditingId = $c->id;
+        $this->c_name = (string) $c->name;
+        $this->c_phone = (string) $c->phone;
+        $this->c_email = (string) $c->email;
+        $this->c_min_level = $c->min_level;
+        $this->c_server_id = $c->server_id;
+        $this->c_grupo = (string) $c->grupo;
+        $this->resetValidation();
+        $this->showContactForm = true;
+    }
+
+    public function closeContato(): void
+    {
+        $this->showContactForm = false;
+        $this->resetValidation();
+    }
+
+    public function saveContato(): void
+    {
+        AreaAccess::authorizeOwnerAction();
+
+        $this->validate([
+            'c_name' => 'required|string|max:100',
+            'c_phone' => 'required|string|max:30|regex:/^[0-9+\s()-]+$/',
+            'c_email' => 'nullable|email|max:150',
+            'c_min_level' => 'required|in:warning,critical',
+            'c_server_id' => 'nullable|integer|exists:servers,id',
+            'c_grupo' => 'nullable|string|max:60',
+        ], [
+            'c_phone.regex' => 'Telefone: use apenas numeros e + ( ) - espaco.',
+        ]);
+
+        AlertContact::query()->updateOrCreate(
+            ['id' => $this->contactEditingId, 'account_id' => $this->accountId()],
+            [
+                'account_id' => $this->accountId(),
+                'name' => trim($this->c_name),
+                'phone' => preg_replace('/\D/', '', $this->c_phone),
+                'email' => trim($this->c_email) !== '' ? trim($this->c_email) : null,
+                'min_level' => $this->c_min_level,
+                // server_id especifico tem precedencia; senao grupo; senao todos.
+                'server_id' => $this->c_server_id,
+                'grupo' => $this->c_server_id === null && trim($this->c_grupo) !== '' ? trim($this->c_grupo) : null,
+                'enabled' => true,
+            ],
+        );
+
+        $this->closeContato();
+        $this->dispatch('toast', message: 'Destinatario salvo.');
+    }
+
+    public function toggleContato(int $id): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        $c = AlertContact::query()->findOrFail($id);
+        $c->update(['enabled' => ! $c->enabled]);
+    }
+
+    public function askDeleteContato(int $id): void
+    {
+        $this->confirmingContactDeleteId = $id;
+    }
+
+    public function cancelDeleteContato(): void
+    {
+        $this->confirmingContactDeleteId = null;
+    }
+
+    public function deleteContatoConfirmed(): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        if ($this->confirmingContactDeleteId) {
+            AlertContact::query()->whereKey($this->confirmingContactDeleteId)->delete();
+            $this->dispatch('toast', message: 'Destinatario removido.');
+        }
+        $this->confirmingContactDeleteId = null;
+    }
+
     // ---- leitura ----------------------------------------------------------------
 
     /** Regra efetiva da metrica no contexto atual (especifica > global). */
@@ -195,10 +307,17 @@ class Alertas extends Component
 
         $removing = $this->confirmingRemoveId ? AlertRule::query()->find($this->confirmingRemoveId) : null;
 
+        $contatos = AlertContact::query()->orderBy('name')->get();
+        $contactDeleting = $this->confirmingContactDeleteId
+            ? AlertContact::query()->find($this->confirmingContactDeleteId) : null;
+
         return view('livewire.servidores.alertas', [
             'linhas' => $linhas,
             'servers' => Server::query()->orderBy('name')->get(['id', 'name']),
             'removing' => $removing,
+            'contatos' => $contatos,
+            'contactDeleting' => $contactDeleting,
+            'notificacoesLigadas' => (bool) config('servers.notifications_enabled'),
         ]);
     }
 }

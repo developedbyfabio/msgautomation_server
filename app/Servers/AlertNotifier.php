@@ -5,34 +5,35 @@ namespace App\Servers;
 use App\Models\SystemEvent;
 
 /**
- * Servidores S2 — ACAO de notificacao por transicao de incidente. 100% MUDA
- * nesta fatia: com config('servers.notifications_enabled') = false (default),
- * cada transicao registra UM SystemEvent "teria notificado..." (ref
- * idempotente por incidente+transicao — rodar a avaliacao N vezes nao duplica)
- * para o dono calibrar limiares vendo nos Logs exatamente o que sairia.
+ * Servidores — acao de notificacao por transicao de incidente.
  *
- * A S3 liga o canal REAL colocando o envio atras do flag (o branch ON abaixo
- * ja existe e hoje tambem so registra, com a ressalva "canal nao implementado"
- * — ligar o flag por engano na S2 nao envia nada). NENHUMA referencia a
- * Sender/ProviderRegistry/Http aqui, de proposito.
+ * MODO SILENCIOSO (flag servers.notifications_enabled OFF, default S2): cada
+ * transicao registra UM SystemEvent "teria notificado..." (ref idempotente por
+ * incidente+transicao) e marca notified_firing_at/notified_resolved_at — para o
+ * dono calibrar limiares vendo nos Logs o que sairia, SEM enviar nada.
+ *
+ * MODO CANAL (flag ON, S3): a transicao NAO envia nem loga aqui. O ENVIO e
+ * responsabilidade do job SendServerAlert, despachado pelo servers:evaluate ao
+ * fim do tick (fila, agrupado por conta). O "pendente" e o proprio estado
+ * persistido do incidente (notified_level != level; notified_resolved_at NULL)
+ * — o job envia e marca. Assim o envio nunca ocorre no request nem dentro da
+ * avaliacao, e um rack caindo vira UMA mensagem agrupada, nao dezenas.
+ * NENHUMA referencia a transporte/Http aqui, de proposito.
  */
 class AlertNotifier
 {
     /** $transition: firing | escalated | resolved. */
     public function transition(Incident $incident, string $transition): void
     {
-        $silencioso = ! config('servers.notifications_enabled');
-
-        if ($silencioso) {
-            $this->registrar($incident, $transition, '[silencioso] Teria notificado: ');
-        } else {
-            // S3: envio real de WhatsApp entra AQUI (job em fila). Ate la, o
-            // flag ligado nao pode enviar nada — so registra a ressalva.
-            $this->registrar($incident, $transition, '[canal nao implementado — S3] Teria notificado: ');
+        // Modo canal (ON): a transicao nao faz nada aqui — o job SendServerAlert
+        // (despachado pelo command) le o estado pendente, envia e marca.
+        if (config('servers.notifications_enabled')) {
+            return;
         }
 
-        // Marca a acao de notificacao da transicao (idempotencia da maquina de
-        // estado; a S3 reusa estas marcas para nunca re-enviar).
+        // Modo silencioso (OFF): trilha nos Logs + marcas (comportamento S2).
+        $this->registrar($incident, $transition, '[silencioso] Teria notificado: ');
+
         if ($transition === 'firing' && $incident->notified_firing_at === null) {
             $incident->forceFill(['notified_firing_at' => now()])->save();
         }
