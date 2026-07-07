@@ -67,10 +67,13 @@ colide com nada em uso (a :9100 estava livre; apache/desenvLaravel/engeinsights 
   `desenvLaravel` nem apache. Contorna o conflito :80 de vez. Versionada em `deploy/nginx/`.
 - **Permissões**: o php-fpm roda como `www-data`; os daemons (worker/scheduler) rodam como `root`.
   Usei **ACL** (`setfacl`, incl. default ACL) em `storage` e `bootstrap/cache` pra os dois
-  usuários coexistirem sem quebrar logs. E **ACL de leitura pro `www-data` no `.env`** — este era
-  o motivo do primeiro `500`: o `.env` era `600 root`, o fpm (www-data) não lia, a app caía em
-  defaults (`env=production`, sem `APP_KEY`) → `MissingAppKeyException`. `.env` **continua sem
-  leitura pra "outros"** (segredos protegidos); só `www-data` ganhou `r`.
+  usuários coexistirem sem quebrar logs. E dei **leitura do `.env` pro `www-data`** — este era o
+  motivo do `500`: o `.env` era `600 root`, o fpm (www-data) não lia, a app caía em defaults
+  (`env=production`, sem `APP_KEY`) → `MissingAppKeyException`. Fix durável: `.env` passou a
+  `root:www-data 640` (+ ACL de reforço) — o grupo sobrevive a edições in-place; **continua sem
+  leitura pra "outros"** (segredos protegidos). ⚠️ Gotcha: editar o `.env` com ferramenta que
+  reescreve o inode **derruba a ACL** (aconteceu ao ajustar o `APP_URL`); o grupo `www-data` é a
+  garantia — se o `www-data` voltar a não ler o `.env`, rode `chgrp www-data .env && chmod 640 .env`.
 - **`artisan serve` aposentado**: `msgautomation-serve.service` (:8080) → `disable --now`
   (`disabled` + `inactive`). `APP_URL` realinhado pra `http://192.168.11.210:9100`.
 
@@ -122,5 +125,6 @@ continuará `failed` no boot pelo motivo pré-existente da :80 — item 3 no top
 - **Outros projetos da máquina intactos**: apache (:80), site `desenvLaravel`, `engeinsights`
   (:8100) — nenhuma porta/config/processo deles foi alterado.
 - Pacotes instalados (aditivo): `php8.5-fpm`, `acl`. Novos: `nginx-msgautomation.service`,
-  `/etc/nginx/msgautomation-standalone.conf`, ACLs em `storage`/`bootstrap/cache`/`.env`.
+  `/etc/nginx/msgautomation-standalone.conf`, ACLs em `storage`/`bootstrap/cache`, e `.env`
+  passado a `root:www-data 640`.
 - `APP_ENV=local` confirmado; `APP_URL` → :9100. Suíte 1087 verdes; `queue:restart` feito. Sem push.
