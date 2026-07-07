@@ -189,3 +189,12 @@ Route::post('/webhook/asaas', \App\Http\Controllers\AsaasWebhookController::clas
 Route::post('/webhook/servers/ingest', \App\Http\Controllers\ServerIngestController::class)
     ->middleware('throttle:server-ingest')
     ->name('webhook.servers.ingest');
+
+// Servidores S4 — instalador do agente coletor (o `curl | sh` do tutorial).
+// PUBLICO e SEM SEGREDO: o script nao carrega token (vem por env na instalacao).
+// Servido pelo proprio app; em producao real deve ser HTTPS (dono decide a
+// exposicao; Tunnel/nginx intocados). GET simples, sem sessao.
+Route::get('/servidores/agente/instalar.sh', [\App\Http\Controllers\ServerAgentController::class, 'installer'])
+    ->name('servidores.agente.instalar');
+Route::get('/servidores/agente/coletor.sh', [\App\Http\Controllers\ServerAgentController::class, 'collector'])
+    ->name('servidores.agente.coletor');

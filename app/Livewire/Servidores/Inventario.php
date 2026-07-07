@@ -49,6 +49,11 @@ class Inventario extends Component
 
     public string $plainTokenFor = '';
 
+    public ?int $plainTokenServerId = null; // a qual servidor o $plainToken pertence
+
+    // Tutorial de instalacao (sem exigir token fresco na mao).
+    public ?int $installServerId = null;
+
     protected function rules(): array
     {
         return [
@@ -121,6 +126,7 @@ class Inventario extends Component
         // Token gerado agora e exibido UMA vez; o claro fica no Cofre.
         $this->plainToken = $tokens->issue($server);
         $this->plainTokenFor = $server->name;
+        $this->plainTokenServerId = $server->id;
         $this->closeForm();
         $this->dispatch('toast', message: 'Servidor cadastrado.');
     }
@@ -152,6 +158,7 @@ class Inventario extends Component
             $s = Server::query()->findOrFail($this->confirmingRegenId);
             $this->plainToken = $tokens->issue($s); // hash novo: o antigo ja da 401
             $this->plainTokenFor = $s->name;
+            $this->plainTokenServerId = $s->id;
             $this->dispatch('toast', message: 'Token regenerado — o anterior parou de valer.');
         }
         $this->confirmingRegenId = null;
@@ -162,6 +169,39 @@ class Inventario extends Component
     {
         $this->plainToken = null;
         $this->plainTokenFor = '';
+        $this->plainTokenServerId = null;
+    }
+
+    // ---- Tutorial de instalacao ---------------------------------------------
+
+    public function verInstalacao(int $id): void
+    {
+        $this->installServerId = $id;
+    }
+
+    public function fecharInstalacao(): void
+    {
+        $this->installServerId = null;
+    }
+
+    /** URL do instalador (o `curl | sh`). */
+    public function installUrl(): string
+    {
+        return route('servidores.agente.instalar');
+    }
+
+    /**
+     * Comando de instalacao de UMA linha. $token embutido quando disponivel em
+     * claro (logo apos criar/regenerar); senao placeholder <SEU_TOKEN> (o token
+     * so aparece uma vez — padrao do Cofre; regenerar gera um novo).
+     */
+    public function comandoInstalacao(?string $token): string
+    {
+        $t = ($token !== null && $token !== '') ? $token : '<SEU_TOKEN>';
+
+        return 'curl -fsSL '.$this->installUrl()
+            .' | sudo AGENT_URL='.route('webhook.servers.ingest')
+            .' AGENT_TOKEN='.$t.' sh';
     }
 
     // ---- Excluir -------------------------------------------------------------
@@ -240,11 +280,13 @@ class Inventario extends Component
 
         $deleting = $this->confirmingDeleteId ? Server::query()->find($this->confirmingDeleteId) : null;
         $regenerating = $this->confirmingRegenId ? Server::query()->find($this->confirmingRegenId) : null;
+        $installServer = $this->installServerId ? Server::query()->find($this->installServerId) : null;
 
         return view('livewire.servidores.inventario', [
             'servers' => $servers,
             'deleting' => $deleting,
             'regenerating' => $regenerating,
+            'installServer' => $installServer,
         ]);
     }
 }

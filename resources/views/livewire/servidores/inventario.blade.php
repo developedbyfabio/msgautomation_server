@@ -68,6 +68,7 @@
                             <flux:icon icon="ellipsis-vertical" variant="micro" />
                         </button>
                         <flux:menu>
+                            <flux:menu.item wire:click="verInstalacao({{ $s->id }})" icon="command-line">Instalacao</flux:menu.item>
                             <flux:menu.item wire:click="edit({{ $s->id }})" icon="pencil-square">Editar</flux:menu.item>
                             <flux:menu.item wire:click="askRegenerate({{ $s->id }})" icon="arrow-path">Regenerar token</flux:menu.item>
                             <flux:menu.item wire:click="toggleEnabled({{ $s->id }})" icon="{{ $s->enabled ? 'pause' : 'play' }}">
@@ -147,16 +148,65 @@
             <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
                 <code class="select-all break-all font-mono text-sm">{{ $plainToken }}</code>
             </div>
-            <p class="mt-2 text-[11px] text-zinc-400">
-                O agente envia o token no header <code>X-Agent-Token</code> do POST para
-                <code>{{ route('webhook.servers.ingest') }}</code>.
-            </p>
+
+            <div class="mt-4 space-y-1">
+                <p class="text-sm font-medium">Instalar o agente (cole no terminal do servidor, como root):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">{{ $this->comandoInstalacao($plainToken) }}</code>
+                </div>
+                <p class="text-[11px] text-zinc-400">
+                    1. Copie o comando. 2. Cole no servidor monitorado (root/sudo). 3. Em ~30s ele aparece como
+                    <strong>Recebendo dados</strong>. Desinstalar: <code>sudo msgautomation-agent-uninstall</code>.
+                </p>
+                <p class="text-[11px] text-zinc-400">
+                    <flux:icon icon="shield-check" variant="micro" class="inline size-3" />
+                    O agente e <strong>read-only</strong>, faz so <strong>PUSH de saida</strong> (nao abre porta) e roda
+                    como usuario comum. O script vem deste sistema; se preferir, inspecione antes:
+                    <code>curl {{ route('servidores.agente.coletor') }}</code>.
+                </p>
+            </div>
+
             <x-slot:footer>
                 <div class="flex justify-end">
                     <button type="button" wire:click="dismissToken" data-autofocus
                         class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">
                         <flux:icon icon="check" variant="micro" /> Copiei, fechar
                     </button>
+                </div>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    {{-- MODAL: tutorial de instalacao (dropdown "Instalacao") --}}
+    @if ($installServer)
+        <x-modal wireClose="fecharInstalacao" title="Instalar o agente — {{ $installServer->name }}" maxWidth="lg">
+            @php $temToken = $plainToken !== null && $plainTokenServerId === $installServer->id; @endphp
+            <p class="text-sm text-zinc-600 dark:text-zinc-300">
+                Comando de instalacao (cole no terminal do servidor monitorado, como root/sudo):
+            </p>
+            <div class="mt-2 rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                <code class="select-all break-all font-mono text-xs text-zinc-100">{{ $this->comandoInstalacao($temToken ? $plainToken : null) }}</code>
+            </div>
+            @unless ($temToken)
+                <p class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                    O token e exibido <strong>uma unica vez</strong> ao criar/regenerar (fica cifrado no Cofre). Troque
+                    <code>&lt;SEU_TOKEN&gt;</code> pelo token do servidor, ou use <strong>Regenerar token</strong> para
+                    obter um comando ja pronto (o token anterior deixa de valer).
+                </p>
+            @endunless
+            <div class="mt-3 space-y-1 text-[11px] text-zinc-400">
+                <p><strong>Passos:</strong> 1. Copie. 2. Cole no servidor (root). 3. Aparece como <strong>Recebendo dados</strong> em ~30s.</p>
+                <p><strong>Desinstalar:</strong> <code>sudo msgautomation-agent-uninstall</code> (para e remove sem residuo).</p>
+                <p>
+                    <flux:icon icon="shield-check" variant="micro" class="inline size-3" />
+                    Read-only, PUSH de saida (nao abre porta), usuario comum. Inspecionar antes:
+                    <code>curl {{ route('servidores.agente.coletor') }}</code>.
+                </p>
+            </div>
+            <x-slot:footer>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="askRegenerate({{ $installServer->id }})" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700">Regenerar token</button>
+                    <button type="button" wire:click="fecharInstalacao" data-autofocus class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900">Fechar</button>
                 </div>
             </x-slot:footer>
         </x-modal>
