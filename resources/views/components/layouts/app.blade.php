@@ -22,6 +22,9 @@
             ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
             ['contatos', 'Clientes', 'users', 0],
             ['campanhas', 'Campanhas', 'megaphone', 0],
+            // Servidores S1 — ferramenta interna do dono (owner-only via MAP;
+            // o filtro de papel abaixo esconde do operador).
+            ['servidores', 'Servidores', 'server-stack', 0],
         ]],
         ['heading' => 'Automacao', 'items' => [
             ['regras', 'Respostas automaticas', 'bolt', 0],

@@ -39,6 +39,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Servidores S1 — rate limit da ingestao de metricas (porta PUBLICA):
+        // por TOKEN (hash — nunca o claro como chave de cache) e por IP. Cadencia
+        // legitima do agente e 2-4 req/min; 10/min da folga sem permitir flood.
+        // Nenhum webhook existente tem throttle — padrao NOVO, so nesta rota.
+        \Illuminate\Support\Facades\RateLimiter::for('server-ingest', function (\Illuminate\Http\Request $request) {
+            $token = (string) $request->header('X-Agent-Token', '');
+
+            return [
+                \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by('srv-ingest-ip:' . $request->ip()),
+                \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by('srv-ingest-tok:' . hash('sha256', $token)),
+            ];
+        });
+
         // Fatia 22 — o middleware de PAPEL e persistente do Livewire: os updates
         // de componente (POST /livewire/update) nao passam pela rota da pagina —
         // sem isto, uma acao Livewire forjada driblaria o enforcement da rota.

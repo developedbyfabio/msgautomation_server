@@ -78,6 +78,10 @@ Route::middleware(['auth', 'verified', 'account.operational'])->group(function (
     // Prompt 02 — logs/eventos da conta (somente leitura; util mesmo desconectado).
     // Fatia 22: tecnico -> OWNER-only.
     Route::get('/logs', \App\Livewire\Logs::class)->middleware('account.role:owner')->name('logs');
+    // Servidores S1 — inventario + token do agente (ferramenta interna do dono,
+    // OWNER-only). Fora do gate whatsapp.connected: monitorar servidor nao
+    // depende do canal estar conectado.
+    Route::get('/servidores', \App\Livewire\Servidores\Inventario::class)->middleware('account.role:owner')->name('servidores');
     // Prompt 04 — serve a midia ENVIADA da conversa. Resolucao EXPLICITA dentro
     // da closure (binding implicito rodaria antes do SetAccountContext): a query
     // escopada por conta garante que midia de outra conta = 404, nunca vaza.
@@ -170,3 +174,13 @@ Route::match(['get', 'post'], '/webhook/cloud/{token}', \App\Http\Controllers\Ch
 // rota e da aplicacao e o dominio ja e exposto.
 Route::post('/webhook/asaas', \App\Http\Controllers\AsaasWebhookController::class)
     ->name('webhook.asaas');
+
+// Servidores S1 — ingestao de metricas dos agentes coletores (PUSH via HTTPS).
+// Token POR SERVIDOR no header X-Agent-Token (claro so no Cofre; sha256 na
+// tabela; hash_equals no resolve), rate limit proprio por token/IP (429),
+// payload minimo validado (413/422). Grava buffer efemero + last_seen_at e
+// responde — NENHUMA avaliacao/envio inline (S2/S3). CSRF isento pelo prefixo
+// webhook/* (bootstrap).
+Route::post('/webhook/servers/ingest', \App\Http\Controllers\ServerIngestController::class)
+    ->middleware('throttle:server-ingest')
+    ->name('webhook.servers.ingest');
