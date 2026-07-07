@@ -39,5 +39,9 @@
         <env name="ASAAS_API_KEY" value="chave-fake-de-teste"/>
         <env name="ASAAS_BASE_URL" value="https://api-sandbox.asaas.com"/>
         <env name="ASAAS_WEBHOOK_TOKEN" value="token-webhook-de-teste-0123456789abcdef"/>
+        <!-- Servidores: canal DESLIGADO na suite por padrao (modo silencioso), independente
+             do .env real (o dono ligou o flag em producao-DEV). Os testes de envio real
+             sobrescrevem para true via config()->set no proprio teste (ServersCanalTest). -->
+        <env name="SERVERS_NOTIFICATIONS_ENABLED" value="false"/>
     </php>
 </phpunit>
