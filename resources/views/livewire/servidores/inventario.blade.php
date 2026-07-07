@@ -150,19 +150,46 @@
             </div>
 
             <div class="mt-4 space-y-1">
-                <p class="text-sm font-medium">Instalar o agente (cole no terminal do servidor, como root):</p>
+                <p class="text-sm font-medium">Passo 1 — Instalar o agente (cole no terminal do servidor, como root):</p>
                 <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
                     <code class="select-all break-all font-mono text-xs text-zinc-100">{{ $this->comandoInstalacao($plainToken) }}</code>
                 </div>
+            </div>
+
+            <div class="mt-3 space-y-1">
+                <p class="text-sm font-medium">Passo 2 — Liberar leitura do config (necessario em RHEL/CentOS/Rocky/AlmaLinux):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">sudo chmod 644 /etc/msgautomation-agent/config</code>
+                </div>
                 <p class="text-[11px] text-zinc-400">
-                    1. Copie o comando. 2. Cole no servidor monitorado (root/sudo). 3. Em ~30s ele aparece como
-                    <strong>Recebendo dados</strong>. Desinstalar: <code>sudo msgautomation-agent-uninstall</code>.
+                    Em algumas distribuicoes Linux (familia RHEL/CentOS), o usuario do coletor nao consegue ler o
+                    arquivo de configuracao restrito e o agente nao inicia. Este comando libera a leitura. Em
+                    Debian/Ubuntu geralmente nao e necessario, mas rodar nao causa problema.
                 </p>
+            </div>
+
+            <div class="mt-3 space-y-1">
+                <p class="text-sm font-medium">Verificar (opcional):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">sudo systemctl start msgautomation-agent.service && journalctl -u msgautomation-agent.service -n 3 --no-pager</code>
+                </div>
+                <p class="text-[11px] text-zinc-400">
+                    Se nao aparecer erro e o servidor mudar para <strong>Recebendo dados</strong> no painel em ~30s,
+                    esta funcionando. Desinstalar: <code>sudo msgautomation-agent-uninstall</code>.
+                </p>
+            </div>
+
+            <div class="mt-3 space-y-1">
                 <p class="text-[11px] text-zinc-400">
                     <flux:icon icon="shield-check" variant="micro" class="inline size-3" />
                     O agente e <strong>read-only</strong>, faz so <strong>PUSH de saida</strong> (nao abre porta) e roda
                     como usuario comum. O script vem deste sistema; se preferir, inspecione antes:
                     <code>curl {{ route('servidores.agente.coletor') }}</code>.
+                </p>
+                <p class="text-[11px] text-amber-700 dark:text-amber-400">
+                    <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
+                    O <code>chmod 644</code> deixa o token legivel por outros usuarios do servidor. Para ambientes com
+                    varios usuarios, avalie restringir o acesso ao servidor.
                 </p>
             </div>
 
@@ -181,9 +208,7 @@
     @if ($installServer)
         <x-modal wireClose="fecharInstalacao" title="Instalar o agente — {{ $installServer->name }}" maxWidth="lg">
             @php $temToken = $plainToken !== null && $plainTokenServerId === $installServer->id; @endphp
-            <p class="text-sm text-zinc-600 dark:text-zinc-300">
-                Comando de instalacao (cole no terminal do servidor monitorado, como root/sudo):
-            </p>
+            <p class="text-sm font-medium">Passo 1 — Instalar (cole no terminal do servidor monitorado, como root/sudo):</p>
             <div class="mt-2 rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
                 <code class="select-all break-all font-mono text-xs text-zinc-100">{{ $this->comandoInstalacao($temToken ? $plainToken : null) }}</code>
             </div>
@@ -194,13 +219,40 @@
                     obter um comando ja pronto (o token anterior deixa de valer).
                 </p>
             @endunless
+
+            <div class="mt-3 space-y-1">
+                <p class="text-sm font-medium">Passo 2 — Liberar leitura do config (necessario em RHEL/CentOS/Rocky/AlmaLinux):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">sudo chmod 644 /etc/msgautomation-agent/config</code>
+                </div>
+                <p class="text-[11px] text-zinc-400">
+                    Em algumas distribuicoes Linux (familia RHEL/CentOS), o usuario do coletor nao consegue ler o
+                    arquivo de configuracao restrito e o agente nao inicia. Este comando libera a leitura. Em
+                    Debian/Ubuntu geralmente nao e necessario, mas rodar nao causa problema.
+                </p>
+            </div>
+
+            <div class="mt-3 space-y-1">
+                <p class="text-sm font-medium">Verificar (opcional):</p>
+                <div class="rounded-lg border border-zinc-200 bg-zinc-900 p-3 dark:border-zinc-700">
+                    <code class="select-all break-all font-mono text-xs text-zinc-100">sudo systemctl start msgautomation-agent.service && journalctl -u msgautomation-agent.service -n 3 --no-pager</code>
+                </div>
+                <p class="text-[11px] text-zinc-400">
+                    Se nao aparecer erro e o servidor mudar para <strong>Recebendo dados</strong> em ~30s, esta funcionando.
+                </p>
+            </div>
+
             <div class="mt-3 space-y-1 text-[11px] text-zinc-400">
-                <p><strong>Passos:</strong> 1. Copie. 2. Cole no servidor (root). 3. Aparece como <strong>Recebendo dados</strong> em ~30s.</p>
                 <p><strong>Desinstalar:</strong> <code>sudo msgautomation-agent-uninstall</code> (para e remove sem residuo).</p>
                 <p>
                     <flux:icon icon="shield-check" variant="micro" class="inline size-3" />
                     Read-only, PUSH de saida (nao abre porta), usuario comum. Inspecionar antes:
                     <code>curl {{ route('servidores.agente.coletor') }}</code>.
+                </p>
+                <p class="text-amber-700 dark:text-amber-400">
+                    <flux:icon icon="exclamation-triangle" variant="micro" class="inline size-3" />
+                    O <code>chmod 644</code> deixa o token legivel por outros usuarios do servidor. Para ambientes com
+                    varios usuarios, avalie restringir o acesso ao servidor.
                 </p>
             </div>
             <x-slot:footer>

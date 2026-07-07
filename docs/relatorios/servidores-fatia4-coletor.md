@@ -188,3 +188,31 @@ void). O incidente de disco de `/` a 88% é uma condição **real** do host.
   recicla os workers.
 - Suíte inteira **sequencial**: 1040 → 1053 verdes (4070 → 4114 assertions), zero falha.
 - Commits `8001951`, `cd0cca2`, `5dd3142` — **sem push** (remote `msgautomation_server`; o dono empurra).
+
+---
+
+## Adendo (2026-07-07) — passo de permissão do config no tutorial
+
+**Só texto/Blade** (`resources/views/livewire/servidores/inventario.blade.php`), nos dois
+modais do tutorial de instalação (o de token na criação/regeneração e o de "Instalação" do
+dropdown). Nenhuma lógica do coletor/instalador/endpoint/pipeline alterada. `APP_ENV=local`.
+
+Motivo: o coletor roda como `nobody` e lê `/etc/msgautomation-agent/config` (criado `600`,
+dono root). Em **RHEL/CentOS/Rocky/AlmaLinux** o `nobody` não lê esse arquivo → o agente morre
+com `AGENT_URL nao definido (config ausente)` e o servidor fica "Aguardando primeiro contato".
+Contorno documentado (o dono aplica na mão nos ~30 servidores; instalador não foi "consertado"
+por decisão do dono).
+
+Adicionado ao tutorial:
+- **Passo 1** — comando de instalação (`curl … | sh`, já existia; agora rotulado).
+- **Passo 2** — `sudo chmod 644 /etc/msgautomation-agent/config` (bloco copiável) + nota simples
+  do porquê (RHEL/CentOS; Debian/Ubuntu geralmente não precisa, rodar não atrapalha).
+- **Verificar (opcional)** — `sudo systemctl start msgautomation-agent.service && journalctl -u
+  msgautomation-agent.service -n 3 --no-pager` + dica ("Recebendo dados em ~30s").
+- **Desinstalar** — `sudo msgautomation-agent-uninstall` (mantido).
+- **Nota de segurança** — o `chmod 644` deixa o token legível por outros usuários do servidor;
+  para ambientes multiusuário, avaliar restringir o acesso ao servidor.
+
+Sem migration, sem `queue:restart` (mudança de view; nada carregado por worker/scheduler).
+Suíte: **1077 verdes / 4201** (inalterada — só texto). Render dos dois modais confirmado via
+Livewire (Passo 2 / chmod 644 / journalctl presentes). Commit: registrado abaixo.
