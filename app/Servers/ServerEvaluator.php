@@ -84,11 +84,36 @@ class ServerEvaluator
             $this->applyRule($server, $rule, $metric, null, $series);
         }
 
-        if (isset($rules['disk'])) {
-            foreach ($this->mounts($samples) as $mount) {
-                $this->applyRule($server, $rules['disk'], 'disk', $mount, $this->series($samples, 'disk', $mount));
+        // Disco: resolucao POR PARTICAO (S4). Cada mount reportado casa a regra
+        // mais especifica; desligada -> particao silenciada; nenhuma -> ignora.
+        foreach ($this->mounts($samples) as $mount) {
+            $rule = $this->diskRuleFor($server, $mount);
+            if ($rule === null) {
+                continue; // sem regra efetiva (ou sobrescrita da particao desligada)
             }
+            $this->applyRule($server, $rule, 'disk', $mount, $this->series($samples, 'disk', $mount));
         }
+    }
+
+    /**
+     * Regra de disco EFETIVA para uma particao (S4). Precedencia, mais
+     * especifica primeiro: (servidor, mount) > (servidor, NULL) > (global,
+     * NULL). enabled=false na regra escolhida SILENCIA a particao (retorna
+     * null: nem abre, nem fecha — como a sobrescrita desligada de metrica).
+     */
+    public function diskRuleFor(Server $server, string $mount): ?AlertRule
+    {
+        $regras = AlertRule::withoutAccountScope()
+            ->where('account_id', $server->account_id)
+            ->where('metric', 'disk')
+            ->where(fn ($q) => $q->whereNull('server_id')->orWhere('server_id', $server->id))
+            ->get();
+
+        $escolhida = $regras->first(fn ($r) => $r->server_id === $server->id && $r->mount === $mount)
+            ?? $regras->first(fn ($r) => $r->server_id === $server->id && $r->mount === null)
+            ?? $regras->first(fn ($r) => $r->server_id === null && $r->mount === null);
+
+        return $escolhida !== null && $escolhida->enabled ? $escolhida : null;
     }
 
     /**

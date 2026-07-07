@@ -78,7 +78,8 @@ class Alertas extends Component
         $r = AlertRule::query()->findOrFail($id); // escopo por conta
         $this->editingId = $r->id;
         $this->editingMetric = $r->metric;
-        $this->editingLabel = (AlertRule::LABELS[$r->metric] ?? $r->metric)
+        $particao = $r->mount !== null ? " · particao {$r->mount}" : '';
+        $this->editingLabel = (AlertRule::LABELS[$r->metric] ?? $r->metric).$particao
             .($r->isGlobal() ? ' — padrao global' : ' — sobrescrita deste servidor');
         $this->warning_threshold = $r->warning_threshold !== null ? (string) $r->warning_threshold : null;
         $this->critical_threshold = (string) $r->critical_threshold;
@@ -155,6 +156,71 @@ class Alertas extends Component
         );
 
         $this->edit($especifica->id);
+    }
+
+    // ---- selecao de PARTICOES por servidor (S4) --------------------------------
+
+    /** Regra de disco EFETIVA de uma particao (para a UI; independe de enabled). */
+    public function diskRuleForUi(int $serverId, string $mount): ?AlertRule
+    {
+        $regras = AlertRule::query()
+            ->where('metric', 'disk')
+            ->where(fn ($q) => $q->whereNull('server_id')->orWhere('server_id', $serverId))
+            ->get();
+
+        return $regras->first(fn ($r) => $r->server_id === $serverId && $r->mount === $mount)
+            ?? $regras->first(fn ($r) => $r->server_id === $serverId && $r->mount === null)
+            ?? $regras->first(fn ($r) => $r->server_id === null && $r->mount === null);
+    }
+
+    /** Cria a sobrescrita da particao (copiando a efetiva) e abre a edicao do limiar. */
+    public function overridePartition(string $mount): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        if (! $this->servidorId) {
+            return;
+        }
+        $base = $this->diskRuleForUi($this->servidorId, $mount);
+        if ($base === null) {
+            return;
+        }
+
+        $regra = AlertRule::query()->firstOrCreate(
+            ['account_id' => $this->accountId(), 'server_id' => $this->servidorId, 'metric' => 'disk', 'mount' => $mount],
+            $base->only(['warning_threshold', 'critical_threshold', 'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s']) + ['enabled' => true],
+        );
+
+        $this->edit($regra->id);
+    }
+
+    /** Liga/desliga o alerta de UMA particao no servidor (desligada = silenciada). */
+    public function togglePartition(string $mount): void
+    {
+        AreaAccess::authorizeOwnerAction();
+        if (! $this->servidorId) {
+            return;
+        }
+
+        $especifica = AlertRule::query()
+            ->where('server_id', $this->servidorId)->where('metric', 'disk')->where('mount', $mount)->first();
+
+        if ($especifica !== null) {
+            $especifica->update(['enabled' => ! $especifica->enabled]);
+
+            return;
+        }
+
+        // Sem sobrescrita ainda: desligar cria uma copia DESLIGADA da efetiva
+        // (silencia so esta particao; as demais seguem o padrao).
+        $base = $this->diskRuleForUi($this->servidorId, $mount);
+        if ($base === null) {
+            return;
+        }
+        AlertRule::query()->create(
+            ['account_id' => $this->accountId(), 'server_id' => $this->servidorId, 'metric' => 'disk', 'mount' => $mount]
+            + $base->only(['warning_threshold', 'critical_threshold', 'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s'])
+            + ['enabled' => false],
+        );
     }
 
     public function askRemoveOverride(int $id): void
@@ -275,18 +341,22 @@ class Alertas extends Component
 
     // ---- leitura ----------------------------------------------------------------
 
-    /** Regra efetiva da metrica no contexto atual (especifica > global). */
+    /**
+     * Regra efetiva da metrica no contexto atual (especifica > global). Para
+     * disco, esta e a regra "de todas as particoes" (mount NULL) — as
+     * sobrescritas por particao aparecem na subsecao Particoes, nao aqui.
+     */
     private function efetiva(string $metric): ?AlertRule
     {
         if ($this->servidorId) {
             $especifica = AlertRule::query()
-                ->where('server_id', $this->servidorId)->where('metric', $metric)->first();
+                ->where('server_id', $this->servidorId)->where('metric', $metric)->whereNull('mount')->first();
             if ($especifica) {
                 return $especifica;
             }
         }
 
-        return AlertRule::query()->whereNull('server_id')->where('metric', $metric)->first();
+        return AlertRule::query()->whereNull('server_id')->where('metric', $metric)->whereNull('mount')->first();
     }
 
     private function accountId(): int
@@ -311,6 +381,26 @@ class Alertas extends Component
         $contactDeleting = $this->confirmingContactDeleteId
             ? AlertContact::query()->find($this->confirmingContactDeleteId) : null;
 
+        // S4 — particoes REPORTADAS pelo servidor selecionado (do last_sample),
+        // cada uma com sua regra de disco efetiva (global/servidor/particao).
+        $particoes = [];
+        if ($this->servidorId) {
+            $srv = Server::query()->find($this->servidorId);
+            foreach ((array) ($srv?->last_sample['disks'] ?? []) as $d) {
+                $mount = (string) ($d['mount'] ?? '');
+                if ($mount === '') {
+                    continue;
+                }
+                $regra = $this->diskRuleForUi($this->servidorId, $mount);
+                $particoes[] = [
+                    'mount' => $mount,
+                    'pct' => $d['pct'] ?? null,
+                    'rule' => $regra,
+                    'override' => $regra !== null && $regra->server_id === $this->servidorId && $regra->mount === $mount,
+                ];
+            }
+        }
+
         return view('livewire.servidores.alertas', [
             'linhas' => $linhas,
             'servers' => Server::query()->orderBy('name')->get(['id', 'name']),
@@ -318,6 +408,7 @@ class Alertas extends Component
             'contatos' => $contatos,
             'contactDeleting' => $contactDeleting,
             'notificacoesLigadas' => (bool) config('servers.notifications_enabled'),
+            'particoes' => $particoes,
         ]);
     }
 }

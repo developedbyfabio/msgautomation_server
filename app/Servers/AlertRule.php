@@ -34,7 +34,7 @@ class AlertRule extends Model
     ];
 
     protected $fillable = [
-        'account_id', 'server_id', 'metric',
+        'account_id', 'server_id', 'metric', 'mount',
         'warning_threshold', 'critical_threshold',
         'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s', 'enabled',
     ];

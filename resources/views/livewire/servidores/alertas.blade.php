@@ -75,6 +75,66 @@
             @endforeach
         </div>
 
+        {{-- ================= PARTICOES (por servidor) ================= --}}
+        @if ($servidorId)
+            <div class="flex items-center gap-2 pt-4">
+                <h2 class="text-lg font-semibold">Particoes reportadas</h2>
+                <x-info-tip text="As particoes que ESTE servidor reportou (descobertas da ultima amostra). O coletor manda todas as particoes reais; aqui voce escolhe QUAIS alertar e o limiar de cada uma — sem reinstalar nada no servidor. Sem sobrescrita, cada particao segue o padrao de disco." />
+            </div>
+
+            @if ($particoes === [])
+                <div class="rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                    Este servidor ainda nao reportou particoes (aguardando o coletor enviar a primeira amostra).
+                </div>
+            @else
+                <div class="rounded-xl border border-zinc-200 bg-white divide-y divide-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:divide-zinc-800">
+                    @foreach ($particoes as $p)
+                        @php $pr = $p['rule']; $ligada = $pr && $pr->enabled; @endphp
+                        <div class="flex items-center gap-3 p-3" wire:key="part-{{ $p['mount'] }}">
+                            <div class="flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800">
+                                <flux:icon icon="circle-stack" variant="micro" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <code class="font-medium">{{ $p['mount'] }}</code>
+                                    @if ($p['pct'] !== null)
+                                        <span class="text-xs text-zinc-400">uso {{ $p['pct'] }}%</span>
+                                    @endif
+                                    @if ($p['override'])
+                                        <span class="rounded bg-sky-100 px-1.5 text-[10px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">sobrescrita</span>
+                                    @endif
+                                    @unless ($ligada)
+                                        <span class="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Silenciada</span>
+                                    @endunless
+                                </div>
+                                <div class="mt-0.5 text-xs text-zinc-400">
+                                    @if ($pr)
+                                        warning &ge; {{ $pr->warning_threshold !== null ? $pr->warning_threshold.'%' : '—' }}
+                                        &middot; critical &ge; {{ $pr->critical_threshold }}%
+                                        @if ($p['override']) (desta particao) @else (padrao) @endif
+                                    @endif
+                                </div>
+                            </div>
+                            <button type="button" wire:click="togglePartition('{{ $p['mount'] }}')"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                <flux:icon icon="{{ $ligada ? 'bell-slash' : 'bell' }}" variant="micro" /> {{ $ligada ? 'Silenciar' : 'Alertar' }}
+                            </button>
+                            <button type="button" wire:click="overridePartition('{{ $p['mount'] }}')"
+                                class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                                <flux:icon icon="pencil-square" variant="micro" /> Limiar
+                            </button>
+                            @if ($p['override'])
+                                <button type="button" wire:click="askRemoveOverride({{ $pr->id }})"
+                                    class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800" title="Voltar ao padrao">
+                                    <flux:icon icon="arrow-uturn-left" variant="micro" />
+                                </button>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        @endif
+
         {{-- ================= DESTINATARIOS (roteamento) ================= --}}
         <div class="flex items-center justify-between gap-3 pt-4">
             <div class="flex items-center gap-2">
