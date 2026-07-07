@@ -5,6 +5,7 @@ namespace App\Livewire\Servidores;
 use App\Auth\AreaAccess;
 use App\Servers\AlertContact;
 use App\Servers\AlertMessage;
+use App\Servers\AlertMessageResolver;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Server;
@@ -114,11 +115,18 @@ class Alertas extends Component
         $this->critical_repeat_on = $r->critical_repeat_s !== null && $r->critical_repeat_s > 0;
         $this->critical_repeat_min = $this->critical_repeat_on ? (string) (int) round($r->critical_repeat_s / 60) : '30';
 
-        // Mensagens (rotacao) + resolucao.
+        // Mensagens (rotacao) + resolucao. Se nao ha mensagem propria, PRE-PREENCHE
+        // com o template PADRAO editavel (o dono ve e edita o texto real que sai;
+        // nada de placeholder vazio). A 1a mensagem e a "padrao" (disparo); as
+        // demais entram na rotacao dos re-avisos.
         $msgs = AlertMessage::withoutAccountScope()->where('rule_id', $r->id)->orderBy('position')->get();
-        $this->msgsWarning = $msgs->where('level', 'warning')->pluck('text')->values()->all();
-        $this->msgsCritical = $msgs->where('level', 'critical')->pluck('text')->values()->all();
-        $this->msgResolved = (string) ($msgs->firstWhere('level', 'resolved')->text ?? '');
+        $disk = $r->metric === 'disk';
+        $this->msgsWarning = $msgs->where('level', 'warning')->pluck('text')->values()->all()
+            ?: [AlertMessageResolver::defaultFiringTemplate('warning', $disk)];
+        $this->msgsCritical = $msgs->where('level', 'critical')->pluck('text')->values()->all()
+            ?: [AlertMessageResolver::defaultFiringTemplate('critical', $disk)];
+        $this->msgResolved = (string) ($msgs->firstWhere('level', 'resolved')->text
+            ?? AlertMessageResolver::defaultResolvedTemplate($disk));
 
         $this->resetValidation();
     }

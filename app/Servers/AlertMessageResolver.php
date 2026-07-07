@@ -19,11 +19,30 @@ class AlertMessageResolver
     /** Rotulos das variaveis exibidos na UI. */
     public const VARIAVEIS = [
         '{servidor}' => 'nome do servidor',
+        '{ip}' => 'IP / host do servidor',
+        '{grupo}' => 'grupo do servidor',
         '{metrica}' => 'CPU / RAM / Disco / ...',
         '{valor}' => 'valor atual (ex.: 92%)',
         '{nivel}' => 'warning / critical',
         '{particao}' => 'partição (só disco)',
     ];
+
+    /** Template padrao EDITAVEL de disparo (com placeholders; a UI mostra e o dono edita). */
+    public static function defaultFiringTemplate(string $level, bool $comParticao = false): string
+    {
+        $emoji = $level === 'critical' ? '🔴' : '🟡';
+        $p = $comParticao ? ' ({particao})' : '';
+
+        return "{$emoji} {servidor} ({ip}): {metrica}{$p} {nivel} ({valor})";
+    }
+
+    /** Template padrao EDITAVEL de resolucao. */
+    public static function defaultResolvedTemplate(bool $comParticao = false): string
+    {
+        $p = $comParticao ? ' ({particao})' : '';
+
+        return '✅ {servidor} ({ip}): {metrica}'.$p.' normalizado';
+    }
 
     /**
      * Texto do alerta de ABERTURA/RE-AVISO do incidente (nivel atual), no indice
@@ -70,6 +89,8 @@ class AlertMessageResolver
 
         return strtr($texto, [
             '{servidor}' => $server?->name ?? ('#'.$incident->server_id),
+            '{ip}' => (string) ($server?->host ?? ''),      // campo "Host / IP" do servidor
+            '{grupo}' => (string) ($server?->grupo ?? ''),
             '{metrica}' => AlertRule::LABELS[$incident->metric] ?? $incident->metric,
             '{valor}' => $this->valor($incident),
             '{nivel}' => $incident->level,
@@ -91,16 +112,11 @@ class AlertMessageResolver
 
     private function defaultFiring(Incident $incident): string
     {
-        $emoji = $incident->level === 'critical' ? '🔴' : '🟡';
-        $part = $incident->mount !== null ? ' ({particao})' : '';
-
-        return "{$emoji} {servidor}: {metrica}{$part} {nivel}".($incident->value_at_fire !== null ? ' ({valor})' : '');
+        return self::defaultFiringTemplate($incident->level, $incident->mount !== null);
     }
 
     private function defaultResolved(Incident $incident): string
     {
-        $part = $incident->mount !== null ? ' ({particao})' : '';
-
-        return "✅ {servidor}: {metrica}{$part} normalizado";
+        return self::defaultResolvedTemplate($incident->mount !== null);
     }
 }

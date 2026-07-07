@@ -369,41 +369,47 @@
                     </div>
                 </div>
 
-                {{-- MENSAGENS configuraveis (rotacao) + variaveis --}}
+                {{-- MENSAGENS configuraveis (padrao editavel + rotacao) + variaveis --}}
                 <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                     <p class="mb-1 text-xs font-semibold">Mensagens do alerta</p>
                     <p class="mb-2 text-[11px] text-zinc-400">
-                        Varias mensagens = rotacao: a 1a no disparo, a proxima a cada re-aviso (repete a ultima ao acabar).
-                        Variaveis: <code>{servidor}</code> <code>{metrica}</code> <code>{valor}</code> <code>{nivel}</code> <code>{particao}</code>.
-                        Vazio = texto padrao.
+                        A <strong>1a mensagem</strong> de cada nivel e a <strong>padrao</strong> (vai no disparo) e ja vem
+                        preenchida — <strong>edite a vontade</strong>. Adicione outras para <strong>rotacao</strong>: a cada
+                        re-aviso o sistema usa a proxima (repete a ultima ao acabar).
+                    </p>
+                    <p class="mb-2 rounded bg-zinc-100 px-2 py-1 text-[11px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                        Variaveis:
+                        @foreach (\App\Servers\AlertMessageResolver::VARIAVEIS as $v => $desc)
+                            <code>{{ $v }}</code><span class="text-zinc-400">={{ $desc }}</span>{{ ! $loop->last ? ' · ' : '' }}
+                        @endforeach
                     </p>
 
                     @foreach (['warning' => 'Warning', 'critical' => 'Critical'] as $lvl => $rot)
                         @php $lista = $lvl === 'warning' ? $msgsWarning : $msgsCritical; @endphp
                         <div class="mt-2">
                             <p class="text-[11px] font-medium text-zinc-500">{{ $rot }}</p>
-                            @forelse ($lista as $i => $txt)
+                            @foreach ($lista as $i => $txt)
                                 <div class="mt-1 flex items-start gap-1" wire:key="msg-{{ $lvl }}-{{ $i }}">
-                                    <span class="pt-2 text-[11px] text-zinc-400">{{ $i + 1 }}.</span>
+                                    <span class="w-16 shrink-0 pt-2 text-[11px] text-zinc-400">{{ $i === 0 ? 'padrao' : ($i + 1).'ª' }}</span>
                                     <input type="text" wire:model="{{ $lvl === 'warning' ? 'msgsWarning' : 'msgsCritical' }}.{{ $i }}"
-                                        placeholder="ex.: 🔴 {servidor} com {metrica} em {valor}"
+                                        placeholder="ex.: 🔴 {servidor} ({ip}, grupo {grupo}): {metrica} em {valor}"
                                         class="w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
-                                    <button type="button" wire:click="removeMsg('{{ $lvl }}', {{ $i }})" class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800" title="Remover">
-                                        <flux:icon icon="x-mark" variant="micro" />
-                                    </button>
+                                    @if ($i > 0)
+                                        <button type="button" wire:click="removeMsg('{{ $lvl }}', {{ $i }})" class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800" title="Remover">
+                                            <flux:icon icon="x-mark" variant="micro" />
+                                        </button>
+                                    @endif
                                 </div>
-                            @empty
-                                <p class="mt-1 text-[11px] text-zinc-400">Sem mensagem propria — usa o texto padrao.</p>
-                            @endforelse
+                            @endforeach
                             <button type="button" wire:click="addMsg('{{ $lvl }}')" class="mt-1 inline-flex items-center gap-1 text-xs text-emerald-700 hover:underline dark:text-emerald-400">
-                                <flux:icon icon="plus" variant="micro" /> Adicionar mensagem
+                                <flux:icon icon="plus" variant="micro" /> Adicionar mensagem (rotacao)
                             </button>
                         </div>
                     @endforeach
 
                     <div class="mt-3">
                         <label class="mb-1 block text-[11px] font-medium text-zinc-500">Mensagem de resolucao (1 vez)</label>
-                        <input type="text" wire:model="msgResolved" placeholder="ex.: ✅ {servidor}: {metrica} normalizou"
+                        <input type="text" wire:model="msgResolved" placeholder="ex.: ✅ {servidor} ({ip}): {metrica} normalizou"
                             class="w-full rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                     </div>
                 </div>
