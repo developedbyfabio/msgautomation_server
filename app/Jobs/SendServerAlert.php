@@ -63,10 +63,11 @@ class SendServerAlert implements ShouldQueue
                 $q->where(fn ($q) => $q->whereNull('resolved_at') // abertura/escalada
                     ->where(fn ($q) => $q->whereNull('notified_level')->orWhereColumn('notified_level', '!=', 'level')))
                     ->orWhere(fn ($q) => $q->whereNotNull('resolved_at')->whereNull('notified_resolved_at')) // resolucao
-                    // candidato a re-aviso: firing ja notificado CUJA regra tem cadencia
-                    // (>0) para o nivel do incidente. Evita job no-op perpetuo em
-                    // incidentes "avisar 1 vez". O intervalo exato e checado no pendingReminders.
-                    ->orWhere(fn ($q) => $q->where('status', Incident::STATUS_FIRING)
+                    // candidato a re-aviso: incidente ABERTO ja notificado CUJA regra tem
+                    // cadencia (>0) para o nivel. Sem ack: o unico gate e "aberto + cadencia".
+                    // Evita job no-op perpetuo em regras "avisar 1 vez" (repeat NULL). O
+                    // intervalo exato e checado no pendingReminders.
+                    ->orWhere(fn ($q) => $q->whereNull('resolved_at')
                         ->whereColumn('notified_level', 'level')
                         ->whereExists(fn ($sub) => $sub->from('server_alert_rules')
                             ->whereColumn('server_alert_rules.id', 'server_incidents.rule_id')
@@ -130,15 +131,16 @@ class SendServerAlert implements ShouldQueue
     }
 
     /**
-     * Re-aviso conforme a CADENCIA da regra por nivel (warning ou critical): so
-     * incidentes FIRING (nao-reconhecidos: ack silencia) ja notificados, cuja
-     * regra define re-aviso (repeat_s > 0) e cujo intervalo venceu. NULL/0 no
-     * nivel = "avisar 1 vez" -> nunca entra aqui.
+     * Re-aviso conforme a CADENCIA da regra por nivel (warning ou critical):
+     * incidente ABERTO (resolved_at NULL) ja notificado, cuja regra define
+     * re-aviso (repeat_s > 0) e cujo intervalo venceu. NULL/0 no nivel =
+     * "avisar 1 vez" -> nunca entra aqui. Sem ack: o unico gate e aberto +
+     * cadencia (re-avisa sempre enquanto o problema persiste).
      */
     private function pendingReminders()
     {
         return Incident::withoutAccountScope()->where('account_id', $this->accountId)
-            ->where('status', Incident::STATUS_FIRING)
+            ->whereNull('resolved_at')
             ->whereColumn('notified_level', 'level')
             ->whereNotNull('last_notified_at')
             ->with(['server'])->get()

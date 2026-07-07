@@ -84,7 +84,7 @@ Route::middleware(['auth', 'verified', 'account.operational'])->group(function (
         Route::get('/servidores', \App\Livewire\Servidores\Inventario::class)->name('servidores');
         // S2 — regras/limiares (padroes globais + sobrescritas por servidor).
         Route::get('/servidores/alertas', \App\Livewire\Servidores\Alertas::class)->name('servidores.alertas');
-        // S2 — incidentes (firing/acknowledged/resolved) + ack.
+        // Incidentes (firing -> resolved; sem reconhecer). Somente leitura.
         Route::get('/servidores/incidentes', \App\Livewire\Servidores\Incidentes::class)->name('servidores.incidentes');
     });
     // Prompt 04 — serve a midia ENVIADA da conversa. Resolucao EXPLICITA dentro

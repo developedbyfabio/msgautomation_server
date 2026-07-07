@@ -10,7 +10,6 @@ use App\Servers\AgentToken;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Incident;
-use App\Servers\IncidentManager;
 use App\Servers\MetricsBuffer;
 use App\Servers\Server;
 use App\Servers\ServerEvaluator;
@@ -24,8 +23,8 @@ use Tests\TestCase;
  * Servidores S3 — auditoria pre-canal (A1..A6). Garante que a base da avaliacao
  * e solida ANTES de ligar o WhatsApp: isolamento multitenant (A1), watchdog pela
  * hora de recebimento (A2), for-duration em segundos robusto a cadencia/amostra
- * perdida (A3), debounce simetrico de resolucao (A4), ack que nao engole
- * escalada (A5) e poda/retencao coerente (A6).
+ * perdida (A3), debounce simetrico de resolucao (A4), escalada warning->critical
+ * avisa a mudanca (A5) e poda/retencao coerente (A6).
  */
 class ServersAuditoriaS3Test extends TestCase
 {
@@ -287,15 +286,13 @@ class ServersAuditoriaS3Test extends TestCase
         $this->assertSame('resolved', $inc->fresh()->status);
     }
 
-    // ===== A5 — ack NAO engole escalada =========================================
+    // ===== A5 — escalada warning -> critical avisa a mudanca ====================
 
-    public function test_a5_ack_em_warning_e_escalada_para_critical_notifica(): void
+    public function test_a5_escalada_para_critical_notifica_no_mesmo_incidente(): void
     {
         $account = Account::create(['name' => 'A']);
         AlertRuleDefaults::ensureFor($account->id);
         $server = $this->servidor($account->id, 'srv');
-        $dono = User::create(['name' => 'Dono', 'email' => 'dono@x.local', 'password' => Hash::make('x')]);
-        $dono->accounts()->attach($account->id, ['role' => 'owner']);
 
         // Abre warning (cpu 90 por 330s).
         $this->cpu($server->id, [330 => 90, 300 => 90, 240 => 90, 180 => 90, 120 => 90, 60 => 90, 0 => 90]);
@@ -303,19 +300,14 @@ class ServersAuditoriaS3Test extends TestCase
         $inc = Incident::withoutAccountScope()->sole();
         $this->assertSame('warning', $inc->level);
 
-        // Dono reconhece o WARNING.
-        app(IncidentManager::class)->acknowledge($inc, $dono->id);
-        $this->assertSame('acknowledged', $inc->fresh()->status);
-
-        // Severidade sobe para critical: FURA o ack.
+        // Severidade sobe para critical: mesmo incidente, avisa a mudanca.
         $this->cpu($server->id, [140 => 97, 100 => 97, 60 => 97, 20 => 97, 0 => 97]);
         $this->evaluate($server);
 
         $inc->refresh();
         $this->assertSame('critical', $inc->level);
-        $this->assertSame('firing', $inc->status);       // des-reconhecido
-        $this->assertNull($inc->acknowledged_at);
-        $this->assertNull($inc->acknowledged_by);
+        $this->assertSame('firing', $inc->status);        // continua aberto (sem ack no modelo)
+        $this->assertSame(1, Incident::withoutAccountScope()->count()); // nunca abre um segundo
         // A escalada gerou notificacao (SystemEvent no modo silencioso).
         $this->assertNotNull(SystemEvent::withoutAccountScope()->where('ref', 'srv-incident:'.$inc->id.':escalated')->first());
     }

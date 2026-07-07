@@ -12,7 +12,7 @@
     $kanbanNovo = \App\Models\Card::query()
         ->whereHas('column', fn ($q) => $q->where('slug', 'novo'))
         ->count();
-    // Servidores S2: badge de incidentes ABERTOS (firing|acknowledged) da conta.
+    // Servidores: badge de incidentes ABERTOS (firing = nao-resolvidos) da conta.
     $incidentesAbertos = \App\Servers\Incident::query()
         ->where('account_id', $navAccountId)
         ->where('status', '!=', 'resolved')

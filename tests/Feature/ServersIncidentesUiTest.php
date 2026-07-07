@@ -84,35 +84,25 @@ class ServersIncidentesUiTest extends TestCase
             ->assertDontSee(route('servidores.alertas'));
     }
 
-    public function test_ack_marca_reconhecido_com_autor(): void
+    public function test_tela_nao_tem_reconhecer_nem_reativar(): void
     {
-        $inc = $this->incidente();
+        $this->incidente(); // firing
         app(AccountContext::class)->set($this->account->id);
         $this->actingAs($this->owner);
 
-        Livewire::test(Incidentes::class)->call('ack', $inc->id);
+        Livewire::test(Incidentes::class)
+            ->assertDontSee('Reconhecer')
+            ->assertDontSee('Reativar')
+            ->assertSee('re-avisando'); // aberto = re-avisando ate normalizar
 
-        $inc->refresh();
-        $this->assertSame(Incident::STATUS_ACKNOWLEDGED, $inc->status);
-        $this->assertSame($this->owner->id, $inc->acknowledged_by);
-        $this->assertNotNull($inc->acknowledged_at);
-        $this->assertNotNull($inc->open_key); // SEGUE aberto (ack nao fecha)
+        // O componente nao expoe mais as acoes de ack.
+        $this->assertFalse(method_exists(Incidentes::class, 'ack'));
+        $this->assertFalse(method_exists(Incidentes::class, 'reactivate'));
     }
 
-    public function test_ack_forjado_de_operador_e_barrado(): void
+    public function test_incidente_resolve_pela_normalizacao(): void
     {
-        $inc = $this->incidente();
-        app(AccountContext::class)->set($this->account->id);
-        $this->actingAs($this->operador);
-
-        Livewire::test(Incidentes::class)->call('ack', $inc->id)->assertForbidden();
-
-        $this->assertSame(Incident::STATUS_FIRING, $inc->fresh()->status);
-    }
-
-    public function test_reconhecido_nao_reabre_e_resolve_pela_normalizacao(): void
-    {
-        // Incidente real via avaliacao (cpu 97 por 150s), depois ack.
+        // Sem ack: incidente aberto (cpu 97 por 150s) resolve quando normaliza.
         $buffer = app(MetricsBuffer::class);
         foreach ([150, 120, 90, 60, 30, 0] as $age) {
             $buffer->push($this->server->id, ['received_at' => now()->getTimestamp() - $age, 'cpu_pct' => 97.0, 'mem_pct' => 10.0, 'disks' => [['mount' => '/', 'pct' => 20.0]]]);
@@ -120,17 +110,8 @@ class ServersIncidentesUiTest extends TestCase
         AlertRuleDefaults::ensureFor($this->account->id);
         app(ServerEvaluator::class)->evaluate($this->server->fresh());
         $inc = Incident::withoutAccountScope()->sole();
+        $this->assertSame(Incident::STATUS_FIRING, $inc->status);
 
-        app(AccountContext::class)->set($this->account->id);
-        $this->actingAs($this->owner);
-        Livewire::test(Incidentes::class)->call('ack', $inc->id);
-
-        // Condicao persiste: segue acknowledged (nao volta a firing, nao duplica).
-        app(ServerEvaluator::class)->evaluate($this->server->fresh());
-        $this->assertSame(Incident::STATUS_ACKNOWLEDGED, $inc->fresh()->status);
-        $this->assertSame(1, Incident::withoutAccountScope()->count());
-
-        // Normaliza: resolve MESMO estando acknowledged.
         foreach ([330, 270, 210, 150, 90, 30, 0] as $age) {
             $buffer->push($this->server->id, ['received_at' => now()->getTimestamp() - $age, 'cpu_pct' => 5.0, 'mem_pct' => 10.0, 'disks' => [['mount' => '/', 'pct' => 20.0]]]);
         }

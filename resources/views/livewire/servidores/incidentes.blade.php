@@ -3,7 +3,7 @@
         <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
                 <h1 class="text-xl font-semibold">Incidentes</h1>
-                <x-info-tip text="Incidentes abertos pela avaliacao (histerese + watchdog). Reconhecer silencia a repeticao; quem resolve e a normalizacao da metrica (ou o servidor voltar a reportar). Nesta fase o sistema esta em MODO SILENCIOSO: as transicoes aparecem aqui e nos Logs, nada e enviado por WhatsApp." />
+                <x-info-tip text="Incidentes abertos pela avaliacao (histerese + watchdog). Enquanto o problema persiste, o alerta RE-AVISA no WhatsApp pela cadencia da regra; quando a metrica normaliza (ou o servidor volta a reportar), resolve e avisa 1 vez. Somente leitura — nao ha reconhecer/silenciar." />
             </div>
         </div>
 
@@ -46,13 +46,17 @@
                                 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' => $i->level === 'critical',
                                 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' => $i->level === 'warning',
                             ])>{{ $i->level }}</span>
-                            {{-- estado --}}
+                            {{-- estado (firing = aberto, re-avisando; resolved = normalizou) --}}
                             <span @class([
                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
                                 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' => $i->status === 'firing',
-                                'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300' => $i->status === 'acknowledged',
                                 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' => $i->status === 'resolved',
-                            ])>{{ ['firing' => 'disparado', 'acknowledged' => 'reconhecido', 'resolved' => 'resolvido'][$i->status] }}</span>
+                            ])>{{ $i->status === 'resolved' ? 'resolvido' : 'aberto' }}</span>
+                            @if ($i->status === 'firing')
+                                <span class="inline-flex items-center gap-1 text-[10px] text-zinc-400">
+                                    <span class="size-1.5 rounded-full bg-red-500"></span> re-avisando ate normalizar
+                                </span>
+                            @endif
                         </div>
                         <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
                             <span>inicio {{ $i->started_at->paraExibicao()->format('d/m H:i:s') }}</span>
@@ -63,28 +67,9 @@
                             @if ($i->resolved_at)
                                 <span aria-hidden="true">&middot;</span>
                                 <span>resolvido {{ $i->resolved_at->paraExibicao()->format('d/m H:i:s') }}</span>
-                            @elseif ($i->acknowledged_at)
-                                <span aria-hidden="true">&middot;</span>
-                                <span>reconhecido {{ $i->acknowledged_at->paraExibicao()->format('d/m H:i') }}</span>
                             @endif
                         </div>
                     </div>
-                    @if ($i->status === 'firing')
-                        <button type="button" wire:click="ack({{ $i->id }})"
-                            class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                            title="Silencia os re-avisos deste incidente (ate resolver ou escalar)">
-                            <flux:icon icon="check" variant="micro" /> Reconhecer
-                        </button>
-                    @elseif ($i->status === 'acknowledged')
-                        <div class="flex shrink-0 flex-col items-end gap-1">
-                            <span class="text-[10px] text-zinc-400">re-avisos pausados</span>
-                            <button type="button" wire:click="reactivate({{ $i->id }})"
-                                class="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950"
-                                title="Volta a repetir os avisos conforme a cadencia da regra">
-                                <flux:icon icon="bell-alert" variant="micro" /> Reativar avisos
-                            </button>
-                        </div>
-                    @endif
                 </div>
             @empty
                 <div class="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">

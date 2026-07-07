@@ -5,27 +5,23 @@ namespace App\Servers;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * Servidores S2 — maquina de estado do incidente (firing -> acknowledged ->
- * resolved), DURAVEL no MySQL. Invariantes:
+ * Servidores — maquina de estado do incidente. Ciclo SIMPLES (sem "reconhecer"):
+ * firing -> resolved. Invariantes:
  *
  *  - UM incidente ativo por (servidor, metrica[, particao]): open_key unique
  *    decide corridas no banco (create duplicado -> catch -> no-op).
  *  - UMA acao de notificacao por transicao (firing/escalated/resolved) — o
  *    notifier usa ref idempotente; rodar a avaliacao 2x nao duplica nada.
- *  - ack NAO fecha (segue aberto e monitorado; silencia repeticao); resolve
- *    fecha e libera o open_key para um incidente futuro da mesma metrica.
+ *  - o incidente vive como firing (aberto) e re-avisa pela cadencia (repeat_s)
+ *    ate normalizar; resolve fecha, avisa 1 vez e libera o open_key.
  *  - Escalada warning -> critical atualiza o MESMO incidente (nunca abre um
- *    segundo); nunca ha downgrade critical -> warning (so resolve).
- *  - A5: escalada FURA o ack. Se o incidente estava acknowledged (o dono
- *    reconheceu o WARNING), a subida para critical o devolve a `firing` e limpa
- *    o ack — o critical DEVE notificar e voltar a re-notificar; o dono nunca
- *    reconheceu esta severidade.
+ *    segundo) e avisa a mudanca; nunca ha downgrade critical -> warning.
  */
 class IncidentManager
 {
     public function __construct(private AlertNotifier $notifier) {}
 
-    /** Incidente ABERTO (firing|acknowledged) do servidor+metrica[+mount], se houver. */
+    /** Incidente ABERTO (firing) do servidor+metrica[+mount], se houver. */
     public function open(int $serverId, string $metric, ?string $mount = null): ?Incident
     {
         return Incident::withoutAccountScope()
@@ -67,14 +63,10 @@ class IncidentManager
         }
 
         // Escalada (warning -> critical) no MESMO incidente; sem downgrade.
-        // A5: FURA o ack — volta a firing e limpa o reconhecimento (era do
-        // warning), para o critical notificar e voltar a re-notificar.
+        // Avisa a mudanca de severidade.
         if ($aberto->level === 'warning' && $level === 'critical') {
             $aberto->forceFill([
                 'level' => 'critical',
-                'status' => Incident::STATUS_FIRING,
-                'acknowledged_at' => null,
-                'acknowledged_by' => null,
                 'value_at_fire' => $value ?? $aberto->value_at_fire,
             ])->save();
             $this->notifier->transition($aberto, 'escalated');
@@ -96,39 +88,5 @@ class IncidentManager
         ])->save();
 
         $this->notifier->transition($aberto, 'resolved');
-    }
-
-    /** Ack do dono (tela Incidentes): silencia repeticao, incidente segue aberto. */
-    public function acknowledge(Incident $incident, int $userId): void
-    {
-        if ($incident->status !== Incident::STATUS_FIRING) {
-            return;
-        }
-
-        $incident->forceFill([
-            'status' => Incident::STATUS_ACKNOWLEDGED,
-            'acknowledged_at' => now(),
-            'acknowledged_by' => $userId,
-        ])->save();
-    }
-
-    /**
-     * Reativa os avisos de um incidente RECONHECIDO (volta a firing): os
-     * re-avisos por cadencia voltam a disparar. NAO re-abre (mantem
-     * notified_level, started_at) — nao e um novo incidente, so desfaz o ack.
-     * Reseta last_notified_at para o re-aviso sair no proximo tick (respeitando
-     * o repeat da regra a partir de agora).
-     */
-    public function reactivate(Incident $incident): void
-    {
-        if ($incident->status !== Incident::STATUS_ACKNOWLEDGED) {
-            return;
-        }
-
-        $incident->forceFill([
-            'status' => Incident::STATUS_FIRING,
-            'acknowledged_at' => null,
-            'acknowledged_by' => null,
-        ])->save();
     }
 }

@@ -8,12 +8,10 @@ use App\Mail\ServersAlertFallback;
 use App\Models\Account;
 use App\Models\Channel;
 use App\Models\SystemEvent;
-use App\Models\User;
 use App\Servers\AlertContact;
 use App\Servers\AlertRule;
 use App\Servers\AlertRuleDefaults;
 use App\Servers\Incident;
-use App\Servers\IncidentManager;
 use App\Servers\MetricsBuffer;
 use App\Servers\Server;
 use App\Servers\ServerEvaluator;
@@ -27,7 +25,7 @@ use Tests\TestCase;
  * Servidores S3 — canal WhatsApp atras do flag (testes espelho do S2). Com o
  * flag ON e transicoes reais: Http::assertSent confirma destinatario+payload
  * (o inverso do assertNothingSent). Cobre roteamento por severidade,
- * agrupamento de tempestade, re-notificacao so de critical nao-reconhecido,
+ * agrupamento de tempestade, re-notificacao por cadencia,
  * resolucao notifica, falha -> retry/fallback e-mail/SystemEvent, e flag OFF =
  * nada enviado (S2 intacto).
  */
@@ -172,7 +170,7 @@ class ServersCanalTest extends TestCase
         Http::assertSent(fn ($req) => str_contains($req['text'], 'resolvido') || str_contains($req['text'], '✅'));
     }
 
-    // ---- re-notificacao: so critical nao-reconhecido ---------------------------
+    // ---- re-notificacao por cadencia (repeat_s) --------------------------------
 
     public function test_critical_nao_reconhecido_renotifica_apos_cooldown(): void
     {
@@ -191,7 +189,7 @@ class ServersCanalTest extends TestCase
         $this->evaluateCommand();
         Http::assertNothingSent();
 
-        // Passado o cooldown: re-notifica (so porque e CRITICAL e nao-reconhecido).
+        // Passado o intervalo: re-notifica (cadencia critical_repeat_s).
         $this->travel(120)->seconds();
         Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
         $this->abrirCpuCritical();
@@ -224,27 +222,6 @@ class ServersCanalTest extends TestCase
         app(ServerEvaluator::class)->evaluate($this->server->fresh());
         $this->evaluateCommand();
         Http::assertNothingSent(); // warning nao repete
-    }
-
-    public function test_reconhecido_nao_renotifica_mesmo_critical(): void
-    {
-        Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
-        // Re-aviso critical a cada 60s: o ack deve silenciar mesmo com o intervalo vencido.
-        AlertRule::withoutAccountScope()->where('account_id', $this->account->id)->whereNull('server_id')->where('metric', 'cpu')->update(['critical_repeat_s' => 60]);
-        $this->contato();
-
-        $this->abrirCpuCritical();
-        $this->evaluateCommand();
-        $inc = Incident::withoutAccountScope()->sole();
-
-        // Dono reconhece; passa o intervalo de re-aviso; a condicao persiste.
-        app(IncidentManager::class)->acknowledge($inc, $this->donoId());
-        $this->travel(120)->seconds();
-        Http::fake(['evo.test/*' => Http::response(['key' => ['id' => 'm']], 200)]);
-        $this->abrirCpuCritical();
-        $this->evaluateCommand();
-
-        Http::assertNothingSent(); // ack silencia a repeticao
     }
 
     // ---- falha de entrega: retry + fallback e-mail + SystemEvent ---------------
@@ -308,13 +285,5 @@ class ServersCanalTest extends TestCase
 
         Http::assertNotSent(fn ($req) => $req['number'] === '5511000000000');
         Http::assertSent(fn ($req) => $req['number'] === '5511999990000');
-    }
-
-    private function donoId(): int
-    {
-        $u = User::create(['name' => 'Dono', 'email' => 'd@x.local', 'password' => bcrypt('x')]);
-        $u->accounts()->attach($this->account->id, ['role' => 'owner']);
-
-        return $u->id;
     }
 }

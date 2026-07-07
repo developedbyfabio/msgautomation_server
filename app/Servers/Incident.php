@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Servidores S2 — incidente (estado DURAVEL no MySQL; a fonte de verdade —
- * flush do Redis nao ressuscita resolvido nem reabre aberto). Maquina de
- * estado: firing -> acknowledged (ack do dono; segue aberto) -> resolved.
+ * Servidores — incidente (estado DURAVEL no MySQL; a fonte de verdade — flush
+ * do Redis nao ressuscita resolvido nem reabre aberto). Ciclo SIMPLES:
+ * firing -> resolved. NAO existe "reconhecer" (ack): o incidente vive como
+ * firing (aberto) e re-avisa pela cadencia ate normalizar, quando resolve e
+ * avisa 1 vez. (As colunas acknowledged_* permanecem no schema por
+ * compatibilidade, mas nao sao mais usadas — o app nunca as escreve.)
  *
  * open_key = "{server}:{metric}[:{mount}]" enquanto aberto, NULL apos o
  * resolve: o unique garante NO BANCO um ativo por (servidor, metrica/particao)
@@ -24,14 +27,12 @@ class Incident extends Model
 
     public const STATUS_FIRING = 'firing';
 
-    public const STATUS_ACKNOWLEDGED = 'acknowledged';
-
     public const STATUS_RESOLVED = 'resolved';
 
     protected $fillable = [
         'account_id', 'server_id', 'rule_id', 'metric', 'mount',
         'level', 'status', 'open_key', 'value_at_fire', 'detail',
-        'started_at', 'acknowledged_at', 'acknowledged_by', 'resolved_at',
+        'started_at', 'resolved_at',
         'notified_firing_at', 'notified_resolved_at', 'notified_level', 'last_notified_at', 'notify_count',
     ];
 
@@ -41,7 +42,6 @@ class Incident extends Model
             'detail' => 'array',
             'value_at_fire' => 'float',
             'started_at' => 'datetime',
-            'acknowledged_at' => 'datetime',
             'resolved_at' => 'datetime',
             'notified_firing_at' => 'datetime',
             'notified_resolved_at' => 'datetime',
