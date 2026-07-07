@@ -109,9 +109,19 @@
                         @error('critical_for_s') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
                 </div>
+                <div class="grid grid-cols-2 gap-3" @if ($ehWatchdog) hidden @endif>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium">Resolver apos (s) abaixo do limiar</label>
+                        <input type="number" wire:model="resolve_for_s" placeholder="vazio = igual a subida (warning)"
+                            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        @error('resolve_for_s') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        <p class="mt-1 text-[11px] text-zinc-400">Debounce anti-flapping: a metrica precisa ficar boa por este tempo antes de fechar.</p>
+                    </div>
+                    <div></div>
+                </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="mb-1 block text-xs font-medium">Cooldown (s) — re-notificacao (S3)</label>
+                        <label class="mb-1 block text-xs font-medium">Cooldown (s) — re-notificacao de critical</label>
                         <input type="number" wire:model="cooldown_s"
                             class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
                         @error('cooldown_s') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror

@@ -16,6 +16,10 @@ use Illuminate\Database\UniqueConstraintViolationException;
  *    fecha e libera o open_key para um incidente futuro da mesma metrica.
  *  - Escalada warning -> critical atualiza o MESMO incidente (nunca abre um
  *    segundo); nunca ha downgrade critical -> warning (so resolve).
+ *  - A5: escalada FURA o ack. Se o incidente estava acknowledged (o dono
+ *    reconheceu o WARNING), a subida para critical o devolve a `firing` e limpa
+ *    o ack — o critical DEVE notificar e voltar a re-notificar; o dono nunca
+ *    reconheceu esta severidade.
  */
 class IncidentManager
 {
@@ -63,8 +67,16 @@ class IncidentManager
         }
 
         // Escalada (warning -> critical) no MESMO incidente; sem downgrade.
+        // A5: FURA o ack — volta a firing e limpa o reconhecimento (era do
+        // warning), para o critical notificar e voltar a re-notificar.
         if ($aberto->level === 'warning' && $level === 'critical') {
-            $aberto->forceFill(['level' => 'critical', 'value_at_fire' => $value ?? $aberto->value_at_fire])->save();
+            $aberto->forceFill([
+                'level' => 'critical',
+                'status' => Incident::STATUS_FIRING,
+                'acknowledged_at' => null,
+                'acknowledged_by' => null,
+                'value_at_fire' => $value ?? $aberto->value_at_fire,
+            ])->save();
             $this->notifier->transition($aberto, 'escalated');
         }
     }

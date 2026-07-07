@@ -37,6 +37,8 @@ class Alertas extends Component
 
     public string $critical_for_s = '';
 
+    public string $resolve_for_s = ''; // A4: debounce de resolucao; vazio = usa warning_for_s
+
     public string $cooldown_s = '';
 
     public bool $enabled = true;
@@ -62,6 +64,7 @@ class Alertas extends Component
         $this->critical_threshold = (string) $r->critical_threshold;
         $this->warning_for_s = (string) $r->warning_for_s;
         $this->critical_for_s = (string) $r->critical_for_s;
+        $this->resolve_for_s = $r->resolve_for_s !== null ? (string) $r->resolve_for_s : '';
         $this->cooldown_s = (string) $r->cooldown_s;
         $this->enabled = (bool) $r->enabled;
         $this->resetValidation();
@@ -77,15 +80,25 @@ class Alertas extends Component
     {
         AreaAccess::authorizeOwnerAction();
 
+        // A3/A6 — for_duration limitado a max_for_duration_s: alem disso o buffer
+        // recente nao guardaria janela suficiente e a regra nunca dispararia.
+        $maxFor = (int) config('servers.max_for_duration_s', 600);
+
         $dados = $this->validate([
             'warning_threshold' => 'nullable|numeric|min:0|lte:critical_threshold',
             'critical_threshold' => 'required|numeric|min:0',
-            'warning_for_s' => 'required|integer|min:0|max:86400',
-            'critical_for_s' => 'required|integer|min:0|max:86400',
+            'warning_for_s' => "required|integer|min:0|max:{$maxFor}",
+            'critical_for_s' => "required|integer|min:0|max:{$maxFor}",
+            'resolve_for_s' => "nullable|integer|min:0|max:{$maxFor}",
             'cooldown_s' => 'required|integer|min:0|max:86400',
         ], [
             'warning_threshold.lte' => 'Warning deve ser menor ou igual ao critical.',
+            'warning_for_s.max' => "Maximo {$maxFor}s (limite do buffer de avaliacao).",
+            'critical_for_s.max' => "Maximo {$maxFor}s (limite do buffer de avaliacao).",
         ]);
+
+        // resolve_for_s vazio -> NULL (usa warning_for_s no avaliador).
+        $dados['resolve_for_s'] = $this->resolve_for_s === '' ? null : (int) $this->resolve_for_s;
 
         $r = AlertRule::query()->findOrFail($this->editingId);
         $r->update($dados + ['enabled' => $this->enabled]);

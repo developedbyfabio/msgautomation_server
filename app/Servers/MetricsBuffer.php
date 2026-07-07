@@ -19,14 +19,25 @@ use Illuminate\Support\Facades\Cache;
  * Um flush do Redis so atrasa a histerese futura (S2) — o watchdog nao depende
  * disto (last_seen_at e duravel no MySQL).
  *
- * Dimensionamento: MAX=60 amostras a 15-30s de cadencia = ~15-30 min, folga
- * pra qualquer "for duration" razoavel; TTL=1h.
+ * Dimensionamento (A6): MAX=60 amostras. A COBERTURA de tempo, no pior caso da
+ * cadencia esperada, e MAX_SAMPLES * cadence_s (>= 900s a 15s; 1800s a 30s) e o
+ * TTL fixa o teto absoluto (1h). O for_duration por regra e limitado a
+ * config('servers.max_for_duration_s') (600s) exatamente para que a janela em
+ * uso SEMPRE caiba na cobertura + margem — sem isto uma regra com for_s alto
+ * nunca dispararia (o buffer nao guardaria janela suficiente). Retencao curta
+ * de proposito: e buffer de avaliacao, NAO historico (nada de TSDB).
  */
 class MetricsBuffer
 {
     public const MAX_SAMPLES = 60;
 
     public const TTL_SECONDS = 3600;
+
+    /** Cobertura de tempo (s) do buffer no pior caso da cadencia esperada. */
+    public static function coverageSeconds(): int
+    {
+        return self::MAX_SAMPLES * max(1, (int) config('servers.cadence_s', 30));
+    }
 
     /** Chave no cache (no Redis vira {REDIS_PREFIX}{cache_prefix}servers:buffer:{id}). */
     public function key(int $serverId): string

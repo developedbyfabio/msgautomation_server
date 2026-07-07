@@ -36,7 +36,7 @@ class AlertRule extends Model
     protected $fillable = [
         'account_id', 'server_id', 'metric',
         'warning_threshold', 'critical_threshold',
-        'warning_for_s', 'critical_for_s', 'cooldown_s', 'enabled',
+        'warning_for_s', 'critical_for_s', 'resolve_for_s', 'cooldown_s', 'enabled',
     ];
 
     protected function casts(): array
@@ -46,6 +46,7 @@ class AlertRule extends Model
             'critical_threshold' => 'float',
             'warning_for_s' => 'integer',
             'critical_for_s' => 'integer',
+            'resolve_for_s' => 'integer',
             'cooldown_s' => 'integer',
             'enabled' => 'boolean',
         ];

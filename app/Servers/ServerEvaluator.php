@@ -8,20 +8,24 @@ namespace App\Servers;
  * estado proprio: le buffer + regras + incidentes abertos e converge — por
  * construcao, rodar N vezes chega no mesmo lugar (idempotente).
  *
- * HISTERESE ("for duration") — definicao registrada: andando da amostra MAIS
- * RECENTE para tras, TODAS as amostras violam o limiar consecutivamente, com
- * pelo menos MIN_SAMPLES amostras e span observado (t_recente - t_antiga da
- * sequencia) >= for_duration do nivel. Pico curto quebra a sequencia; buffer
- * insuficiente (servidor novo/flush) NAO dispara por metrica — falso positivo
- * por falta de dado e coberto pelo watchdog, nao pelas metricas.
+ * HISTERESE ("for duration") — A3, medida em SEGUNDOS (nao em contagem fixa de
+ * amostras): andando da amostra MAIS RECENTE para tras, a condicao vale
+ * CONTINUAMENTE por >= for_duration do nivel. "Continuamente" = a sequencia de
+ * amostras que violam nao tem buraco maior que MAX_GAP (cadencia esperada x
+ * fator) — uma amostra perdida e tolerada; duas seguidas quebram a prova de
+ * continuidade (conservador: sem dado, sem alerta). Assim a LATENCIA do alerta
+ * segue o for_duration, independente da cadencia de ingestao ou de uma amostra
+ * que caiu. Pico curto quebra a sequencia; buffer insuficiente (servidor novo/
+ * flush) NAO dispara por metrica — o "sem dado" e papel do watchdog.
  *
- * RESOLUCAO com a mesma histerese (anti-flapping): so resolve quando ha
- * sequencia LIMPA (abaixo do limiar de warning; do critical se a regra nao
- * tem warning) cobrindo warning_for_s (min. 60s). Sem amostras -> nao resolve
- * (incidente e duravel; flush do Redis nao fecha incidente).
+ * RESOLUCAO com debounce SIMETRICO (A4, anti-flapping): so resolve quando ha
+ * sequencia LIMPA (abaixo do limiar de warning; do critical se a regra nao tem
+ * warning) continua por resolve_for_s (default = warning_for_s, min. 60s).
+ * Sem amostras -> nao resolve (incidente e duravel; flush do Redis nao fecha).
  *
- * WATCHDOG com PRECEDENCIA: gap = agora - last_seen_at. gap >= warning do
- * watchdog => servidor STALE: as metricas NAO avaliam (dado velho nao abre
+ * WATCHDOG com PRECEDENCIA: gap = agora - last_seen_at (SEMPRE hora de
+ * RECEBIMENTO server-side — A2; o ts do agente nunca decide). gap >= warning
+ * do watchdog => servidor STALE: as metricas NAO avaliam (dado velho nao abre
  * nem fecha incidente de metrica); so o watchdog transiciona. Voltou a
  * reportar (gap < warning) => watchdog resolve e as metricas voltam.
  * last_seen_at NULL (nunca reportou) => watchdog nao se aplica ("aguardando
@@ -29,10 +33,10 @@ namespace App\Servers;
  */
 class ServerEvaluator
 {
-    /** Minimo de amostras consecutivas para confirmar condicao (ou limpeza). */
-    public const MIN_SAMPLES = 3;
+    /** Fator sobre a cadencia esperada para o gap maximo tolerado entre amostras. */
+    private const MAX_GAP_FACTOR = 2.5;
 
-    /** Span minimo (s) da sequencia limpa para resolver (regras com for_duration curto). */
+    /** Piso do debounce de resolucao (s), quando a regra nao define resolve_for_s. */
     private const MIN_RESOLVE_SPAN_S = 60;
 
     public function __construct(
@@ -127,10 +131,16 @@ class ServerEvaluator
             return;
         }
 
-        // Resolucao anti-flapping: sequencia LIMPA (abaixo do limiar de
-        // warning) cobrindo a janela de warning (min. 60s).
+        // Resolucao com debounce SIMETRICO (A4): sequencia LIMPA (abaixo do
+        // limiar de warning) continua por resolve_for_s. Default = warning_for_s
+        // (janela de subida), piso 60s — a metrica precisa "ficar boa" pelo
+        // mesmo tempo que precisou "ficar ruim" antes de fechar o incidente.
         $limpeza = (float) ($rule->warning_threshold ?? $rule->critical_threshold);
-        $spanResolve = max((int) $rule->warning_for_s, self::MIN_RESOLVE_SPAN_S);
+        // resolve_for_s EXPLICITO e honrado como esta (escolha do dono); NULL cai
+        // no default seguro: janela de subida (warning_for_s), com piso de 60s.
+        $spanResolve = $rule->resolve_for_s !== null
+            ? (int) $rule->resolve_for_s
+            : max((int) $rule->warning_for_s, self::MIN_RESOLVE_SPAN_S);
         if ($this->holds($series, fn (float $v) => $v < $limpeza, $spanResolve)) {
             $this->incidents->resolve($server->id, $metric, $mount);
         }
@@ -154,25 +164,45 @@ class ServerEvaluator
     }
 
     /**
-     * A condicao $cond vale CONSECUTIVAMENTE da amostra mais recente para tras
-     * por >= $forSeconds de span observado e >= MIN_SAMPLES amostras?
+     * A condicao $cond vale CONTINUAMENTE por >= $forSeconds (A3)? Anda da
+     * amostra mais recente para tras enquanto $cond e verdadeira E o buraco ate
+     * a amostra anterior nao passa de MAX_GAP (cadencia x fator — tolera UMA
+     * amostra perdida). O span coberto pela sequencia (t_recente - t_antiga)
+     * precisa alcancar $forSeconds. Latencia = for_duration, desacoplada da
+     * cadencia. forSeconds<=0 (nao usado por metrica; watchdog nao passa por
+     * aqui) confirma com a primeira amostra.
      */
     private function holds(array $series, callable $cond, int $forSeconds): bool
     {
-        $count = 0;
+        $maxGap = (int) ceil(max(1, (int) config('servers.cadence_s', 30)) * self::MAX_GAP_FACTOR);
+
         $newest = null;
         $oldest = null;
+        $prev = null;
+        $count = 0;
 
         foreach ($series as $ponto) { // mais recente primeiro
             if (! $cond($ponto['v'])) {
                 break; // sequencia quebrada (pico/normalizacao no meio)
             }
+            if ($prev !== null && ($prev - $ponto['t']) > $maxGap) {
+                break; // buraco de dados: sem prova de continuidade a partir daqui
+            }
             $newest ??= $ponto['t'];
             $oldest = $ponto['t'];
+            $prev = $ponto['t'];
             $count++;
         }
 
-        return $count >= self::MIN_SAMPLES && ($newest - $oldest) >= $forSeconds;
+        if ($count === 0) {
+            return false;
+        }
+        if ($forSeconds <= 0) {
+            return true; // janela nula: uma amostra basta
+        }
+
+        // Precisa de >= 2 pontos (um span exige dois instantes) cobrindo forSeconds.
+        return $count >= 2 && ($newest - $oldest) >= $forSeconds;
     }
 
     /** Serie [['t' => epoch, 'v' => float], ...] da metrica (mais recente primeiro). */
