@@ -22,3 +22,10 @@ Illuminate\Support\Facades\Schedule::command('unmatched:prune')->dailyAt('03:10'
 // overdue alem da carencia -> suspended. Reversivel (webhook de pagamento
 // reativa); contas legacy sao imunes por construcao. NADA e apagado.
 Illuminate\Support\Facades\Schedule::command('billing:sweep')->dailyAt('03:20');
+
+// Servidores S2 — tick de avaliacao (watchdog + histerese + incidentes),
+// 100% MUDO nesta fatia (SystemEvent apenas; flag de notificacao OFF).
+// withoutOverlapping + lock interno: sem sobreposicao. NOTA OPERACIONAL:
+// requer o scheduler ativo no host (systemd msgautomation-scheduler rodando
+// `schedule:work`) — registrado no relatorio da S2; os testes chamam direto.
+Illuminate\Support\Facades\Schedule::command('servers:evaluate')->everyMinute()->withoutOverlapping();

@@ -51,6 +51,8 @@ class AreaAccess
         'configuracoes' => 'owner',
         'billing' => 'owner', // Fatia 26: assinatura/pagamento e decisao do dono
         'servidores' => 'owner', // Servidores S1: monitoramento de infra — ferramenta interna do dono
+        'servidores.alertas' => 'owner', // Servidores S2: regras/limiares
+        'servidores.incidentes' => 'owner', // Servidores S2: incidentes + ack
 
         // /admin/*: fora deste mapa — continua com platform.admin + 2FA (Prompts 22/29).
     ];

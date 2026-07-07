@@ -12,6 +12,11 @@
     $kanbanNovo = \App\Models\Card::query()
         ->whereHas('column', fn ($q) => $q->where('slug', 'novo'))
         ->count();
+    // Servidores S2: badge de incidentes ABERTOS (firing|acknowledged) da conta.
+    $incidentesAbertos = \App\Servers\Incident::query()
+        ->where('account_id', $navAccountId)
+        ->where('status', '!=', 'resolved')
+        ->count();
     // Fatia 23 — navegacao REAGRUPADA em linguagem de negocio (rotulos de UI;
     // rotas/URLs identicas — so a arvore do menu mudou). "Senhas" NAO renomeado
     // aqui (Fatia 24). Grupo 'Automacao' junta a engenharia do atendimento.
@@ -22,9 +27,14 @@
             ['kanban', 'Kanban', 'view-columns', $kanbanNovo],
             ['contatos', 'Clientes', 'users', 0],
             ['campanhas', 'Campanhas', 'megaphone', 0],
-            // Servidores S1 — ferramenta interna do dono (owner-only via MAP;
-            // o filtro de papel abaixo esconde do operador).
-            ['servidores', 'Servidores', 'server-stack', 0],
+        ]],
+        // Servidores S1/S2 — ferramenta interna do dono (owner-only via MAP; o
+        // filtro de papel abaixo esconde o grupo inteiro do operador). Virou
+        // GRUPO na S2 (mesmo mecanismo da Automacao) com as sub-paginas.
+        ['heading' => 'Servidores', 'items' => [
+            ['servidores', 'Inventario', 'server-stack', 0],
+            ['servidores.alertas', 'Alertas', 'bell-alert', 0],
+            ['servidores.incidentes', 'Incidentes', 'exclamation-triangle', $incidentesAbertos],
         ]],
         ['heading' => 'Automacao', 'items' => [
             ['regras', 'Respostas automaticas', 'bolt', 0],

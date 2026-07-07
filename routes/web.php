@@ -78,10 +78,15 @@ Route::middleware(['auth', 'verified', 'account.operational'])->group(function (
     // Prompt 02 — logs/eventos da conta (somente leitura; util mesmo desconectado).
     // Fatia 22: tecnico -> OWNER-only.
     Route::get('/logs', \App\Livewire\Logs::class)->middleware('account.role:owner')->name('logs');
-    // Servidores S1 — inventario + token do agente (ferramenta interna do dono,
-    // OWNER-only). Fora do gate whatsapp.connected: monitorar servidor nao
-    // depende do canal estar conectado.
-    Route::get('/servidores', \App\Livewire\Servidores\Inventario::class)->middleware('account.role:owner')->name('servidores');
+    // Servidores S1/S2 — ferramenta interna do dono, OWNER-only. Fora do gate
+    // whatsapp.connected: monitorar servidor nao depende do canal conectado.
+    Route::middleware('account.role:owner')->group(function () {
+        Route::get('/servidores', \App\Livewire\Servidores\Inventario::class)->name('servidores');
+        // S2 — regras/limiares (padroes globais + sobrescritas por servidor).
+        Route::get('/servidores/alertas', \App\Livewire\Servidores\Alertas::class)->name('servidores.alertas');
+        // S2 — incidentes (firing/acknowledged/resolved) + ack.
+        Route::get('/servidores/incidentes', \App\Livewire\Servidores\Incidentes::class)->name('servidores.incidentes');
+    });
     // Prompt 04 — serve a midia ENVIADA da conversa. Resolucao EXPLICITA dentro
     // da closure (binding implicito rodaria antes do SetAccountContext): a query
     // escopada por conta garante que midia de outra conta = 404, nunca vaza.
